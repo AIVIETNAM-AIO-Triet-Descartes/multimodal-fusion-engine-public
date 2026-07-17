@@ -1,0 +1,46 @@
+# Sprint 1 — the only active config. Every path/model/threshold lives here,
+# never in code (docs/01 §3.1, docs/00 §7).
+
+paths:
+  # Identical to docs/00 §7. Code lives in src/mfe/; these are artifacts only.
+  raw: data/raw/
+  keyframes: data/keyframes/
+  segments: data/segments/          # video_segment assets (docs/03 §3)
+  vector_store: stores/vector/
+  inverted_store: stores/inverted/
+  relational_db: stores/relational/app.db
+  eval_results: eval/results/
+  throughput: eval/throughput.json
+
+storage:
+  backend: local                     # local | modal (docs/01 §3.2 — modal is a stub)
+
+models:
+  # TV1 fills these in. Left unset on purpose: picking a checkpoint is a TV1
+  # call, and Sprint 1 does not tune accuracy (docs/02 §1).
+  clip: null                         # e.g. ViT-B-32 / laion2b_s34b_b79k
+  detector: null
+  ocr: null                          # null disables the OCR module (docs/02 §3)
+  metadata: null
+
+retrieval:
+  embed_dim: 512
+  coarse_topk: 500
+  rerank_topk: 50
+  # Scores from CLIP (cosine) and BM25 are on different scales — normalize
+  # before weighting, do not add raw (docs/04 §3.1).
+  fusion_weights:
+    clip: 1.0
+    bm25: 1.0
+  # Over budget => skip rerank, fall back to coarse ranking (docs/04 §3.3).
+  rerank_budget_ms: 3000
+
+submit:
+  # BTC schema is TO_CONFIRM. Switching format must not require a code change
+  # (docs/05 §2). One of: by_timestamp | by_frame | by_frame_range | raw_keyframe
+  schema_format: by_timestamp
+  frame_range_window: 25             # only used by by_frame_range
+
+eval:
+  queryset: eval/queryset.jsonl
+  recall_at: [1, 5, 10]

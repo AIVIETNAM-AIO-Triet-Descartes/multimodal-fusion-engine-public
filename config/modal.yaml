@@ -1,0 +1,49 @@
+# ============================================================================
+# NOT ACTIVE IN SPRINT 1. Sprint 1 runs local only (docs/00 §1 scope table).
+#
+# This file exists so that moving local -> Modal is a config change, not a
+# logic change (docs/01 §3.2). The `storage.backend: modal` switch below routes
+# read_bytes/write_bytes through src/mfe/core/backends/modal.py, which is a
+# stub that raises today.
+# ============================================================================
+
+paths:
+  raw: /vol/data/raw/
+  keyframes: /vol/data/keyframes/
+  segments: /vol/data/segments/
+  vector_store: /vol/stores/vector/
+  inverted_store: /vol/stores/inverted/
+  relational_db: /vol/stores/relational/app.db
+  eval_results: /vol/eval/results/
+  throughput: /vol/eval/throughput.json
+
+storage:
+  backend: modal
+  volume: mfe-data
+
+compute:
+  gpu: true
+  gpu_type: A10G
+
+models:
+  clip: null
+  detector: null
+  ocr: null
+  metadata: null
+
+retrieval:
+  embed_dim: 512
+  coarse_topk: 500
+  rerank_topk: 50
+  fusion_weights:
+    clip: 1.0
+    bm25: 1.0
+  rerank_budget_ms: 3000
+
+submit:
+  schema_format: by_timestamp
+  frame_range_window: 25
+
+eval:
+  queryset: /vol/eval/queryset.jsonl
+  recall_at: [1, 5, 10]
