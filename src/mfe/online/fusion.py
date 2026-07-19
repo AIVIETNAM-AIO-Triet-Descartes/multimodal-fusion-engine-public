@@ -19,7 +19,7 @@ from mfe.contracts.tools import Candidate
 def normalize_scores(candidates: list[Candidate]) -> list[Candidate]:
     """Bring one tool's scores onto a comparable scale.
 
-    Owner: TV3. TODO(TV3): implement.
+    Owner: Phạm Trọng. TODO(Phạm Trọng): implement.
 
     Pick the method deliberately and write down why:
       - min-max      : bounded, but one outlier compresses everything else
@@ -30,7 +30,7 @@ def normalize_scores(candidates: list[Candidate]) -> list[Candidate]:
     Whatever you pick, normalize *within* a single tool's result list. Across
     lists is meaningless.
     """
-    raise NotImplementedError("TODO(TV3): normalize scores within one result list")
+    raise NotImplementedError("TODO(Phạm Trọng): normalize scores within one result list")
 
 
 def weighted_fusion(
@@ -39,7 +39,7 @@ def weighted_fusion(
 ) -> list[Candidate]:
     """Merge per-tool result lists into one ranking. docs/04 §3.1.
 
-    Owner: TV3. TODO(TV3): implement.
+    Owner: Phạm Trọng. TODO(Phạm Trọng): implement.
 
     - Normalize each list first, then weight.
     - A keyframe found by one tool and not the other still competes: treat a
@@ -49,4 +49,4 @@ def weighted_fusion(
       produced it (docs/00 §5), and after a merge that provenance is the only
       way the validator can check it.
     """
-    raise NotImplementedError("TODO(TV3): normalize -> weight -> merge")
+    raise NotImplementedError("TODO(Phạm Trọng): normalize -> weight -> merge")

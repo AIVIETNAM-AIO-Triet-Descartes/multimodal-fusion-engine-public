@@ -17,7 +17,7 @@ from mfe.contracts.tools import Candidate
 class VectorIndex:
     """Faiss index + sidecar, behind one object.
 
-    Owner: TV2. TODO(TV2): implement.
+    Owner: Công Quang. TODO(Công Quang): implement.
     """
 
     def __init__(self, store_path: str, embed_dim: int) -> None:
@@ -25,14 +25,14 @@ class VectorIndex:
         self.embed_dim = embed_dim
 
     def add(self, records: list[VectorRecord]) -> None:
-        """Add records. Called by TV1's writers during ingest.
+        """Add records. Called by Quốc Đạt's writers during ingest.
 
-        TODO(TV2): implement. The order records are added in *is* the
+        TODO(Công Quang): implement. The order records are added in *is* the
         `internal_id` assignment — the sidecar must be appended in lockstep, in
         the same transaction-ish unit. An add that half-succeeds leaves the two
         permanently misaligned, and nothing downstream can detect it.
         """
-        raise NotImplementedError("TODO(TV2): add embeddings to Faiss + sidecar")
+        raise NotImplementedError("TODO(Công Quang): add embeddings to Faiss + sidecar")
 
     def search(
         self,
@@ -42,26 +42,26 @@ class VectorIndex:
     ) -> list[Candidate]:
         """Cosine top-k. The `vector_search` API of docs/03 §1.
 
-        TODO(TV2): implement.
+        TODO(Công Quang): implement.
 
         - Both sides must be L2-normalized for inner product to equal cosine.
           Records are checked at construction (docs/00 §4.1); the *query* vector
-          arrives from TV3 and is not — normalize it here or the scores are
+          arrives from Phạm Trọng and is not — normalize it here or the scores are
           silently wrong rather than absent.
         - `video_id` filters to one video (docs/03 §1).
         - Translate `internal_id -> keyframe_id` through the sidecar. Never
           return an `internal_id` to a caller; it is meaningless outside Faiss.
         - `evidence_id` on every Candidate (docs/00 §5).
         """
-        raise NotImplementedError("TODO(TV2): faiss search -> Candidate list")
+        raise NotImplementedError("TODO(Công Quang): faiss search -> Candidate list")
 
     def save(self) -> None:
-        raise NotImplementedError("TODO(TV2): persist index + sidecar to store_path")
+        raise NotImplementedError("TODO(Công Quang): persist index + sidecar to store_path")
 
     @classmethod
     def load(cls, store_path: str, embed_dim: int) -> VectorIndex:
-        raise NotImplementedError("TODO(TV2): load index + sidecar from store_path")
+        raise NotImplementedError("TODO(Công Quang): load index + sidecar from store_path")
 
     def __len__(self) -> int:
         """Number of indexed keyframes. Must equal the sidecar length."""
-        raise NotImplementedError("TODO(TV2)")
+        raise NotImplementedError("TODO(Công Quang)")

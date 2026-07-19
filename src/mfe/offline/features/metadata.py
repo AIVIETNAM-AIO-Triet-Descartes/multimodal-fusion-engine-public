@@ -22,7 +22,7 @@ from mfe.offline.features.base import FeatureModule
 class MetadataModule(FeatureModule):
     """Produces InvertedRecord.metadata_text. Empty string when unavailable.
 
-    Owner: TV1. TODO(TV1): implement.
+    Owner: Quốc Đạt. TODO(Quốc Đạt): implement.
 
     Unlike the other modules this reads a sidecar file, not the image bytes —
     so `extract` ignores its argument and the module is really a per-video
@@ -33,10 +33,10 @@ class MetadataModule(FeatureModule):
     config_key = "metadata"
 
     def is_enabled(self, models_config: Any) -> bool:
-        raise NotImplementedError("TODO(TV1): return False when models.metadata is null")
+        raise NotImplementedError("TODO(Quốc Đạt): return False when models.metadata is null")
 
     def load(self, model_name: str) -> None:
-        raise NotImplementedError("TODO(TV1): locate the metadata sidecar")
+        raise NotImplementedError("TODO(Quốc Đạt): locate the metadata sidecar")
 
     def extract(self, image_bytes: bytes) -> str:
-        raise NotImplementedError("TODO(TV1): per-video metadata -> text")
+        raise NotImplementedError("TODO(Quốc Đạt): per-video metadata -> text")

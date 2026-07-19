@@ -7,7 +7,7 @@ Two hard requirements ride on this module:
     seen, clicks, timestamps). docs/context/buoi-2.md §2: TTCA, not vector
     search latency, is what the team optimizes.
 
-So logs here are events the Lead's harness reads, not prose for humans. Write
+So logs here are events the Vỹ Triết's harness reads, not prose for humans. Write
 one JSON object per line.
 """
 
@@ -33,18 +33,18 @@ class EventType(StrEnum):
 def get_run_id() -> str:
     """Stable id for one harness run or one operator session.
 
-    Owner: Lead. TODO(Lead): implement. `evidence_id` is expected to embed this
+    Owner: Vỹ Triết. TODO(Vỹ Triết): implement. `evidence_id` is expected to embed this
     (see contracts/tools.py) so a candidate can be traced back to the exact call
     that produced it.
     """
-    raise NotImplementedError("TODO(Lead): mint a run id")
+    raise NotImplementedError("TODO(Vỹ Triết): mint a run id")
 
 
 def log_event(event: EventType, **fields: object) -> None:
     """Append one structured event.
 
-    Owner: Lead. TODO(Lead): implement — JSON per line, always stamped with
+    Owner: Vỹ Triết. TODO(Vỹ Triết): implement — JSON per line, always stamped with
     run_id and a monotonic timestamp. Use a monotonic clock for durations: a
     wall-clock adjustment mid-session would corrupt TTCA.
     """
-    raise NotImplementedError("TODO(Lead): write one JSON event per line")
+    raise NotImplementedError("TODO(Vỹ Triết): write one JSON event per line")

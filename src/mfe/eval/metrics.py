@@ -1,10 +1,10 @@
 """Metrics — defined once here, referenced everywhere else. docs/00 §6.
 
-    Recall@K        Is the right answer in the top K?          Lead (harness)
-    TTCA            Query received -> answer ready to submit    Lead + TV3
-    Latency         One retrieval/rerank call                   TV3
-    Throughput      Seconds per hour of video (offline)         TV1 (offline/throughput.py)
-    Mapping acc.    % of submits with the right ID/frame/ts     TV4
+    Recall@K        Is the right answer in the top K?          Vỹ Triết (harness)
+    TTCA            Query received -> answer ready to submit    Vỹ Triết + Phạm Trọng
+    Latency         One retrieval/rerank call                   Phạm Trọng
+    Throughput      Seconds per hour of video (offline)         Quốc Đạt (offline/throughput.py)
+    Mapping acc.    % of submits with the right ID/frame/ts     Nhật Bảo
 """
 
 from __future__ import annotations
@@ -15,8 +15,8 @@ from pydantic import BaseModel, ConfigDict
 class QueryRecord(BaseModel):
     """One line of `eval/queryset.jsonl` — docs/01 §2, docs/05 §4.
 
-    Produced by TV4, who understands the mapping and ground truth best. This is
-    the TV4 <-> Lead sync point in docs/01 §1: get it wrong and the harness
+    Produced by Nhật Bảo, who understands the mapping and ground truth best. This is
+    the Nhật Bảo <-> Vỹ Triết sync point in docs/01 §1: get it wrong and the harness
     cannot score anything.
     """
 
@@ -32,7 +32,7 @@ class QueryRecord(BaseModel):
 def recall_at_k(ranked: list[str], ground_truth: list[str], k: int) -> float:
     """Is any ground-truth keyframe in the top K? docs/00 §6.
 
-    Owner: Lead. TODO(Lead): implement.
+    Owner: Vỹ Triết. TODO(Vỹ Triết): implement.
 
     Decide and document what counts as a hit, because docs/context/buoi-1.md §7
     says BTC may treat a *range* of contiguous frames as correct — so an exact
@@ -40,13 +40,13 @@ def recall_at_k(ranked: list[str], ground_truth: list[str], k: int) -> float:
     understate the system. Neighbour tolerance needs the Relational Map, not
     string equality.
     """
-    raise NotImplementedError("TODO(Lead): recall@k")
+    raise NotImplementedError("TODO(Vỹ Triết): recall@k")
 
 
 def compute_ttca(events: list[dict]) -> float:
     """Seconds from receiving a query to having a correct answer ready. docs/00 §6.
 
-    Owner: Lead. TODO(Lead): implement — from QUERY_RECEIVED to ANSWER_READY in
+    Owner: Vỹ Triết. TODO(Vỹ Triết): implement — from QUERY_RECEIVED to ANSWER_READY in
     the event log (`mfe.core.logging`).
 
     This, not vector-search latency, is the number to optimize
@@ -55,15 +55,15 @@ def compute_ttca(events: list[dict]) -> float:
 
     Use the monotonic timestamps in the log, not wall clock.
     """
-    raise NotImplementedError("TODO(Lead): TTCA from event log")
+    raise NotImplementedError("TODO(Vỹ Triết): TTCA from event log")
 
 
 def summarize(rows: list[dict]) -> dict:
     """Aggregate a run: median TTCA, mean Recall@K by type, valid-submit share.
 
-    Owner: Lead. TODO(Lead): implement.
+    Owner: Vỹ Triết. TODO(Vỹ Triết): implement.
 
     Median TTCA, not mean — docs/01 §2 asks for median, and one query where the
     operator gave up would drag a mean into meaninglessness.
     """
-    raise NotImplementedError("TODO(Lead): aggregate per-query rows")
+    raise NotImplementedError("TODO(Vỹ Triết): aggregate per-query rows")

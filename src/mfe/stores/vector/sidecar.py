@@ -15,7 +15,7 @@ from __future__ import annotations
 class Sidecar:
     """Row `i` describes Faiss `internal_id == i`.
 
-    Owner: TV2. TODO(TV2): implement. Backend: a parallel array, or parquet for
+    Owner: Công Quang. TODO(Công Quang): implement. Backend: a parallel array, or parquet for
     something inspectable at scale.
     """
 
@@ -25,38 +25,38 @@ class Sidecar:
     def append(self, keyframe_id: str, video_id: str) -> int:
         """Append one entry, returning the `internal_id` it was assigned.
 
-        TODO(TV2): implement. The returned id must be exactly the position Faiss
+        TODO(Công Quang): implement. The returned id must be exactly the position Faiss
         will assign to the matching `add` — that coupling is the whole contract.
         """
-        raise NotImplementedError("TODO(TV2): append -> internal_id")
+        raise NotImplementedError("TODO(Công Quang): append -> internal_id")
 
     def to_keyframe_id(self, internal_id: int) -> str:
         """Translate a Faiss hit back to the global key.
 
-        TODO(TV2): implement. Raise on an unknown id — never return a guess or
+        TODO(Công Quang): implement. Raise on an unknown id — never return a guess or
         a placeholder. A wrong keyframe_id here becomes a wrong submission
         (docs/context/buoi-1.md §8: "tìm đúng hình nhưng submit sai ID/frame là
         lỗi trắng").
         """
-        raise NotImplementedError("TODO(TV2): internal_id -> keyframe_id")
+        raise NotImplementedError("TODO(Công Quang): internal_id -> keyframe_id")
 
     def to_internal_id(self, keyframe_id: str) -> int:
         """Reverse lookup — needed by `search_image` when the query is a
         keyframe already in the index (docs/04 §2)."""
-        raise NotImplementedError("TODO(TV2): keyframe_id -> internal_id")
+        raise NotImplementedError("TODO(Công Quang): keyframe_id -> internal_id")
 
     def video_id_of(self, internal_id: int) -> str:
         """Used to filter results by video without touching another store."""
-        raise NotImplementedError("TODO(TV2): internal_id -> video_id")
+        raise NotImplementedError("TODO(Công Quang): internal_id -> video_id")
 
     def verify_alignment(self, faiss_size: int) -> None:
         """Assert the sidecar and the Faiss index are the same length.
 
-        TODO(TV2): implement, and call it on every `load`. This is the cheap
+        TODO(Công Quang): implement, and call it on every `load`. This is the cheap
         check that catches a half-finished ingest before it silently corrupts a
         competition run.
         """
-        raise NotImplementedError("TODO(TV2): assert len(self) == faiss_size")
+        raise NotImplementedError("TODO(Công Quang): assert len(self) == faiss_size")
 
     def __len__(self) -> int:
-        raise NotImplementedError("TODO(TV2)")
+        raise NotImplementedError("TODO(Công Quang)")

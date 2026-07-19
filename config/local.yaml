@@ -16,7 +16,7 @@ storage:
   backend: local                     # local | modal (docs/01 §3.2 — modal is a stub)
 
 models:
-  # TV1 fills these in. Left unset on purpose: picking a checkpoint is a TV1
+  # Quốc Đạt fills these in. Left unset on purpose: picking a checkpoint is a Quốc Đạt
   # call, and Sprint 1 does not tune accuracy (docs/02 §1).
   clip: null                         # e.g. ViT-B-32 / laion2b_s34b_b79k
   detector: null

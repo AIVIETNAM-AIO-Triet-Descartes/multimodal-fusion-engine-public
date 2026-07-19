@@ -14,7 +14,7 @@ from mfe.contracts.records import VideoRow
 def probe_video(source_path: str, video_id: str) -> VideoRow:
     """Read fps / duration / resolution / frame count from a video file.
 
-    Owner: TV1. TODO(TV1): implement (PyAV or ffprobe).
+    Owner: Quốc Đạt. TODO(Quốc Đạt): implement (PyAV or ffprobe).
 
     Notes that will bite otherwise:
 
@@ -26,17 +26,17 @@ def probe_video(source_path: str, video_id: str) -> VideoRow:
       a frame (docs/05 §1.1), so a wrong value blocks good submits or lets bad
       ones through.
     """
-    raise NotImplementedError("TODO(TV1): probe container metadata -> VideoRow")
+    raise NotImplementedError("TODO(Quốc Đạt): probe container metadata -> VideoRow")
 
 
 def derive_video_id(source_path: str) -> str:
     """Derive a `video_id` from a filename, e.g. data/raw/L01_V001.mp4 -> L01_V001.
 
-    Owner: TV1. TODO(TV1): implement.
+    Owner: Quốc Đạt. TODO(Quốc Đạt): implement.
 
     Must round-trip: `VideoRow.source_path` is what reopens the video for
     verification (docs/05 §1.1). Validate the result with
     `mfe.contracts.ids.validate_video_id` — a filename with a space or a '#' in
     it would silently break every keyframe_id built from it.
     """
-    raise NotImplementedError("TODO(TV1): filename -> video_id")
+    raise NotImplementedError("TODO(Quốc Đạt): filename -> video_id")

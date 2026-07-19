@@ -18,13 +18,13 @@ from mfe.offline.features.base import FeatureModule
 class OcrModule(FeatureModule):
     """Produces InvertedRecord.ocr_text. Empty string when disabled.
 
-    Owner: TV1. TODO(TV1): implement.
+    Owner: Quốc Đạt. TODO(Quốc Đạt): implement.
 
     - Must handle Vietnamese diacritics. The docs' own example is "BẢN TIN 18H"
       (docs/03 §2.1) — an engine that strips diacritics turns "Thời sự" into
       something no query matches.
-    - Agree normalization with TV2: their term index example lowercases ("18h",
-      docs/03 §2.2). If TV1 stores raw case and TV2 lowercases at query time
+    - Agree normalization with Công Quang: their term index example lowercases ("18h",
+      docs/03 §2.2). If Quốc Đạt stores raw case and Công Quang lowercases at query time
       only, exact match breaks.
     - This is the slowest optional module. Measure it into throughput
       (docs/02 §5) so its cost at full-dataset scale is known before committing.
@@ -33,10 +33,10 @@ class OcrModule(FeatureModule):
     config_key = "ocr"
 
     def is_enabled(self, models_config: Any) -> bool:
-        raise NotImplementedError("TODO(TV1): return False when models.ocr is null")
+        raise NotImplementedError("TODO(Quốc Đạt): return False when models.ocr is null")
 
     def load(self, model_name: str) -> None:
-        raise NotImplementedError("TODO(TV1): load OCR engine")
+        raise NotImplementedError("TODO(Quốc Đạt): load OCR engine")
 
     def extract(self, image_bytes: bytes) -> str:
-        raise NotImplementedError("TODO(TV1): image -> text")
+        raise NotImplementedError("TODO(Quốc Đạt): image -> text")

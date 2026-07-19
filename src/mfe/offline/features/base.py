@@ -48,19 +48,19 @@ _REGISTRY: dict[str, type[FeatureModule]] = {}
 def register(name: str, module_cls: type[FeatureModule]) -> None:
     """Register a feature module under a config key.
 
-    Owner: TV1. TODO(TV1): implement.
+    Owner: Quốc Đạt. TODO(Quốc Đạt): implement.
     """
-    raise NotImplementedError("TODO(TV1): register module class under name")
+    raise NotImplementedError("TODO(Quốc Đạt): register module class under name")
 
 
 def build_enabled_modules(models_config: Any) -> list[FeatureModule]:
     """Instantiate every module config switches on.
 
-    Owner: TV1. TODO(TV1): implement.
+    Owner: Quốc Đạt. TODO(Quốc Đạt): implement.
 
     Must enforce docs/02 §3's required/optional split: CLIP and the detector are
     required, so a null there is a config error, not a silent skip. OCR and
     metadata are genuinely optional and a null is fine. docs/02 §6 requires the
     pipeline to still run with OCR off.
     """
-    raise NotImplementedError("TODO(TV1): read config -> instantiate enabled modules")
+    raise NotImplementedError("TODO(Quốc Đạt): read config -> instantiate enabled modules")

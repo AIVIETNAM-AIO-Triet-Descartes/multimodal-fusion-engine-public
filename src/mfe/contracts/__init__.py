@@ -1,11 +1,11 @@
 """The contract — the code form of docs/00.
 
-**Owner: Lead. Do not change without the Lead.** docs/01 §1: "Bất kỳ ai muốn đổi
-schema một kho hoặc chữ ký một tool phải báo Lead; Lead cập nhật file 00 rồi
+**Owner: Vỹ Triết. Do not change without the Vỹ Triết.** docs/01 §1: "Bất kỳ ai muốn đổi
+schema một kho hoặc chữ ký một tool phải báo Vỹ Triết; Vỹ Triết cập nhật file 00 rồi
 thông báo nhóm."
 
 Import from here rather than redefining a shape locally. A `keyframe_id` built
-by hand in TV1 and parsed by hand in TV4 is exactly how risk #1 in docs/00 §8
+by hand in Quốc Đạt and parsed by hand in Nhật Bảo is exactly how risk #1 in docs/00 §8
 happens.
 """
 

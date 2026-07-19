@@ -19,7 +19,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="mfe-eval",
         description="Run the query set end-to-end and report metrics (docs/01 §2).",
     )
-    parser.add_argument("--queryset", default="eval/queryset.jsonl", help="TV4's ground truth")
+    parser.add_argument("--queryset", default="eval/queryset.jsonl", help="Nhật Bảo's ground truth")
     parser.add_argument("--config", default="config/local.yaml")
     parser.add_argument("--out", default="eval/results/", help="Per-run output directory")
     return parser
@@ -28,7 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
 def run(queryset_path: str, config_path: str, out_dir: str) -> None:
     """Run every query, score it, write the report.
 
-    Owner: Lead. TODO(Lead): implement.
+    Owner: Vỹ Triết. TODO(Vỹ Triết): implement.
 
     Per docs/01 §2, emit one row per query:
 
@@ -42,7 +42,7 @@ def run(queryset_path: str, config_path: str, out_dir: str) -> None:
     going. "Chạy được >= 30 query nội bộ không crash" is measurable only if the
     run reaches the end.
     """
-    raise NotImplementedError("TODO(Lead): run queryset -> metrics -> report + PASS/FAIL")
+    raise NotImplementedError("TODO(Vỹ Triết): run queryset -> metrics -> report + PASS/FAIL")
 
 
 def main() -> None:

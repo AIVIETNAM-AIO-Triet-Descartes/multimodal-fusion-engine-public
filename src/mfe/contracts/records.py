@@ -1,8 +1,8 @@
 """Record schemas for the 4 stores — docs/00 §4.
 
-This is the code form of the contract tables. TV1 produces these; TV2 and TV4
+This is the code form of the contract tables. Quốc Đạt produces these; Công Quang and Nhật Bảo
 consume them. If a field here disagrees with docs/00 §4, docs/00 wins and this
-file is the bug — tell the Lead (docs/01 §1).
+file is the bug — tell the Vỹ Triết (docs/01 §1).
 
 Why pydantic rather than plain dataclasses: drift between the four workstreams
 is risk #1 in docs/00 §8. Validation at the boundary turns a silent mismatch
@@ -112,7 +112,7 @@ class VectorRecord(_Record):
 class InvertedRecord(_Record):
     """One row = one keyframe viewed as a text document. docs/00 §4.2, docs/03 §2.1.
 
-    This is the "document" view. How TV2 inverts it into term -> postings
+    This is the "document" view. How Công Quang inverts it into term -> postings
     (docs/03 §2.2) is a storage detail and not part of this contract.
     """
 

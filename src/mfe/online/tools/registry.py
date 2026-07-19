@@ -46,15 +46,15 @@ _REGISTRY: dict[str, ToolSpec] = {}
 
 
 def register(spec: ToolSpec) -> None:
-    """Owner: TV3. TODO(TV3): implement."""
-    raise NotImplementedError("TODO(TV3): register tool spec by name")
+    """Owner: Phạm Trọng. TODO(Phạm Trọng): implement."""
+    raise NotImplementedError("TODO(Phạm Trọng): register tool spec by name")
 
 
 def get(name: str) -> ToolSpec:
-    """Owner: TV3. TODO(TV3): implement. Raise on unknown — never no-op."""
-    raise NotImplementedError("TODO(TV3): name -> ToolSpec")
+    """Owner: Phạm Trọng. TODO(Phạm Trọng): implement. Raise on unknown — never no-op."""
+    raise NotImplementedError("TODO(Phạm Trọng): name -> ToolSpec")
 
 
 def list_specs() -> list[ToolSpec]:
     """All registered tools. The agent phase reads this to build its action space."""
-    raise NotImplementedError("TODO(TV3): list registered specs")
+    raise NotImplementedError("TODO(Phạm Trọng): list registered specs")

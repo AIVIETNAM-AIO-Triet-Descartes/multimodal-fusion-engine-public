@@ -1,6 +1,6 @@
 # eval/ (code) — Benchmark harness
 
-**Owner:** Lead. **Spec:** `docs/01-lead-coordination-infra.md` §2.
+**Owner:** Vỹ Triết. **Spec:** `docs/01-lead-coordination-infra.md` §2.
 
 ## Đây là code. Data ở chỗ khác.
 
@@ -35,16 +35,16 @@ Cộng dồn: **median** TTCA (không phải mean — một query operator bỏ 
 
 Cộng: in **PASS/FAIL** từng tiêu chí "Done" ở docs/00 §1.
 
-## Input — do TV4 cung cấp
+## Input — do Nhật Bảo cung cấp
 
 ```json
 {"query_id": "q001", "text": "người đàn ông cầm túi tím bước xuống xe",
  "gt_keyframe_ids": ["L01_V001#001234"], "gt_video_id": "L01_V001", "type": "KIS"}
 ```
 
-TV4 hiểu mapping/ground truth rõ nhất nên phụ trách query set (docs/05 §4). Mục tiêu ≥20 query, KIS trước.
+Nhật Bảo hiểu mapping/ground truth rõ nhất nên phụ trách query set (docs/05 §4). Mục tiêu ≥20 query, KIS trước.
 
-Đây là điểm đồng bộ TV4↔Lead (docs/01 §1): lệch format → harness không chấm được gì.
+Đây là điểm đồng bộ Nhật Bảo↔Vỹ Triết (docs/01 §1): lệch format → harness không chấm được gì.
 
 ## Query crash không phải lý do dừng
 
@@ -54,4 +54,4 @@ Bắt, ghi lại, chạy tiếp. *"Chạy được ≥30 query nội bộ không
 
 `metrics.py` — một chỗ duy nhất (docs/00 §6). File khác chỉ tham chiếu, không định nghĩa lại.
 
-Riêng **throughput** do TV1 sinh (`offline/throughput.py` → `eval/throughput.json`), Lead chỉ tổng hợp.
+Riêng **throughput** do Quốc Đạt sinh (`offline/throughput.py` → `eval/throughput.json`), Vỹ Triết chỉ tổng hợp.

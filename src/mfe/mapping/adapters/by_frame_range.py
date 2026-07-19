@@ -9,7 +9,7 @@ from mfe.mapping.adapters.base import SubmitAdapter
 
 
 class ByFrameRangeAdapter(SubmitAdapter):
-    """Expand a window around the keyframe. Owner: TV4. TODO(TV4): implement.
+    """Expand a window around the keyframe. Owner: Nhật Bảo. TODO(Nhật Bảo): implement.
 
     Why this format is plausible at all: docs/context/buoi-1.md §7 records the
     lecturer explaining BTC may treat a *contiguous range* of frames as correct
@@ -25,4 +25,4 @@ class ByFrameRangeAdapter(SubmitAdapter):
     format_name = "by_frame_range"
 
     def build(self, keyframe: KeyframeRow, video: VideoRow) -> dict[str, Any]:
-        raise NotImplementedError("TODO(TV4): {video_id, frame_start, frame_end}, clamped")
+        raise NotImplementedError("TODO(Nhật Bảo): {video_id, frame_start, frame_end}, clamped")

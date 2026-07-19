@@ -19,17 +19,17 @@ def filter_metadata(
     constraints: dict,
     candidate_ids: list[str] | None = None,
 ) -> ToolResult[str]:
-    """Owner: TV3. TODO(TV3): implement.
+    """Owner: Phạm Trọng. TODO(Phạm Trọng): implement.
 
     - `candidate_ids=None` filters the whole store; otherwise filter within the
       given set (docs/03 §2).
     - Support negative constraints. docs/context/buoi-2.md §6 lists marking a
       negative to exclude a wrong kind of scene as core exploitation behaviour,
       and §9 calls out negative constraints as a place teams pull ahead.
-    - Term normalization must match how TV2 indexed (docs/03 §2.2 stores "18h",
-      TV1 emitted "BẢN TIN 18H"). Normalizing here differently from there means
+    - Term normalization must match how Công Quang indexed (docs/03 §2.2 stores "18h",
+      Quốc Đạt emitted "BẢN TIN 18H"). Normalizing here differently from there means
       the filter silently matches nothing — which looks like "no such
       keyframes", not like a bug.
     - An empty result is a valid answer, not an error.
     """
-    raise NotImplementedError("TODO(TV3): apply constraints -> filtered keyframe_ids")
+    raise NotImplementedError("TODO(Phạm Trọng): apply constraints -> filtered keyframe_ids")

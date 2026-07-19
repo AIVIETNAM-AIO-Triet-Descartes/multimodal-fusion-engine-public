@@ -1,6 +1,6 @@
 # offline/ — Ingestion pipeline
 
-**Owner:** TV1. **Spec:** `docs/02-offline-ingestion.md`.
+**Owner:** Quốc Đạt. **Spec:** `docs/02-offline-ingestion.md`.
 
 ## Việc của package này
 
@@ -19,7 +19,7 @@ docs/02 §1 nói thẳng: giai đoạn này **không** để đạt độ chính
 - [ ] Thư mục video bất kỳ → chạy hết, không crash
 - [ ] Output đúng record format 4 kho đọc được
 - [ ] Đổi input path / bật-tắt module chỉ bằng config, không sửa code
-- [ ] Ghi throughput ra file cho Lead
+- [ ] Ghi throughput ra file cho Vỹ Triết
 
 ## Modules
 
@@ -29,7 +29,7 @@ docs/02 §1 nói thẳng: giai đoạn này **không** để đạt độ chính
 | `probe.py` | [1] | **fps vào hệ thống ở đây** — đọc từng video, không đoán |
 | `keyframes.py` | [2] | sinh 1 lúc 2 record: Asset + Relational |
 | `features/` | [3] | cắm-rút qua config (docs/02 §3) |
-| `writers.py` | [4] | seam TV1→TV2/TV4 |
+| `writers.py` | [4] | seam Quốc Đạt→Công Quang/Nhật Bảo |
 | `throughput.py` | ngang [1-4] | đo để ước lượng scale (docs/02 §5) |
 
 ## Hai chỗ dễ sai nhất
@@ -41,7 +41,7 @@ docs/02 §1 nói thẳng: giai đoạn này **không** để đạt độ chính
 ## Đừng viết gì vào đây
 
 - **Định nghĩa schema** → `contracts/records.py`.
-- **Logic đọc/ghi kho** → `stores/` (TV2) và `mapping/` (TV4). Package này *tạo ra* record, gọi API của họ để ghi.
+- **Logic đọc/ghi kho** → `stores/` (Công Quang) và `mapping/` (Nhật Bảo). Package này *tạo ra* record, gọi API của họ để ghi.
 - **`open()` lên đường dẫn store** → đi qua `mfe.core.storage`, xem `core/README.md`.
 
 ## Thêm modality mới (ASR, ...)

@@ -24,7 +24,7 @@ def search_image(
     keyframe_id: str | None = None,
     top_k: int = 100,
 ) -> ToolResult[Candidate]:
-    """Owner: TV3. TODO(TV3): implement. Sprint 1: after `search_text` works.
+    """Owner: Phạm Trọng. TODO(Phạm Trọng): implement. Sprint 1: after `search_text` works.
 
     - Exactly one of `image_bytes` / `keyframe_id` — both or neither is
       INVALID_ARGUMENT.
@@ -32,8 +32,8 @@ def search_image(
       than re-encoding the image. Cheaper and, more importantly, guaranteed
       identical to what is indexed.
     - Given bytes, encode with the same CLIP checkpoint as ingest.
-    - The query keyframe will rank #1 against itself. Decide with TV3 whether to
+    - The query keyframe will rank #1 against itself. Decide with Phạm Trọng whether to
       drop it, and say which in the docstring — an operator seeing their own
       anchor at the top of the results learns nothing.
     """
-    raise NotImplementedError("TODO(TV3): image/keyframe -> embedding -> vector search")
+    raise NotImplementedError("TODO(Phạm Trọng): image/keyframe -> embedding -> vector search")

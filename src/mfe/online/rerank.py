@@ -19,7 +19,7 @@ from mfe.contracts.tools import Candidate
 
 
 class Reranker:
-    """Owner: TV3. TODO(TV3): implement."""
+    """Owner: Phạm Trọng. TODO(Phạm Trọng): implement."""
 
     def __init__(self, model_name: str, budget_ms: int) -> None:
         self.model_name = model_name
@@ -28,7 +28,7 @@ class Reranker:
     def rerank(self, query: str, candidates: list[Candidate]) -> list[Candidate]:
         """Re-score a small candidate set. docs/04 §2 `rerank` tool.
 
-        Owner: TV3. TODO(TV3): implement.
+        Owner: Phạm Trọng. TODO(Phạm Trọng): implement.
 
         - Load images through `AssetStore.get_asset` — never read the path off
           the manifest and open it (docs/01 §3.2).
@@ -40,7 +40,7 @@ class Reranker:
         - Emit a fresh `evidence_id`; a reranked candidate is a new claim about
           a different model's judgement.
         """
-        raise NotImplementedError("TODO(TV3): cross-encoder rerank within budget_ms")
+        raise NotImplementedError("TODO(Phạm Trọng): cross-encoder rerank within budget_ms")
 
     def _score_pair(self, query: str, image_bytes: bytes) -> float:
-        raise NotImplementedError("TODO(TV3): cross-encoder forward pass")
+        raise NotImplementedError("TODO(Phạm Trọng): cross-encoder forward pass")

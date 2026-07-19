@@ -3,13 +3,13 @@
 ## Layout gương với package
 
 ```
-tests/unit/contracts/    [Lead] ✅ chạy được ngay — khóa ID model + records
-tests/unit/core/         [Lead]
-tests/unit/offline/      [TV1]
-tests/unit/stores/       [TV2]
-tests/unit/mapping/      [TV4]
-tests/unit/online/       [TV3]
-tests/integration/       [Lead] vertical slice — hiện skip toàn bộ
+tests/unit/contracts/    [Vỹ Triết] ✅ chạy được ngay — khóa ID model + records
+tests/unit/core/         [Vỹ Triết]
+tests/unit/offline/      [Quốc Đạt]
+tests/unit/stores/       [Công Quang]
+tests/unit/mapping/      [Nhật Bảo]
+tests/unit/online/       [Phạm Trọng]
+tests/integration/       [Vỹ Triết] vertical slice — hiện skip toàn bộ
 tests/fixtures/          video tí hon + expected records
 ```
 

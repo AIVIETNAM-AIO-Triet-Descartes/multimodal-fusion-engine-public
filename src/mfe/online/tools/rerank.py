@@ -15,7 +15,7 @@ from mfe.contracts.tools import Candidate, ToolResult
 
 
 def rerank(query: str, candidate_ids: list[str]) -> ToolResult[Candidate]:
-    """Owner: TV3. TODO(TV3): implement.
+    """Owner: Phạm Trọng. TODO(Phạm Trọng): implement.
 
     - Enforce `retrieval.rerank_topk` from config. This tool is the expensive
       one; an agent handed 500 ids will happily wait, blowing the query budget
@@ -26,4 +26,4 @@ def rerank(query: str, candidate_ids: list[str]) -> ToolResult[Candidate]:
       (docs/context/buoi-3.md §7): reranking 5 candidates buys nothing and costs
       seconds.
     """
-    raise NotImplementedError("TODO(TV3): wrap Reranker with topk + budget enforcement")
+    raise NotImplementedError("TODO(Phạm Trọng): wrap Reranker with topk + budget enforcement")

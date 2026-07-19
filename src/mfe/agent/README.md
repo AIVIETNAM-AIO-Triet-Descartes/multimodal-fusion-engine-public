@@ -17,7 +17,7 @@ Nghĩa là: `online/tools/` phải xong, có test, có số benchmark **trước
 docs/context/buoi-3.md §2: *"agent không nên thay retrieval engine. Agent nên điều phối các công cụ đã đo được chất lượng."*
 
 ```python
-from mfe.online.tools import registry   # ĐÚNG — dùng lại tool TV3 đã đo
+from mfe.online.tools import registry   # ĐÚNG — dùng lại tool Phạm Trọng đã đo
 # KHÔNG: tự viết search trong agent/
 ```
 

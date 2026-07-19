@@ -51,7 +51,7 @@ class ModelsConfig(_Section):
     """A null value disables the module — docs/02 §3 ("cắm-rút").
 
     `clip` and `detector` are required by docs/02 §3 but may be null here so the
-    repo imports before TV1 picks checkpoints; `mfe.offline.ingest` is what
+    repo imports before Quốc Đạt picks checkpoints; `mfe.offline.ingest` is what
     enforces their presence at run time.
     """
 
@@ -146,7 +146,7 @@ def _resolve_paths(paths: dict[str, Any], repo_root: Path) -> dict[str, Any]:
 def load_config(path: str | Path, repo_root: str | Path | None = None) -> Config:
     """Load and validate a YAML config.
 
-    Owner: Lead.
+    Owner: Vỹ Triết.
 
     `repo_root` anchors relative paths. It defaults to the config file's
     grandparent — `config/local.yaml` sits one level under the repo root — so

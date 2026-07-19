@@ -17,20 +17,20 @@ from mfe.contracts.tools import Candidate
 def group_by_shot(candidates: list[Candidate]) -> list[list[Candidate]]:
     """Cluster candidates into shots.
 
-    Owner: TV3. TODO(TV3): implement.
+    Owner: Phạm Trọng. TODO(Phạm Trọng): implement.
 
-    Prefers `shot_id` when TV1 assigned one (optional in Sprint 1 — docs/00 §3).
+    Prefers `shot_id` when Quốc Đạt assigned one (optional in Sprint 1 — docs/00 §3).
     Falls back to temporal proximity within a video. Needs `frame_number`, which
     `mfe.contracts.ids.parse_keyframe_id` gets from the id itself — no store
     lookup required.
     """
-    raise NotImplementedError("TODO(TV3): cluster candidates by shot / temporal proximity")
+    raise NotImplementedError("TODO(Phạm Trọng): cluster candidates by shot / temporal proximity")
 
 
 def select_representatives(groups: list[list[Candidate]]) -> list[Candidate]:
     """Keep one candidate per group. docs/04 §3.2.
 
-    Owner: TV3. TODO(TV3): implement.
+    Owner: Phạm Trọng. TODO(Phạm Trọng): implement.
 
     Keep the group's members reachable — docs/04 §3.2 says "Giữ đại diện mỗi
     nhóm, mở rộng khi người dùng cần". A collapsed group the operator cannot
@@ -39,9 +39,9 @@ def select_representatives(groups: list[list[Candidate]]) -> list[Candidate]:
     often a transition frame; docs/context/buoi-1.md §7 records that a
     transition frame may not be accepted as an answer at all.
     """
-    raise NotImplementedError("TODO(TV3): one representative per group, group kept expandable")
+    raise NotImplementedError("TODO(Phạm Trọng): one representative per group, group kept expandable")
 
 
 def dedup(candidates: list[Candidate]) -> list[Candidate]:
     """group_by_shot + select_representatives. Stage B entrypoint."""
-    raise NotImplementedError("TODO(TV3): group -> select representatives")
+    raise NotImplementedError("TODO(Phạm Trọng): group -> select representatives")

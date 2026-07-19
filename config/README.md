@@ -1,6 +1,6 @@
 # config/
 
-**Owner:** Lead. **Spec:** `docs/01-lead-coordination-infra.md` §3.
+**Owner:** Vỹ Triết. **Spec:** `docs/01-lead-coordination-infra.md` §3.
 
 ## Quy tắc
 
@@ -19,7 +19,7 @@
 
 1. Thêm vào **cả** `local.yaml` và `modal.yaml` — hai file phải cùng shape, khác value.
 2. Thêm field tương ứng vào `src/mfe/core/config.py` để nó được validate lúc load, không phải lúc dùng.
-3. Key ảnh hưởng contract giữa 2 workstream (ví dụ `retrieval.embed_dim`, `submit.schema_format`) → báo Lead, xem docs/01 §1.
+3. Key ảnh hưởng contract giữa 2 workstream (ví dụ `retrieval.embed_dim`, `submit.schema_format`) → báo Vỹ Triết, xem docs/01 §1.
 
 ## Vì sao paths ở đây khớp docs/00 §7 từng ký tự
 

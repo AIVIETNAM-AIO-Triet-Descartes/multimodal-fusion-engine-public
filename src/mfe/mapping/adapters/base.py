@@ -35,14 +35,14 @@ _REGISTRY: dict[str, type[SubmitAdapter]] = {}
 
 
 def register(adapter_cls: type[SubmitAdapter]) -> None:
-    """Owner: TV4. TODO(TV4): implement — key on `adapter_cls.format_name`."""
-    raise NotImplementedError("TODO(TV4): register adapter under format_name")
+    """Owner: Nhật Bảo. TODO(Nhật Bảo): implement — key on `adapter_cls.format_name`."""
+    raise NotImplementedError("TODO(Nhật Bảo): register adapter under format_name")
 
 
 def get_adapter(format_name: str) -> SubmitAdapter:
-    """Owner: TV4. TODO(TV4): implement.
+    """Owner: Nhật Bảo. TODO(Nhật Bảo): implement.
 
     Raise on an unknown name. A default-to-something here would submit in the
     wrong format on a config typo, and nothing upstream would notice.
     """
-    raise NotImplementedError("TODO(TV4): format_name -> adapter instance")
+    raise NotImplementedError("TODO(Nhật Bảo): format_name -> adapter instance")

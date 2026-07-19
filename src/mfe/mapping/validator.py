@@ -42,7 +42,7 @@ class ValidationResult(BaseModel):
 
 
 class Validator:
-    """Owner: TV4. TODO(TV4): implement all five rules of docs/05 §3."""
+    """Owner: Nhật Bảo. TODO(Nhật Bảo): implement all five rules of docs/05 §3."""
 
     def __init__(self, relational_map: object) -> None:
         self.relational_map = relational_map
@@ -53,20 +53,20 @@ class Validator:
         evidence_id: EvidenceId | None = None,
         schema_format: str = "by_timestamp",
     ) -> ValidationResult:
-        """Run every rule. TODO(TV4): implement.
+        """Run every rule. TODO(Nhật Bảo): implement.
 
         Report *all* failures, not just the first. An operator under time
         pressure who fixes one problem only to hit the next has lost twice the
         time — which is the metric that actually matters (docs/04 §5: optimize
         TTCA, not just Recall).
         """
-        raise NotImplementedError("TODO(TV4): run 5 rules -> ValidationResult")
+        raise NotImplementedError("TODO(Nhật Bảo): run 5 rules -> ValidationResult")
 
     # --- individual rules, docs/05 §3 -------------------------------------
 
     def _check_exists(self, keyframe_id: str) -> ValidationFailure | None:
         """Rule "Tồn tại" -> KEYFRAME_NOT_FOUND."""
-        raise NotImplementedError("TODO(TV4)")
+        raise NotImplementedError("TODO(Nhật Bảo)")
 
     def _check_frame_in_bounds(self, keyframe_id: str) -> ValidationFailure | None:
         """Rule "Trong biên" -> FRAME_OUT_OF_BOUNDS.
@@ -76,11 +76,11 @@ class Validator:
         while duration is inclusive (`timestamp_ms <= duration_ms`). Making both
         inclusive admits a frame that does not exist.
         """
-        raise NotImplementedError("TODO(TV4)")
+        raise NotImplementedError("TODO(Nhật Bảo)")
 
     def _check_timestamp_in_bounds(self, keyframe_id: str) -> ValidationFailure | None:
         """Rule "Timestamp hợp lệ" -> TIMESTAMP_OUT_OF_BOUNDS."""
-        raise NotImplementedError("TODO(TV4)")
+        raise NotImplementedError("TODO(Nhật Bảo)")
 
     def _check_schema(self, record: dict, schema_format: str) -> ValidationFailure | None:
         """Rule "Đúng schema" -> SCHEMA_MISMATCH.
@@ -88,15 +88,15 @@ class Validator:
         The BTC format is TO_CONFIRM (docs/00 §3), so this validates against
         whichever adapter config selected — not against a hardcoded shape.
         """
-        raise NotImplementedError("TODO(TV4)")
+        raise NotImplementedError("TODO(Nhật Bảo)")
 
     def _check_evidence(self, evidence_id: EvidenceId | None) -> ValidationFailure | None:
         """Rule "Có bằng chứng" -> MISSING_EVIDENCE.
 
         docs/05 §3 marks this one "Cảnh báo/chặn" rather than a hard block.
-        TODO(TV4): settle which, with the Lead. It matters more later than now:
+        TODO(Nhật Bảo): settle which, with the Vỹ Triết. It matters more later than now:
         docs/context/buoi-3.md §7 requires an agent's answer to point at real
         evidence, and a warning is not a guardrail. Sprint 1 has a human in the
         loop, so warn may be enough — but decide it, do not default into it.
         """
-        raise NotImplementedError("TODO(TV4)")
+        raise NotImplementedError("TODO(Nhật Bảo)")

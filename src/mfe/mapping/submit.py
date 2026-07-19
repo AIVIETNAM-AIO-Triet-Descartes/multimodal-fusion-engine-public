@@ -25,10 +25,10 @@ def build_submission(
 ) -> dict[str, Any]:
     """Translate a keyframe_id into a submission record. docs/05 §2.
 
-    Owner: TV4. TODO(TV4): implement — dispatch to `adapters/`.
+    Owner: Nhật Bảo. TODO(Nhật Bảo): implement — dispatch to `adapters/`.
 
     Fails, never guesses: if `keyframe_id` is absent from the Relational Map,
     raise ContractError(KEYFRAME_NOT_FOUND). docs/05 §2: "nếu keyframe_id không
     có trong Relational Map -> lỗi, không đoán".
     """
-    raise NotImplementedError("TODO(TV4): dispatch schema_format -> adapter")
+    raise NotImplementedError("TODO(Nhật Bảo): dispatch schema_format -> adapter")

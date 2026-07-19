@@ -1,6 +1,6 @@
 # infra/modal/ — STUB. Không kích hoạt Sprint 1.
 
-**Owner:** Lead. **Spec:** `docs/01-lead-coordination-infra.md` §3.2.
+**Owner:** Vỹ Triết. **Spec:** `docs/01-lead-coordination-infra.md` §3.2.
 
 docs/00 §1 xếp Modal ở mức **stub** trong sprint này. Thư mục này giữ chỗ.
 
@@ -22,12 +22,12 @@ Stub **fail to**, không âm thầm fallback về local. Fallback âm thầm khi
 
 docs/01 §3.2 liệt kê thứ phải ước lượng trước khi bắt đầu:
 
-- [ ] Trích keyframe hàng trăm giờ video — bao lâu? (dùng số `eval/throughput.json` của TV1)
+- [ ] Trích keyframe hàng trăm giờ video — bao lâu? (dùng số `eval/throughput.json` của Quốc Đạt)
 - [ ] Kích thước Faiss index — vào RAM nổi không? Cần IVF/PQ thay Flat?
 - [ ] RAM/VRAM — batch size CLIP/detector trần ở đâu?
 - [ ] Asset Store — dung lượng volume?
 
-Số cho những câu này do TV1 đo từ mẫu nhỏ ngay Sprint 1 (docs/02 §5). Đó là lý do đo sớm: *"thứ hay vỡ khi scale không phải logic mà là thông lượng và lưu trữ."*
+Số cho những câu này do Quốc Đạt đo từ mẫu nhỏ ngay Sprint 1 (docs/02 §5). Đó là lý do đo sớm: *"thứ hay vỡ khi scale không phải logic mà là thông lượng và lưu trữ."*
 
 ## Cảnh báo scope
 

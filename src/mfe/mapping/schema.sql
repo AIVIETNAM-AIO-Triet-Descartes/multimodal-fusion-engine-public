@@ -3,7 +3,7 @@
 -- The source of truth for ID <-> frame <-> timestamp. Retrieval never queries
 -- this (docs/00 §2); only the validator does, at submit time.
 --
--- Owner: TV4. Backend: SQLite for Sprint 1, Postgres when it needs to scale
+-- Owner: Nhật Bảo. Backend: SQLite for Sprint 1, Postgres when it needs to scale
 -- (docs/05 §1). Keep this file backend-neutral enough that the move is mostly
 -- mechanical.
 
@@ -37,7 +37,7 @@ CREATE INDEX IF NOT EXISTS idx_keyframes_video_frame ON keyframes(video_id, fram
 
 CREATE INDEX IF NOT EXISTS idx_keyframes_shot_id ON keyframes(shot_id);
 
--- TODO(TV4): a video_id + frame_number pair should be unique, and it is implied
+-- TODO(Nhật Bảo): a video_id + frame_number pair should be unique, and it is implied
 -- by keyframe_id being the PK — but only if every writer builds the id through
 -- mfe.contracts.ids. A UNIQUE(video_id, frame_number) constraint makes that
 -- independent of writer discipline. Add it unless there is a reason not to.

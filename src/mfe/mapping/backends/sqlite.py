@@ -9,7 +9,7 @@ import sqlite3
 
 
 class SqliteBackend:
-    """Owner: TV4. TODO(TV4): implement.
+    """Owner: Nhật Bảo. TODO(Nhật Bảo): implement.
 
     Settings worth turning on deliberately rather than discovering later:
 
@@ -26,7 +26,7 @@ class SqliteBackend:
         self.db_path = db_path
 
     def connect(self) -> sqlite3.Connection:
-        raise NotImplementedError("TODO(TV4): connect with foreign_keys ON")
+        raise NotImplementedError("TODO(Nhật Bảo): connect with foreign_keys ON")
 
     def executescript(self, sql: str) -> None:
-        raise NotImplementedError("TODO(TV4): run schema.sql")
+        raise NotImplementedError("TODO(Nhật Bảo): run schema.sql")

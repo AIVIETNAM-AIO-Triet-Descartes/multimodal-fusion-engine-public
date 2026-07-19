@@ -1,10 +1,10 @@
 # stores/ — 3 kho TÌM KIẾM
 
-**Owner:** TV2. **Spec:** `docs/03-storage-indexes.md`.
+**Owner:** Công Quang. **Spec:** `docs/03-storage-indexes.md`.
 
 ## Việc của package này
 
-Hiện thực 3 kho, mở API **ghi** cho TV1 và API **đọc** cho TV3.
+Hiện thực 3 kho, mở API **ghi** cho Quốc Đạt và API **đọc** cho Phạm Trọng.
 
 | Kho | Vai trò trong cascade | Backend đề xuất |
 |---|---|---|
@@ -14,7 +14,7 @@ Hiện thực 3 kho, mở API **ghi** cho TV1 và API **đọc** cho TV3.
 
 ## Kho thứ 4 KHÔNG ở đây
 
-Relational Map là của TV4 (`src/mfe/mapping/`). Nó không phải kho tìm kiếm — nó là **nguồn sự thật để xác minh**. docs/00 §2: *"retrieval không query thẳng vào Relational Map"*.
+Relational Map là của Nhật Bảo (`src/mfe/mapping/`). Nó không phải kho tìm kiếm — nó là **nguồn sự thật để xác minh**. docs/00 §2: *"retrieval không query thẳng vào Relational Map"*.
 
 ## Đừng nhầm `stores/` (code) với `stores/` (artifact)
 
@@ -33,23 +33,23 @@ Gọi `Sidecar.verify_alignment()` mỗi lần `load`.
 
 ## Score không cùng thang
 
-BM25 unbounded và phụ thuộc corpus; CLIP cosine ∈ [-1,1]. **Đừng pre-normalize ở đây** — TV3 chuẩn hóa lúc fusion (docs/04 §3.1) và cần thông tin gốc để làm việc đó.
+BM25 unbounded và phụ thuộc corpus; CLIP cosine ∈ [-1,1]. **Đừng pre-normalize ở đây** — Phạm Trọng chuẩn hóa lúc fusion (docs/04 §3.1) và cần thông tin gốc để làm việc đó.
 
 ## Đồng bộ phải chốt sớm
 
 | Với ai | Chốt gì | Vỡ gì nếu lệch |
 |---|---|---|
-| TV1 | Vocabulary nhãn object, normalization của OCR text | Term không bao giờ match |
-| TV3 | `get_asset` trả bytes hay path? Ảnh cỡ nào? | Cross-encoder và UI đều kẹt |
-| TV3 | Cấu trúc `evidence_id` trên Candidate | Validator không map ngược được |
+| Quốc Đạt | Vocabulary nhãn object, normalization của OCR text | Term không bao giờ match |
+| Phạm Trọng | `get_asset` trả bytes hay path? Ảnh cỡ nào? | Cross-encoder và UI đều kẹt |
+| Phạm Trọng | Cấu trúc `evidence_id` trên Candidate | Validator không map ngược được |
 
 ## Checklist bàn giao (docs/03 §4)
 
-- [ ] Vector Index build từ output TV1, `search` trả đúng `keyframe_id`
+- [ ] Vector Index build từ output Quốc Đạt, `search` trả đúng `keyframe_id`
 - [ ] Sidecar dịch `internal_id ↔ keyframe_id` chính xác 100%
 - [ ] `search` + `filter` chạy trên object/ocr/metadata
 - [ ] `get_asset` trả đúng ảnh cho một `keyframe_id`
-- [ ] API đọc cho TV3 và API ghi cho TV1 đã thống nhất
+- [ ] API đọc cho Phạm Trọng và API ghi cho Quốc Đạt đã thống nhất
 
 ## Thêm kho mới (scene graph, ...)
 

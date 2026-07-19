@@ -1,6 +1,6 @@
 # mapping/ — Relational Map & Validator (P0)
 
-**Owner:** TV4. **Spec:** `docs/05-validator-mapping.md`.
+**Owner:** Nhật Bảo. **Spec:** `docs/05-validator-mapping.md`.
 
 ## Đây là P0 — làm sớm nhất
 
@@ -17,7 +17,7 @@ Và: phần này **generalize 100%** sang data mới — nó là logic ID, khôn
 ## Luồng — retrieval KHÔNG đọc thẳng vào đây
 
 ```
-TV3 cascade ──> chọn keyframe_id ──> [validator] ──> [submit adapter] ──> submit
+Phạm Trọng cascade ──> chọn keyframe_id ──> [validator] ──> [submit adapter] ──> submit
                                           │
                                           └── tra Relational Map (bước cuối, ở đây)
 ```
@@ -46,12 +46,12 @@ Schema BTC còn `TO_CONFIRM` (docs/00 §3). docs/context/buoi-1.md §7 ghi giả
 
 ## Đừng viết gì vào đây
 
-- **Logic retrieval/ranking** → `online/` (TV3).
+- **Logic retrieval/ranking** → `online/` (Phạm Trọng).
 - **Suy `timestamp_ms` từ `frame_number` lúc submit.** Đọc thẳng từ bảng. docs/00 §3 lưu cả hai cột chính vì lý do này — xem `docs/adr/0002-id-format.md`, ví dụ trong docs từng lệch nhau vì rounding.
 
 ## Checklist bàn giao (docs/05 §5)
 
-- [ ] Relational Map dựng từ output TV1, mapping đúng **100%** trên mẫu
+- [ ] Relational Map dựng từ output Quốc Đạt, mapping đúng **100%** trên mẫu
 - [ ] `build_submission` xuất được cả timestamp và frame_number
 - [ ] Validator chặn đủ 5 luật
 - [ ] `keyframe_id` không tồn tại → báo lỗi, **không đoán**

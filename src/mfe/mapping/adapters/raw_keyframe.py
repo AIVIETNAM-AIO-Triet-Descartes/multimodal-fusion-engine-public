@@ -9,7 +9,7 @@ from mfe.mapping.adapters.base import SubmitAdapter
 
 
 class RawKeyframeAdapter(SubmitAdapter):
-    """Pass the id straight through. Owner: TV4. TODO(TV4): implement.
+    """Pass the id straight through. Owner: Nhật Bảo. TODO(Nhật Bảo): implement.
 
     The only format that assumes BTC uses *our* id convention — which they will
     not, unless they ship the keyframes and we adopt their naming. Realistically
@@ -24,4 +24,4 @@ class RawKeyframeAdapter(SubmitAdapter):
     format_name = "raw_keyframe"
 
     def build(self, keyframe: KeyframeRow, video: VideoRow) -> dict[str, Any]:
-        raise NotImplementedError("TODO(TV4): {keyframe_id}")
+        raise NotImplementedError("TODO(Nhật Bảo): {keyframe_id}")

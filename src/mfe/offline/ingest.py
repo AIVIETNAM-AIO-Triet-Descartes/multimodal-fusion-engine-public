@@ -51,7 +51,7 @@ def build_parser() -> argparse.ArgumentParser:
 def run(input_dir: str, config_path: str, limit: int | None = None) -> None:
     """Run the full offline pipeline.
 
-    Owner: TV1. TODO(TV1): implement steps 1-4 above.
+    Owner: Quốc Đạt. TODO(Quốc Đạt): implement steps 1-4 above.
 
     Two things that are easy to get wrong and expensive to fix:
 
@@ -60,7 +60,7 @@ def run(input_dir: str, config_path: str, limit: int | None = None) -> None:
       format the id by hand.
     - fps is read per video from `probe.py`, never assumed (docs/00 §7).
     """
-    raise NotImplementedError("TODO(TV1): orchestrate probe -> keyframes -> features -> writers")
+    raise NotImplementedError("TODO(Quốc Đạt): orchestrate probe -> keyframes -> features -> writers")
 
 
 def main() -> None:

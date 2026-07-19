@@ -14,7 +14,7 @@ class ErrorCode(StrEnum):
     """Stable machine-readable failure codes.
 
     The five validator rules of docs/05 §3 map onto the first five members.
-    Keep the string values stable — they end up in logs the Lead greps to
+    Keep the string values stable — they end up in logs the Vỹ Triết greps to
     explain a blocked submit.
     """
 

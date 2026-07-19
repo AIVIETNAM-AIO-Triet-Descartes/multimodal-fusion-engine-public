@@ -16,7 +16,7 @@ from mfe.offline.features.base import FeatureModule
 class ClipModule(FeatureModule):
     """Produces the L2-normalized vector stored in VectorRecord.embedding.
 
-    Owner: TV1. TODO(TV1): implement.
+    Owner: Quốc Đạt. TODO(Quốc Đạt): implement.
 
     - Normalize L2 before returning. docs/00 §4.1 requires it, and
       `VectorRecord` rejects a vector whose norm is off — so an unnormalized
@@ -25,7 +25,7 @@ class ClipModule(FeatureModule):
     - The vector length must equal `retrieval.embed_dim` in config (512 for
       ViT-B/32, 768 for larger). A mismatch is caught only when Faiss refuses
       the add, several thousand keyframes in.
-    - The *same* checkpoint must encode queries at search time (TV3). A text
+    - The *same* checkpoint must encode queries at search time (Phạm Trọng). A text
       tower from one model against an image tower from another produces
       confident nonsense.
     """
@@ -33,10 +33,10 @@ class ClipModule(FeatureModule):
     config_key = "clip"
 
     def is_enabled(self, models_config: Any) -> bool:
-        raise NotImplementedError("TODO(TV1)")
+        raise NotImplementedError("TODO(Quốc Đạt)")
 
     def load(self, model_name: str) -> None:
-        raise NotImplementedError("TODO(TV1): load CLIP checkpoint")
+        raise NotImplementedError("TODO(Quốc Đạt): load CLIP checkpoint")
 
     def extract(self, image_bytes: bytes) -> list[float]:
-        raise NotImplementedError("TODO(TV1): image -> L2-normalized embedding")
+        raise NotImplementedError("TODO(Quốc Đạt): image -> L2-normalized embedding")

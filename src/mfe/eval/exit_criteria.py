@@ -35,40 +35,40 @@ class CriterionResult(BaseModel):
 def check_all(run_summary: dict) -> list[CriterionResult]:
     """Evaluate every criterion against a harness run.
 
-    Owner: Lead. TODO(Lead): implement the checks below.
+    Owner: Vỹ Triết. TODO(Vỹ Triết): implement the checks below.
     """
-    raise NotImplementedError("TODO(Lead): evaluate all criteria -> results")
+    raise NotImplementedError("TODO(Vỹ Triết): evaluate all criteria -> results")
 
 
 def check_queries_without_crash(run_summary: dict) -> CriterionResult:
     """>= 30 queries completed without a crash, with a reproducible log."""
-    raise NotImplementedError("TODO(Lead)")
+    raise NotImplementedError("TODO(Vỹ Triết)")
 
 
 def check_mapping_accuracy(run_summary: dict) -> CriterionResult:
     """Mapping 100% correct on the sample.
 
-    TODO(Lead): source this from `RelationalMap.verify_mapping()` rather than
+    TODO(Vỹ Triết): source this from `RelationalMap.verify_mapping()` rather than
     from query outcomes. A query set can pass while the map is wrong — it only
     touches the keyframes the queries happen to hit.
     """
-    raise NotImplementedError("TODO(Lead)")
+    raise NotImplementedError("TODO(Vỹ Triết)")
 
 
 def check_invalid_submits_blocked(run_summary: dict) -> CriterionResult:
     """Every malformed submit was blocked by the validator.
 
-    TODO(Lead): this needs deliberately bad submits in the run — a set of known
+    TODO(Vỹ Triết): this needs deliberately bad submits in the run — a set of known
     violations, one per rule in docs/05 §3. A run where nothing was wrong proves
     the fence works only in the sense that an untested fence is standing.
     """
-    raise NotImplementedError("TODO(Lead)")
+    raise NotImplementedError("TODO(Vỹ Triết)")
 
 
 def check_metrics_recorded(run_summary: dict) -> CriterionResult:
     """Recall@K, TTCA, latency, throughput all present.
 
-    TODO(Lead): throughput comes from `eval/throughput.json` (TV1, docs/02 §5),
+    TODO(Vỹ Triết): throughput comes from `eval/throughput.json` (Quốc Đạt, docs/02 §5),
     not from this run.
     """
-    raise NotImplementedError("TODO(Lead)")
+    raise NotImplementedError("TODO(Vỹ Triết)")

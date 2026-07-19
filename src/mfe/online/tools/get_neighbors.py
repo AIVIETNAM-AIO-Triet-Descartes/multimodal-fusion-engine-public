@@ -20,7 +20,7 @@ from mfe.contracts.tools import Neighbor, ToolResult
 
 
 def get_neighbors(keyframe_id: str, window: int = 5) -> ToolResult[Neighbor]:
-    """Owner: TV3. TODO(TV3): implement.
+    """Owner: Phạm Trọng. TODO(Phạm Trọng): implement.
 
     - Reads the Relational Map (`RelationalMap.get_neighbors`). This is the one
       sanctioned retrieval read of that store — it returns context, not
@@ -32,4 +32,4 @@ def get_neighbors(keyframe_id: str, window: int = 5) -> ToolResult[Neighbor]:
     - Near the start or end, return fewer than `window` — that is correct, not
       an error.
     """
-    raise NotImplementedError("TODO(TV3): keyframe_id + window -> neighbors")
+    raise NotImplementedError("TODO(Phạm Trọng): keyframe_id + window -> neighbors")

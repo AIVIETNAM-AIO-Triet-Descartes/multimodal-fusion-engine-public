@@ -18,7 +18,7 @@ pip install -e ".[dev]"
 pytest tests/unit/contracts -v    # 52 test, không cần torch/faiss
 ```
 
-Cài thêm theo workstream của bạn: `pip install -e ".[offline]"` (TV1), `".[stores]"` (TV2), `".[online,browser]"` (TV3). TV4 và Lead chỉ cần `dev`.
+Cài thêm theo workstream của bạn: `pip install -e ".[offline]"` (Quốc Đạt), `".[stores]"` (Công Quang), `".[online,browser]"` (Phạm Trọng). Nhật Bảo và Vỹ Triết chỉ cần `dev`.
 
 Hai lệnh của sprint (chưa hiện thực):
 
@@ -47,11 +47,11 @@ mfe-eval --queryset eval/queryset.jsonl --config config/local.yaml --out eval/re
 
 | Người | Vai | Spec | Code |
 |---|---|---|---|
-| Lead | Contract, eval, infra | [`docs/01`](docs/01-lead-coordination-infra.md) | [`contracts/`](src/mfe/contracts/) [`core/`](src/mfe/core/) [`eval/`](src/mfe/eval/) |
-| TV1 | Offline ingestion | [`docs/02`](docs/02-offline-ingestion.md) | [`offline/`](src/mfe/offline/) |
-| TV2 | Storage (3 kho tìm kiếm) | [`docs/03`](docs/03-storage-indexes.md) | [`stores/`](src/mfe/stores/) |
-| TV3 | Online retrieval + browser | [`docs/04`](docs/04-online-retrieval.md) | [`online/`](src/mfe/online/) [`browser/`](src/mfe/browser/) |
-| TV4 | Validator / Mapping **(P0)** | [`docs/05`](docs/05-validator-mapping.md) | [`mapping/`](src/mfe/mapping/) |
+| Vỹ Triết | Contract, eval, infra | [`docs/01`](docs/01-lead-coordination-infra.md) | [`contracts/`](src/mfe/contracts/) [`core/`](src/mfe/core/) [`eval/`](src/mfe/eval/) |
+| Quốc Đạt | Offline ingestion | [`docs/02`](docs/02-offline-ingestion.md) | [`offline/`](src/mfe/offline/) |
+| Công Quang | Storage (3 kho tìm kiếm) | [`docs/03`](docs/03-storage-indexes.md) | [`stores/`](src/mfe/stores/) |
+| Phạm Trọng | Online retrieval + browser | [`docs/04`](docs/04-online-retrieval.md) | [`online/`](src/mfe/online/) [`browser/`](src/mfe/browser/) |
+| Nhật Bảo | Validator / Mapping **(P0)** | [`docs/05`](docs/05-validator-mapping.md) | [`mapping/`](src/mfe/mapping/) |
 
 **`src/mfe/<workstream>/` = một owner.** Đó là luật giữ cây thư mục không rối khi thêm sprint.
 
@@ -62,17 +62,17 @@ mfe-eval --queryset eval/queryset.jsonl --config config/local.yaml --out eval/re
 ```
                           OFFLINE
 video mẫu (local)
-  └─ [TV1] ingestion: keyframe + pretrained (CLIP/object/OCR/metadata)
+  └─ [Quốc Đạt] ingestion: keyframe + pretrained (CLIP/object/OCR/metadata)
        └─ ghi ra 4 KHO:
 
-  [TV2] Vector Index   [TV2] Inverted Index   [TV2] Asset Store   [TV4] Relational Map
+  [Công Quang] Vector Index   [Công Quang] Inverted Index   [Công Quang] Asset Store   [Nhật Bảo] Relational Map
      (semantic)          (text/exact match)      (ảnh gốc/blob)      (validator core, P0)
   └──────────── phục vụ TÌM KIẾM ────────────┘   └── nguồn SỰ THẬT, chỉ dùng lúc xác minh ──┘
 
                           ONLINE
 query text
-  └─ [TV3] Cascade: late-fusion coarse → dedup/temporal → early-fusion rerank → browser
-       └─ [TV4] Validator + submit adapter → Submit hợp lệ
+  └─ [Phạm Trọng] Cascade: late-fusion coarse → dedup/temporal → early-fusion rerank → browser
+       └─ [Nhật Bảo] Validator + submit adapter → Submit hợp lệ
 ```
 
 **Luồng quan trọng nhất:** retrieval **không** query thẳng vào Relational Map. Ba kho đầu phục vụ *tìm*; kho thứ tư phục vụ *xác minh*, chỉ ở bước cuối trước submit.
@@ -126,10 +126,10 @@ Từ docs/00 §1. `tests/integration/test_vertical_slice.py` là bản code củ
 - [ ] Chạy ≥ 30 query nội bộ không crash, có log tái hiện
 - [ ] Có số liệu Recall@K, TTCA, latency, throughput
 
-**Thứ tự tích hợp** (docs/01 §4): TV4 dựng mapping+validator → TV1 ingest → TV2 mở API → TV3 nối `search_text` → Lead chạy harness → bổ sung dần.
+**Thứ tự tích hợp** (docs/01 §4): Nhật Bảo dựng mapping+validator → Quốc Đạt ingest → Công Quang mở API → Phạm Trọng nối `search_text` → Vỹ Triết chạy harness → bổ sung dần.
 
 ---
 
 ## Đổi contract thế nào
 
-docs/01 §1: muốn đổi schema một kho hoặc chữ ký một tool → **báo Lead**. Lead cập nhật `docs/00`, ghi ADR, thông báo nhóm. Không ai tự sửa contract trong file cá nhân.
+docs/01 §1: muốn đổi schema một kho hoặc chữ ký một tool → **báo Vỹ Triết**. Vỹ Triết cập nhật `docs/00`, ghi ADR, thông báo nhóm. Không ai tự sửa contract trong file cá nhân.

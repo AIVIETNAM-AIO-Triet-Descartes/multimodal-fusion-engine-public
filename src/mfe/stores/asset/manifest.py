@@ -15,7 +15,7 @@ from mfe.contracts.records import AssetRecord, AssetType
 
 
 class AssetStore:
-    """A manifest pointing at bytes. Owner: TV2. TODO(TV2): implement.
+    """A manifest pointing at bytes. Owner: Công Quang. TODO(Công Quang): implement.
 
     Bytes are read and written through `mfe.core.storage`, never `open()` —
     that is what makes local -> Modal a config change (docs/01 §3.2).
@@ -25,32 +25,32 @@ class AssetStore:
         self.store_path = store_path
 
     def add(self, records: list[AssetRecord]) -> None:
-        """Register assets. Called by TV1's writers during ingest.
+        """Register assets. Called by Quốc Đạt's writers during ingest.
 
-        TODO(TV2): implement. A keyframe may have several rows — one `image`,
+        TODO(Công Quang): implement. A keyframe may have several rows — one `image`,
         one `video_segment` (docs/03 §3(c)) — so this is keyed by
         (keyframe_id, asset_type), not keyframe_id alone.
         """
-        raise NotImplementedError("TODO(TV2): register asset rows")
+        raise NotImplementedError("TODO(Công Quang): register asset rows")
 
     def get_asset(self, keyframe_id: str, asset_type: AssetType = AssetType.IMAGE) -> bytes:
         """The `get_asset` API of docs/03 §3.
 
-        TODO(TV2): implement. Raise ContractError(KEYFRAME_NOT_FOUND) on a miss
+        TODO(Công Quang): implement. Raise ContractError(KEYFRAME_NOT_FOUND) on a miss
         — never return a placeholder image. A placeholder would silently feed
         the reranker garbage and the operator a lie.
 
-        DECIDE WITH TV3 BEFORE IMPLEMENTING (docs/03 §3): does this return bytes
+        DECIDE WITH Phạm Trọng BEFORE IMPLEMENTING (docs/03 §3): does this return bytes
         or a path, and at what image size? Both the cross-encoder and the UI
         depend on the answer, and it is cheap to settle now and expensive later.
-        The signature here says bytes — change it if TV3 needs otherwise.
+        The signature here says bytes — change it if Phạm Trọng needs otherwise.
         """
-        raise NotImplementedError("TODO(TV2): keyframe_id -> asset bytes")
+        raise NotImplementedError("TODO(Công Quang): keyframe_id -> asset bytes")
 
     def get_record(self, keyframe_id: str, asset_type: AssetType) -> AssetRecord:
         """Manifest row without loading the bytes — for sizing and for the UI."""
-        raise NotImplementedError("TODO(TV2): keyframe_id -> AssetRecord")
+        raise NotImplementedError("TODO(Công Quang): keyframe_id -> AssetRecord")
 
     def total_bytes(self) -> int:
         """Sum of `byte_size`. Feeds the Modal volume estimate (docs/02 §5)."""
-        raise NotImplementedError("TODO(TV2)")
+        raise NotImplementedError("TODO(Công Quang)")

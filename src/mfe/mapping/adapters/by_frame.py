@@ -9,11 +9,11 @@ from mfe.mapping.adapters.base import SubmitAdapter
 
 
 class ByFrameAdapter(SubmitAdapter):
-    """Owner: TV4. TODO(TV4): implement.
+    """Owner: Nhật Bảo. TODO(Nhật Bảo): implement.
 
     Read `keyframe.frame_number` directly.
 
-    TODO(TV4, Lead): if BTC scores by frame, confirm their extraction convention
+    TODO(Nhật Bảo, Vỹ Triết): if BTC scores by frame, confirm their extraction convention
     and FPS. docs/context/buoi-1.md §7: "nếu dùng frame thì cần FPS/config trích
     xuất". Our frame numbers index the source video (docs/00 §3); if BTC numbers
     frames within *their* keyframe set instead, every submission is off by the
@@ -23,4 +23,4 @@ class ByFrameAdapter(SubmitAdapter):
     format_name = "by_frame"
 
     def build(self, keyframe: KeyframeRow, video: VideoRow) -> dict[str, Any]:
-        raise NotImplementedError("TODO(TV4): {video_id, frame_number}")
+        raise NotImplementedError("TODO(Nhật Bảo): {video_id, frame_number}")

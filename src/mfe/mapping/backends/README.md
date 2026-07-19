@@ -1,6 +1,6 @@
 # mapping/backends/
 
-**Owner:** TV4. **Spec:** `docs/05-validator-mapping.md` §1.
+**Owner:** Nhật Bảo. **Spec:** `docs/05-validator-mapping.md` §1.
 
 ## Vì sao tách backend từ ngày 1
 

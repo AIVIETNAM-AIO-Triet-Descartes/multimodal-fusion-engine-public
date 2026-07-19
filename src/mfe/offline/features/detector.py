@@ -20,10 +20,10 @@ from mfe.offline.features.base import FeatureModule
 class DetectorModule(FeatureModule):
     """Produces InvertedRecord.object_labels.
 
-    Owner: TV1. TODO(TV1): implement.
+    Owner: Quốc Đạt. TODO(Quốc Đạt): implement.
 
-    - Return normalized label strings; TV2 indexes them as terms (docs/03 §2.2).
-      Agree the vocabulary with TV2 first — if TV1 emits "handbag" and a query
+    - Return normalized label strings; Công Quang indexes them as terms (docs/03 §2.2).
+      Agree the vocabulary with Công Quang first — if Quốc Đạt emits "handbag" and a query
       expands to "purse", the term never matches.
     - The confidence threshold belongs in config, not here.
     - Sprint 1 stores labels only, not boxes. Boxes become necessary for the
@@ -34,10 +34,10 @@ class DetectorModule(FeatureModule):
     config_key = "detector"
 
     def is_enabled(self, models_config: Any) -> bool:
-        raise NotImplementedError("TODO(TV1)")
+        raise NotImplementedError("TODO(Quốc Đạt)")
 
     def load(self, model_name: str) -> None:
-        raise NotImplementedError("TODO(TV1): load detector checkpoint")
+        raise NotImplementedError("TODO(Quốc Đạt): load detector checkpoint")
 
     def extract(self, image_bytes: bytes) -> list[str]:
-        raise NotImplementedError("TODO(TV1): image -> object labels")
+        raise NotImplementedError("TODO(Quốc Đạt): image -> object labels")

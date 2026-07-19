@@ -11,10 +11,10 @@ from mfe.core.storage import StorageBackend
 class LocalBackend(StorageBackend):
     """Reads and writes plain files under a root directory.
 
-    Owner: Lead.
+    Owner: Vỹ Triết.
 
     Every access is confined to `root`. A path read from a manifest — an
-    `asset_path` written by TV1, or later something on a Modal volume — is
+    `asset_path` written by Quốc Đạt, or later something on a Modal volume — is
     untrusted input; a `..` in it must not read outside the data tree. Absolute
     paths are joined the pathlib way (`root / "/x"` == `/x`) and then rejected
     by the same containment check, so an absolute escape fails too.

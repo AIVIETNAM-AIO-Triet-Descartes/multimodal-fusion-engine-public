@@ -16,9 +16,9 @@ from mfe.contracts.tools import Candidate, ToolResult
 
 
 def search_text(query_text: str, top_k: int = 100) -> ToolResult[Candidate]:
-    """Owner: TV3. TODO(TV3): implement.
+    """Owner: Phạm Trọng. TODO(Phạm Trọng): implement.
 
-    - Encode the query with the *same* CLIP checkpoint TV1 used for images. A
+    - Encode the query with the *same* CLIP checkpoint Quốc Đạt used for images. A
       text tower from a different model against those image vectors returns
       confident nonsense.
     - Run vector_search and text_search, fuse via `fusion.py`.
@@ -29,4 +29,4 @@ def search_text(query_text: str, top_k: int = 100) -> ToolResult[Candidate]:
     - On failure return ToolResult with an error, not an empty list. "No
       results" and "the store is down" must be distinguishable.
     """
-    raise NotImplementedError("TODO(TV3): encode query -> vector + text search -> fuse")
+    raise NotImplementedError("TODO(Phạm Trọng): encode query -> vector + text search -> fuse")

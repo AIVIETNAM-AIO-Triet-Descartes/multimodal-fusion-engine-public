@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Split by workstream so TV4/Lead can run the validator and eval harness
+# Split by workstream so Nhật Bảo/Vỹ Triết can run the validator and eval harness
 # without installing torch. See docs/00 §2 for the ownership map.
 offline = [
     "av>=12.0",

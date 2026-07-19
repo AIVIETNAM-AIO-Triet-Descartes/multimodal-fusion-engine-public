@@ -1,6 +1,6 @@
 # infra/
 
-**Owner:** Lead. **Spec:** `docs/01-lead-coordination-infra.md` §3.
+**Owner:** Vỹ Triết. **Spec:** `docs/01-lead-coordination-infra.md` §3.
 
 | Thư mục | Trạng thái |
 |---|---|

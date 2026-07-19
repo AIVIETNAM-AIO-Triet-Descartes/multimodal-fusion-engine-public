@@ -1,10 +1,10 @@
 # online/ — Retrieval cascade
 
-**Owner:** TV3. **Spec:** `docs/04-online-retrieval.md`.
+**Owner:** Phạm Trọng. **Spec:** `docs/04-online-retrieval.md`.
 
 ## Đây là critical path dài nhất của sprint
 
-docs/04 mở đầu nói thẳng: xếp người mạnh code nhất, hoặc ghép Lead hỗ trợ giai đoạn cao điểm.
+docs/04 mở đầu nói thẳng: xếp người mạnh code nhất, hoặc ghép Vỹ Triết hỗ trợ giai đoạn cao điểm.
 
 ## Cascade
 
@@ -14,7 +14,7 @@ query text
   -> [B] dedup + temporal grouping                          -> top 50-100
   -> [C] early-fusion rerank: cross-encoder trên ảnh gốc    -> top 10-20
   -> [D] browser: grid + timeline
-  -> candidate (+ evidence_id) -> Validator (TV4)
+  -> candidate (+ evidence_id) -> Validator (Nhật Bảo)
 ```
 
 Tinh thần: model rẻ/nhanh trên toàn kho (A), model đắt/chính xác chỉ trên tập nhỏ (C). Kích thước candidate là **điểm khởi đầu, không phải luật** — benchmark theo GPU/time budget thật.
@@ -29,12 +29,12 @@ docs/04 §1: khi C lỗi hoặc chậm, hệ **tự** quay về kết quả coar
 
 ## `tools/` — vì sao tách khỏi UI
 
-docs/00 §5 đặt tool-contract ở phần **cross-cutting**, không phải file TV3. Lý do: hai consumer — browser (Sprint 1) và agent (Buổi 3).
+docs/00 §5 đặt tool-contract ở phần **cross-cutting**, không phải file Phạm Trọng. Lý do: hai consumer — browser (Sprint 1) và agent (Buổi 3).
 
 | Chỗ | Gì |
 |---|---|
-| `contracts/tools.py` | **shape** — Lead sở hữu, ổn định |
-| `online/tools/*.py` | **impl** — TV3 sở hữu |
+| `contracts/tools.py` | **shape** — Vỹ Triết sở hữu, ổn định |
+| `online/tools/*.py` | **impl** — Phạm Trọng sở hữu |
 
 docs/context/buoi-3.md §2: *"agent không nên thay retrieval engine"*. Test để biết một tool có thuộc đây không: **agent gọi được nó khi không có browser nào chạy không?** Nếu nó cần UI state, nó sai chỗ.
 
@@ -48,14 +48,14 @@ Trọng số ở config (`retrieval.fusion_weights`). docs/00 §8 rủi ro 4: **
 
 ## Đo lường (docs/04 §5)
 
-- Log mỗi query: text, candidate đã xem, click, thời điểm → Lead tính **TTCA**
+- Log mỗi query: text, candidate đã xem, click, thời điểm → Vỹ Triết tính **TTCA**
 - Đo latency **riêng từng tầng** A/B/C để biết chỗ nghẽn
 - Nhớ: *"một model tăng Recall nhưng làm operator chậm hơn có thể khiến tổng điểm giảm"* — tối ưu TTCA, không chỉ Recall
 
 ## Đừng viết gì vào đây
 
 - **Query thẳng vào Relational Map** → docs/00 §2 cấm. Ngoại lệ duy nhất: `get_neighbors` (trả ngữ cảnh, không phải xác minh).
-- **Logic submit** → `mapping/` (TV4). TV3 chuyển candidate + `evidence_id` sang, dừng ở đó.
+- **Logic submit** → `mapping/` (Nhật Bảo). Phạm Trọng chuyển candidate + `evidence_id` sang, dừng ở đó.
 - **Tool dính UI state** → xem trên.
 
 ## Checklist bàn giao (docs/04 §6)
@@ -64,5 +64,5 @@ Trọng số ở config (`retrieval.fusion_weights`). docs/00 §8 rủi ro 4: **
 - [ ] Cascade A→B→C chạy, có fallback khi C lỗi
 - [ ] Fusion weights ở config, không hardcode
 - [ ] Browser: grid + mở timeline một thao tác
-- [ ] Nút submit tách riêng, đi qua validator TV4
-- [ ] Log đủ để Lead tính TTCA
+- [ ] Nút submit tách riêng, đi qua validator Nhật Bảo
+- [ ] Log đủ để Vỹ Triết tính TTCA

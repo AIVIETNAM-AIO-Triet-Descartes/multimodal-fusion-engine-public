@@ -1,11 +1,11 @@
 """Shared tool contract — docs/00 §5.
 
-docs/00 puts the tool contract in the *cross-cutting* section, not in TV3's
+docs/00 puts the tool contract in the *cross-cutting* section, not in Phạm Trọng's
 file, because two consumers depend on it: the browser in Sprint 1, and the
 Buổi 3 agent later. Hence the split:
 
-    contracts/tools.py    the shape (here, Lead-owned, stable)
-    online/tools/*.py     the implementations (TV3-owned)
+    contracts/tools.py    the shape (here, Vỹ Triết-owned, stable)
+    online/tools/*.py     the implementations (Phạm Trọng-owned)
 
 An agent added in a later sprint calls the same tools. docs/context/buoi-3.md §2:
 "agent không nên thay retrieval engine".
@@ -25,8 +25,8 @@ from mfe.contracts.errors import ErrorCode
 #: answer traces to real retrieval output (docs/05 §3, rule "Có bằng chứng") and
 #: so a later agent can cite evidence per docs/context/buoi-3.md §7.
 #:
-#: TODO(TV3, TV4): fix the concrete format before TV3 writes the first tool.
-#: docs/01 §1 flags `evidence_id` as the TV3<->TV4 sync point — if the two sides
+#: TODO(Phạm Trọng, Nhật Bảo): fix the concrete format before Phạm Trọng writes the first tool.
+#: docs/01 §1 flags `evidence_id` as the Phạm Trọng<->Nhật Bảo sync point — if the two sides
 #: disagree the validator cannot map results back to ids. A workable starting
 #: shape is "{tool_name}:{run_id}:{ordinal}", resolvable against the structured
 #: log written by mfe.core.logging. Keep it opaque to callers either way.
@@ -47,7 +47,7 @@ class ToolError(BaseModel):
 
 
 class Candidate(BaseModel):
-    """One retrieval hit — the unit that flows TV2 -> TV3 -> TV4.
+    """One retrieval hit — the unit that flows Công Quang -> Phạm Trọng -> Nhật Bảo.
 
     `score` is only comparable within the tool that produced it. CLIP cosine and
     BM25 live on different scales; normalize before fusing, never add raw
@@ -91,7 +91,7 @@ class ToolResult(BaseModel, Generic[ItemT]):
     items: list[ItemT] = Field(default_factory=list)
     error: ToolError | None = None
     latency_ms: float | None = Field(
-        default=None, description="Per-stage latency; the Lead aggregates for docs/01 §2"
+        default=None, description="Per-stage latency; the Vỹ Triết aggregates for docs/01 §2"
     )
 
     @property

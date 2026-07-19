@@ -1,6 +1,6 @@
 # eval/ — DATA (không phải code)
 
-**Owner:** `queryset.jsonl` → TV4. `results/` → sinh bởi harness.
+**Owner:** `queryset.jsonl` → Nhật Bảo. `results/` → sinh bởi harness.
 
 | Đây | Là gì |
 |---|---|
@@ -13,9 +13,9 @@ Chính va chạm tên này là một trong hai lý do chọn src layout. Xem `do
 
 | File | Git | Ai sinh |
 |---|---|---|
-| `queryset.jsonl` | **Tracked** | TV4 — ground truth, nhỏ, giá trị cao |
+| `queryset.jsonl` | **Tracked** | Nhật Bảo — ground truth, nhỏ, giá trị cao |
 | `results/` | Gitignored | `mfe-eval` mỗi lần chạy |
-| `throughput.json` | Gitignored | TV1 (`offline/throughput.py`) |
+| `throughput.json` | Gitignored | Quốc Đạt (`offline/throughput.py`) |
 
 ## Format `queryset.jsonl`
 
@@ -37,7 +37,7 @@ Một dòng một query (docs/01 §2, docs/05 §4):
 
 **≥ 20 query** (docs/05 §5), KIS trước. docs/00 §6 nói 20–50 query đa bước.
 
-TV4 phụ trách vì hiểu mapping/ground truth rõ nhất. Đây là điểm đồng bộ TV4↔Lead (docs/01 §1): lệch format → harness không chấm được gì.
+Nhật Bảo phụ trách vì hiểu mapping/ground truth rõ nhất. Đây là điểm đồng bộ Nhật Bảo↔Vỹ Triết (docs/01 §1): lệch format → harness không chấm được gì.
 
 ## Vì sao `gt_keyframe_ids` là list
 
