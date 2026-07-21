@@ -11,13 +11,12 @@ happens.
 
 from mfe.contracts.errors import ContractError, ErrorCode
 from mfe.contracts.ids import (
-    FRAME_DIGITS,
+    KEYFRAME_INDEX_DIGITS,
     build_keyframe_id,
     build_shot_id,
-    frame_to_timestamp_ms,
     parse_keyframe_id,
     parse_shot_id,
-    timestamp_ms_to_frame,
+    pts_time_to_timestamp_ms,
 )
 from mfe.contracts.records import (
     AssetRecord,
@@ -37,7 +36,7 @@ from mfe.contracts.tools import (
 )
 
 __all__ = [
-    "FRAME_DIGITS",
+    "KEYFRAME_INDEX_DIGITS",
     "AssetRecord",
     "AssetType",
     "Candidate",
@@ -54,8 +53,7 @@ __all__ = [
     "VideoRow",
     "build_keyframe_id",
     "build_shot_id",
-    "frame_to_timestamp_ms",
     "parse_keyframe_id",
     "parse_shot_id",
-    "timestamp_ms_to_frame",
+    "pts_time_to_timestamp_ms",
 ]

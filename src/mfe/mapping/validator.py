@@ -8,7 +8,7 @@ lọt." When a rule is ambiguous, block.
 The five rules:
 
     Tồn tại          keyframe_id is in the Relational Map        -> block
-    Trong biên       0 <= frame_number < total_frames            -> block
+    Trong biên       0 <= frame_idx < total_frames               -> block
     Timestamp hợp lệ 0 <= timestamp_ms <= duration_ms            -> block
     Đúng schema      record matches the required format          -> block
     Có bằng chứng    answer traces to a real evidence_id         -> warn/block
@@ -71,8 +71,9 @@ class Validator:
     def _check_frame_in_bounds(self, keyframe_id: str) -> ValidationFailure | None:
         """Rule "Trong biên" -> FRAME_OUT_OF_BOUNDS.
 
+        Bound-checks `frame_idx` (the real source-video frame from the CSV).
         Note the asymmetry with the timestamp rule below, and keep it: frames
-        are 0-indexed so the bound is exclusive (`frame_number < total_frames`),
+        are 0-indexed so the bound is exclusive (`frame_idx < total_frames`),
         while duration is inclusive (`timestamp_ms <= duration_ms`). Making both
         inclusive admits a frame that does not exist.
         """

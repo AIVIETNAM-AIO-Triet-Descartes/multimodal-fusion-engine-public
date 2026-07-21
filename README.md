@@ -85,12 +85,12 @@ query text
 
 ```python
 from mfe.contracts.ids import build_keyframe_id
-build_keyframe_id("L01_V001", 1234)   # 'L01_V001#001234'
+build_keyframe_id("L21_V001", 1)   # 'L21_V001#001'  (keyframe_index, khớp file 001.jpg)
 ```
 
 Không tự f-string. docs/02 §4 gọi đây là *"điểm dễ sai nhất — sai một chỗ là cả pipeline lệch"*.
 
-**2. Không suy `timestamp_ms` từ `frame_number` lúc submit.** Lưu cả hai, đọc thẳng từ Relational Map. BTC chưa chốt submit theo cái nào. Ba ví dụ trong chính bộ docs này từng lệch nhau vì làm tròn khác nhau — xem [`adr/0002`](docs/adr/0002-id-format.md).
+**2. `frame_idx` và `pts_time` đọc thẳng từ `map-keyframes` CSV, KHÔNG tự tính.** `round(pts_time×fps)` đã được chứng minh sai trên 83–93% dòng video 29.97fps (NTSC drop-frame). BTC chưa chốt submit theo cái nào nên lưu đủ — xem [`adr/0002`](docs/adr/0002-id-format.md).
 
 **3. Submit sai còn tệ hơn không submit.** Validator thà chặn nhầm còn hơn cho lọt (docs/05 §3).
 

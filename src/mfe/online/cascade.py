@@ -44,7 +44,7 @@ class Cascade:
 
     def _coarse(self, query_text: str) -> list[Candidate]:
         """Stage A — late fusion over the whole store. See `fusion.py`."""
-        raise NotImplementedError("TODO(Phạm Trọng): vector_search + text_search -> fused candidates")
+        raise NotImplementedError("TODO(Phạm Trọng): vector + text search -> fused candidates")
 
     def _group(self, candidates: list[Candidate]) -> list[Candidate]:
         """Stage B — dedup + temporal grouping. See `dedup.py`."""

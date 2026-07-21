@@ -15,8 +15,8 @@ from mfe.core.storage import get_backend
 class TestLocalBackend:
     def test_write_then_read_round_trips(self, tmp_path):
         backend = LocalBackend(root=str(tmp_path))
-        backend.write_bytes("keyframes/L01_V001/000250.jpg", b"\xff\xd8\xff")
-        assert backend.read_bytes("keyframes/L01_V001/000250.jpg") == b"\xff\xd8\xff"
+        backend.write_bytes("keyframes/L21_V001/025.jpg", b"\xff\xd8\xff")
+        assert backend.read_bytes("keyframes/L21_V001/025.jpg") == b"\xff\xd8\xff"
 
     def test_write_creates_parent_dirs(self, tmp_path):
         backend = LocalBackend(root=str(tmp_path))

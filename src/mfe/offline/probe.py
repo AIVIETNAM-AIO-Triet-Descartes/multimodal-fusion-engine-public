@@ -30,7 +30,7 @@ def probe_video(source_path: str, video_id: str) -> VideoRow:
 
 
 def derive_video_id(source_path: str) -> str:
-    """Derive a `video_id` from a filename, e.g. data/raw/L01_V001.mp4 -> L01_V001.
+    """Derive a `video_id` from a filename, e.g. data/raw/L21_V001.mp4 -> L21_V001.
 
     Owner: Quốc Đạt. TODO(Quốc Đạt): implement.
 

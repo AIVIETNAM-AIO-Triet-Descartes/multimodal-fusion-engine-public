@@ -36,7 +36,7 @@ docs/02 §1 nói thẳng: giai đoạn này **không** để đạt độ chính
 
 **1. `keyframe_id`.** Luôn dùng `mfe.contracts.ids.build_keyframe_id`, không tự f-string. docs/02 §4: *"Đây là điểm dễ sai nhất — sai một chỗ là cả pipeline lệch."*
 
-**2. `frame_number` là index trong video gốc, 0-indexed** (docs/00 §3) — không phải thứ tự trong danh sách keyframe đã trích. Hai cái này khác nhau ngay khi sampling không phải every-frame.
+**2. `keyframe_index` (n) ≠ `frame_idx`.** `keyframe_index` là thứ tự keyframe / tên file ảnh (`001.jpg`) → vào `keyframe_id`. `frame_idx` là frame thật trong video gốc, **đọc từ `map-keyframes` CSV, không tự tính** (docs/00 §3). Nhầm hai cái = mọi submission lệch.
 
 ## Đừng viết gì vào đây
 

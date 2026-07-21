@@ -20,9 +20,10 @@ def group_by_shot(candidates: list[Candidate]) -> list[list[Candidate]]:
     Owner: Phạm Trọng. TODO(Phạm Trọng): implement.
 
     Prefers `shot_id` when Quốc Đạt assigned one (optional in Sprint 1 — docs/00 §3).
-    Falls back to temporal proximity within a video. Needs `frame_number`, which
-    `mfe.contracts.ids.parse_keyframe_id` gets from the id itself — no store
-    lookup required.
+    Falls back to temporal proximity within a video. `keyframe_index` (the
+    keyframe's order) comes from `mfe.contracts.ids.parse_keyframe_id` — good
+    enough for adjacency without a store lookup; use `pts_time` from the
+    Relational Map when true elapsed time matters.
     """
     raise NotImplementedError("TODO(Phạm Trọng): cluster candidates by shot / temporal proximity")
 
@@ -39,7 +40,7 @@ def select_representatives(groups: list[list[Candidate]]) -> list[Candidate]:
     often a transition frame; docs/context/buoi-1.md §7 records that a
     transition frame may not be accepted as an answer at all.
     """
-    raise NotImplementedError("TODO(Phạm Trọng): one representative per group, group kept expandable")
+    raise NotImplementedError("TODO(Phạm Trọng): one representative per group, kept expandable")
 
 
 def dedup(candidates: list[Candidate]) -> list[Candidate]:

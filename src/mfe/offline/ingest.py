@@ -60,7 +60,7 @@ def run(input_dir: str, config_path: str, limit: int | None = None) -> None:
       format the id by hand.
     - fps is read per video from `probe.py`, never assumed (docs/00 §7).
     """
-    raise NotImplementedError("TODO(Quốc Đạt): orchestrate probe -> keyframes -> features -> writers")
+    raise NotImplementedError("TODO(Quốc Đạt): probe -> keyframes -> features -> writers")
 
 
 def main() -> None:

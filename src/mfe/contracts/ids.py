@@ -4,13 +4,18 @@ Every store keys off `keyframe_id`. No store may mint its own identifiers.
 This module is the only place that knows how a `keyframe_id` is spelled; if you
 find yourself writing an f-string with a `#` in it, call in here instead.
 
-Two format decisions are recorded in docs/adr/0002-id-format.md:
+Anchored on the real dataset (Kaggle AI Challenge 2025). See
+docs/adr/0002-id-format.md.
 
-1. `frame_number` is zero-padded to 6 digits. docs never states the width, but
-   every example uses 6 (`#001234`, `#000250`, `#000000`).
-2. `timestamp_ms` uses round(), per the normative formula in docs/00 §3. Two
-   worked examples in the docs disagree with that formula; the formula wins and
-   the examples are being corrected.
+    keyframe_id    = {video_id}#{keyframe_index:03d}      e.g. L21_V001#001
+    keyframe_index = the keyframe's sequential position `n`, matching its image
+                     filename (001.jpg). It is NOT the source-video frame number.
+
+`frame_idx` (the real frame in the source video) and `pts_time` (seconds) are
+read from the dataset's `map-keyframes/{video_id}.csv` and **never computed**:
+`round(pts_time * fps)` was measured wrong on 83-93% of rows for 29.97fps NTSC
+drop-frame video. So this module deliberately offers no frame<->time derivation —
+only the one honest conversion, `pts_time_to_timestamp_ms`.
 """
 
 from __future__ import annotations
@@ -19,19 +24,18 @@ import re
 
 from mfe.contracts.errors import ContractError, ErrorCode
 
-#: Width of the zero-padded frame number inside a `keyframe_id`.
-#: 6 digits caps a video at 999,999 frames ~= 9.2 hours at 30fps. AIC clips are
-#: far shorter; raising this is a contract change (every store re-keys).
-FRAME_DIGITS = 6
+#: Zero-pad width of `keyframe_index` inside a `keyframe_id`. The dataset uses
+#: 3 (`001.jpg`). Indices >= 1000 simply use more digits; parsing accepts 3+.
+KEYFRAME_INDEX_DIGITS = 3
 
-#: Width of the zero-padded shot number inside a `shot_id` (`L01_V001#s07`).
+#: Width of the zero-padded shot number inside a `shot_id` (`L21_V001#s07`).
 SHOT_DIGITS = 2
 
-_KEYFRAME_RE = re.compile(rf"^(?P<video_id>[^\s#]+)#(?P<frame>\d{{{FRAME_DIGITS}}})$")
+_KEYFRAME_RE = re.compile(
+    rf"^(?P<video_id>[^\s#]+)#(?P<index>\d{{{KEYFRAME_INDEX_DIGITS},}})$"
+)
 _SHOT_RE = re.compile(r"^(?P<video_id>[^\s#]+)#s(?P<shot>\d+)$")
 _VIDEO_ID_RE = re.compile(r"^[^\s#]+$")
-
-MAX_FRAME_NUMBER = 10**FRAME_DIGITS - 1
 
 
 def validate_video_id(video_id: str) -> str:
@@ -48,42 +52,39 @@ def validate_video_id(video_id: str) -> str:
     return video_id
 
 
-def build_keyframe_id(video_id: str, frame_number: int) -> str:
-    """Build the global keyframe key: ``{video_id}#{frame_number:06d}``.
+def build_keyframe_id(video_id: str, keyframe_index: int) -> str:
+    """Build the global keyframe key: ``{video_id}#{keyframe_index:03d}``.
 
-    >>> build_keyframe_id("L01_V001", 1234)
-    'L01_V001#001234'
-    >>> build_keyframe_id("L01_V001", 0)
-    'L01_V001#000000'
+    `keyframe_index` is the keyframe's ordinal `n` (matching its image
+    filename), not the source-video frame number.
+
+    >>> build_keyframe_id("L21_V001", 1)
+    'L21_V001#001'
+    >>> build_keyframe_id("L21_V001", 250)
+    'L21_V001#250'
     """
     validate_video_id(video_id)
-    if frame_number < 0:
+    if keyframe_index < 0:
         raise ContractError(
-            ErrorCode.INVALID_ID, f"frame_number must be >= 0, got {frame_number}"
+            ErrorCode.INVALID_ID, f"keyframe_index must be >= 0, got {keyframe_index}"
         )
-    if frame_number > MAX_FRAME_NUMBER:
-        raise ContractError(
-            ErrorCode.INVALID_ID,
-            f"frame_number {frame_number} exceeds {FRAME_DIGITS}-digit format "
-            f"(max {MAX_FRAME_NUMBER}); widening FRAME_DIGITS is a contract change",
-        )
-    return f"{video_id}#{frame_number:0{FRAME_DIGITS}d}"
+    return f"{video_id}#{keyframe_index:0{KEYFRAME_INDEX_DIGITS}d}"
 
 
 def parse_keyframe_id(keyframe_id: str) -> tuple[str, int]:
-    """Inverse of :func:`build_keyframe_id`. Returns ``(video_id, frame_number)``.
+    """Inverse of :func:`build_keyframe_id`. Returns ``(video_id, keyframe_index)``.
 
-    >>> parse_keyframe_id("L01_V001#001234")
-    ('L01_V001', 1234)
+    >>> parse_keyframe_id("L21_V001#001")
+    ('L21_V001', 1)
     """
     match = _KEYFRAME_RE.match(keyframe_id)
     if match is None:
         raise ContractError(
             ErrorCode.INVALID_ID,
             f"malformed keyframe_id {keyframe_id!r}; "
-            f"expected {{video_id}}#{{frame_number:0{FRAME_DIGITS}d}}",
+            f"expected {{video_id}}#{{keyframe_index:0{KEYFRAME_INDEX_DIGITS}d}}",
         )
-    return match.group("video_id"), int(match.group("frame"))
+    return match.group("video_id"), int(match.group("index"))
 
 
 def build_shot_id(video_id: str, shot_number: int) -> str:
@@ -91,8 +92,8 @@ def build_shot_id(video_id: str, shot_number: int) -> str:
 
     Used for dedup / temporal grouping (docs/04 §3.2). Optional in Sprint 1.
 
-    >>> build_shot_id("L01_V001", 7)
-    'L01_V001#s07'
+    >>> build_shot_id("L21_V001", 7)
+    'L21_V001#s07'
     """
     validate_video_id(video_id)
     if shot_number < 0:
@@ -113,44 +114,26 @@ def parse_shot_id(shot_id: str) -> tuple[str, int]:
     return match.group("video_id"), int(match.group("shot"))
 
 
-def frame_to_timestamp_ms(frame_number: int, fps: float) -> int:
-    """Convert a frame index to milliseconds — docs/00 §3.
+def pts_time_to_timestamp_ms(pts_time: float) -> int:
+    """Convert a keyframe's `pts_time` (seconds, from CSV) to milliseconds.
 
-    ``timestamp_ms = round(frame_number / fps * 1000)``
+    ``timestamp_ms = round(pts_time * 1000)``
 
-    This is a *derivation*, not a substitute for storage. Both `frame_number`
-    and `timestamp_ms` are persisted on every keyframe row because BTC has not
-    fixed which one the submission uses (TO_CONFIRM, docs/00 §3). At submit
-    time, read both from the Relational Map — never re-derive one from the
-    other, or a float rounding difference becomes a wrong answer.
+    This is the *only* time conversion the contract sanctions, and it is exact
+    up to float representation — seconds to milliseconds, no fps involved.
 
-    >>> frame_to_timestamp_ms(250, 29.97)
-    8342
-    >>> frame_to_timestamp_ms(1180, 25.0)
-    47200
+    What is **forbidden** (docs/00 §3, docs/adr/0002-id-format.md): deriving
+    `frame_idx` from `pts_time` and `fps`, or vice versa. Both come straight from
+    `map-keyframes/{video_id}.csv`. `round(pts_time * fps)` disagreed with the
+    dataset on 83-93% of 29.97fps rows.
+
+    >>> pts_time_to_timestamp_ms(3.0)
+    3000
+    >>> pts_time_to_timestamp_ms(41.174)
+    41174
     """
-    if frame_number < 0:
+    if pts_time < 0:
         raise ContractError(
-            ErrorCode.INVALID_ID, f"frame_number must be >= 0, got {frame_number}"
+            ErrorCode.INVALID_ID, f"pts_time must be >= 0, got {pts_time}"
         )
-    if fps <= 0:
-        raise ContractError(
-            ErrorCode.INVALID_ID, f"fps must be > 0, got {fps}; read it per-video, never hardcode"
-        )
-    return round(frame_number / fps * 1000)
-
-
-def timestamp_ms_to_frame(timestamp_ms: int, fps: float) -> int:
-    """Inverse derivation, for tooling only.
-
-    Do **not** use this to build a submission. It exists so the browser can jump
-    from a user-picked timestamp back to a candidate frame. The authoritative
-    pair always comes from the Relational Map (docs/05 §1.2).
-    """
-    if timestamp_ms < 0:
-        raise ContractError(
-            ErrorCode.INVALID_ID, f"timestamp_ms must be >= 0, got {timestamp_ms}"
-        )
-    if fps <= 0:
-        raise ContractError(ErrorCode.INVALID_ID, f"fps must be > 0, got {fps}")
-    return round(timestamp_ms * fps / 1000)
+    return round(pts_time * 1000)

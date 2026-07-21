@@ -81,12 +81,13 @@ class RelationalMap:
         to be checkable by running something, not by reading rows.
 
         Worth checking:
-          - every keyframe_id parses, and agrees with its own video_id/frame_number
+          - every keyframe_id parses, and agrees with its own video_id/keyframe_index
           - every keyframes.video_id resolves to a videos row
-          - 0 <= frame_number < videos.total_frames
+          - 0 <= frame_idx < videos.total_frames
           - 0 <= timestamp_ms <= videos.duration_ms
-          - timestamp_ms == frame_to_timestamp_ms(frame_number, fps), which
-            catches a writer that derived it with a different rounding rule
-            (see docs/adr/0002-id-format.md — the docs' own examples disagreed)
+          - timestamp_ms == round(pts_time * 1000), i.e. the one derived column
+            agrees with its source. Do NOT check frame_idx against
+            round(pts_time * fps) — that formula is wrong on this dataset
+            (docs/00 §3, adr/0002); frame_idx is authoritative from the CSV.
         """
         raise NotImplementedError("TODO(Nhật Bảo): return list of mapping violations")

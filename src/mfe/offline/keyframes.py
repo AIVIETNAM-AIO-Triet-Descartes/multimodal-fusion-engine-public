@@ -19,22 +19,24 @@ def extract_keyframes(video: VideoRow) -> Iterator[tuple[KeyframeRow, AssetRecor
 
     Owner: Quốc Đạt. TODO(Quốc Đạt): implement.
 
-    Build ids and timestamps through `mfe.contracts.ids` — never by hand:
+    For the current dataset the keyframes AND their coordinates are provided:
+    read the images plus `map-keyframes/{video_id}.csv` (columns
+    n, pts_time, fps, frame_idx). Build ids and timestamps through
+    `mfe.contracts.ids` — never by hand:
 
-        keyframe_id  = build_keyframe_id(video.video_id, frame_number)
-        timestamp_ms = frame_to_timestamp_ms(frame_number, video.fps)
+        keyframe_id  = build_keyframe_id(video.video_id, n)      # n = keyframe_index
+        timestamp_ms = pts_time_to_timestamp_ms(pts_time)
 
-    `frame_number` must be the frame's index in the *source* video, 0-indexed
-    (docs/00 §3) — not its ordinal among extracted keyframes. Those two differ
-    the moment sampling is not every-frame, and confusing them puts every
-    submission off by a factor of the sampling stride.
+    `frame_idx` and `pts_time` are copied straight from the CSV and NEVER
+    recomputed — round(pts_time*fps) was wrong on 83-93% of 29.97fps rows
+    (docs/00 §3, adr/0002). `keyframe_index` (n) is the keyframe's ordinal /
+    image filename; it is a different number from `frame_idx`.
 
-    Selection strategy (I-frame vs fixed interval vs shot boundary) is Quốc Đạt's
-    call and belongs in config. docs/context/buoi-1.md slide 44 notes BTC
-    guarantees a query segment contains at least one provided keyframe — which
-    only helps if we index the keyframes they provide.
+    docs/context/buoi-1.md slide 44 notes BTC guarantees a query segment contains
+    at least one provided keyframe — which only helps if we index exactly the
+    keyframes they provide.
     """
-    raise NotImplementedError("TODO(Quốc Đạt): decode video -> keyframe images + rows")
+    raise NotImplementedError("TODO(Quốc Đạt): read provided keyframes + CSV -> rows")
 
 
 def assign_shot_ids(rows: list[KeyframeRow]) -> list[KeyframeRow]:

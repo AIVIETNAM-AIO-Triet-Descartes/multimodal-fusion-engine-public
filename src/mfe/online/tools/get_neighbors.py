@@ -27,8 +27,8 @@ def get_neighbors(keyframe_id: str, window: int = 5) -> ToolResult[Neighbor]:
       verification, so it does not violate docs/00 §2.
     - `window` counts neighbouring *keyframes*, not frames or seconds. Say which
       in the tool description; an agent given "window" with no unit will guess.
-    - Do not cross a video boundary. The keyframe before `L01_V002#000000` is
-      not the last keyframe of `L01_V001`.
+    - Do not cross a video boundary. The keyframe before `L21_V002#000` is
+      not the last keyframe of `L21_V001`.
     - Near the start or end, return fewer than `window` — that is correct, not
       an error.
     """

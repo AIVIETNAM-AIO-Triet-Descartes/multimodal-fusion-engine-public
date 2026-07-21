@@ -2,7 +2,7 @@
 
 This is the code form of the contract tables. Quốc Đạt produces these; Công Quang and Nhật Bảo
 consume them. If a field here disagrees with docs/00 §4, docs/00 wins and this
-file is the bug — tell the Vỹ Triết (docs/01 §1).
+file is the bug — tell Vỹ Triết (docs/01 §1).
 
 Why pydantic rather than plain dataclasses: drift between the four workstreams
 is risk #1 in docs/00 §8. Validation at the boundary turns a silent mismatch
@@ -54,31 +54,34 @@ class VideoRow(_Record):
 class KeyframeRow(_Record):
     """One row = one keyframe with its canonical coordinates. docs/05 §1.2.
 
-    Both `frame_number` and `timestamp_ms` are stored even though either can be
-    derived from the other via `fps`, because BTC has not fixed which the
-    submission uses (TO_CONFIRM, docs/00 §3).
+    `keyframe_index`, `frame_idx` and `pts_time` come straight from the dataset's
+    `map-keyframes/{video_id}.csv` — none is computed (docs/00 §3). `frame_idx`
+    and `pts_time` are stored because BTC has not fixed which the submission uses
+    (TO_CONFIRM); `timestamp_ms` is the one derived field, = pts_time * 1000.
     """
 
-    keyframe_id: str = Field(description="Primary key, {video_id}#{frame_number:06d}")
+    keyframe_id: str = Field(description="Primary key, {video_id}#{keyframe_index:03d}")
     video_id: str = Field(description="Foreign key -> VideoRow.video_id")
-    frame_number: int = Field(ge=0)
-    timestamp_ms: int = Field(ge=0)
+    keyframe_index: int = Field(ge=0, description="Ordinal n, matches keyframe_id and image file")
+    frame_idx: int = Field(ge=0, description="Real source-video frame, from CSV — never computed")
+    pts_time: float = Field(ge=0, description="Seconds, from CSV — never computed")
+    timestamp_ms: int = Field(ge=0, description="pts_time * 1000")
     shot_id: str | None = Field(default=None, description="Optional in Sprint 1")
 
     @model_validator(mode="after")
     def _keyframe_id_agrees_with_parts(self) -> KeyframeRow:
         """The single most expensive bug to ship: an id that disagrees with its
         own columns. docs/02 §4 calls this "điểm dễ sai nhất"."""
-        parsed_video_id, parsed_frame = parse_keyframe_id(self.keyframe_id)
+        parsed_video_id, parsed_index = parse_keyframe_id(self.keyframe_id)
         if parsed_video_id != self.video_id:
             raise ValueError(
                 f"keyframe_id {self.keyframe_id!r} encodes video_id "
                 f"{parsed_video_id!r} but the row says {self.video_id!r}"
             )
-        if parsed_frame != self.frame_number:
+        if parsed_index != self.keyframe_index:
             raise ValueError(
-                f"keyframe_id {self.keyframe_id!r} encodes frame {parsed_frame} "
-                f"but the row says {self.frame_number}"
+                f"keyframe_id {self.keyframe_id!r} encodes keyframe_index "
+                f"{parsed_index} but the row says {self.keyframe_index}"
             )
         return self
 

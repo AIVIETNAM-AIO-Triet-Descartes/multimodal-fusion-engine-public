@@ -39,7 +39,7 @@ Cộng: in **PASS/FAIL** từng tiêu chí "Done" ở docs/00 §1.
 
 ```json
 {"query_id": "q001", "text": "người đàn ông cầm túi tím bước xuống xe",
- "gt_keyframe_ids": ["L01_V001#001234"], "gt_video_id": "L01_V001", "type": "KIS"}
+ "gt_keyframe_ids": ["L21_V001#001"], "gt_video_id": "L21_V001", "type": "KIS"}
 ```
 
 Nhật Bảo hiểu mapping/ground truth rõ nhất nên phụ trách query set (docs/05 §4). Mục tiêu ≥20 query, KIS trước.

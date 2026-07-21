@@ -47,12 +47,12 @@ Schema BTC còn `TO_CONFIRM` (docs/00 §3). docs/context/buoi-1.md §7 ghi giả
 ## Đừng viết gì vào đây
 
 - **Logic retrieval/ranking** → `online/` (Phạm Trọng).
-- **Suy `timestamp_ms` từ `frame_number` lúc submit.** Đọc thẳng từ bảng. docs/00 §3 lưu cả hai cột chính vì lý do này — xem `docs/adr/0002-id-format.md`, ví dụ trong docs từng lệch nhau vì rounding.
+- **Tự tính `frame_idx`/`pts_time` từ `fps` lúc submit.** Đọc thẳng từ bảng (chép từ CSV lúc ingest). `round(pts_time×fps)` đã được chứng minh sai trên data thật — xem `docs/adr/0002-id-format.md`.
 
 ## Checklist bàn giao (docs/05 §5)
 
 - [ ] Relational Map dựng từ output Quốc Đạt, mapping đúng **100%** trên mẫu
-- [ ] `build_submission` xuất được cả timestamp và frame_number
+- [ ] `build_submission` xuất được cả timestamp và frame_idx
 - [ ] Validator chặn đủ 5 luật
 - [ ] `keyframe_id` không tồn tại → báo lỗi, **không đoán**
 - [ ] Query set ≥ 20 query + ground truth ở `eval/queryset.jsonl`
