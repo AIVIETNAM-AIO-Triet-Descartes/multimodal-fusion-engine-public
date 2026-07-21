@@ -25,10 +25,17 @@ class _Section(BaseModel):
 
 
 class PathsConfig(_Section):
-    """Mirrors docs/00 §7 exactly. Artifact locations only — never code."""
+    """Mirrors docs/00 §7. Input (data/sample/*, provided by the dataset) and
+    output (stores/*, we generate). Never code."""
 
-    raw: str
+    # Input — dataset extracted into data/sample/ (see data/README.md)
+    videos: str
     keyframes: str
+    clip_features: str
+    map_keyframes: str
+    objects: str
+    media_info: str
+    # Output — what we build
     segments: str
     vector_store: str
     inverted_store: str

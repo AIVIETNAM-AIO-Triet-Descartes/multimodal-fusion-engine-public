@@ -2,10 +2,16 @@
 # never in code (docs/01 §3.1, docs/00 §7).
 
 paths:
-  # Identical to docs/00 §7. Code lives in src/mfe/; these are artifacts only.
-  raw: data/raw/
-  keyframes: data/keyframes/
-  segments: data/segments/          # video_segment assets (docs/03 §3)
+  # --- INPUT: dataset giải nén vào data/sample/ (read-only, gitignored) -------
+  # Cấu trúc do Kaggle "AI Challenge 2025" cấp sẵn. Xem data/README.md.
+  videos: data/sample/videos/
+  keyframes: data/sample/keyframes/          # ảnh keyframe cấp sẵn (Asset Store đọc từ đây)
+  clip_features: data/sample/clip-features/  # .npy (n_keyframe, 512) float16 — không tự chạy CLIP
+  map_keyframes: data/sample/map-keyframes/  # CSV: n, pts_time, fps, frame_idx — NGUỒN SỰ THẬT
+  objects: data/sample/objects/              # object detection JSON
+  media_info: data/sample/media-info/        # metadata JSON mỗi video
+  # --- OUTPUT: kho ta sinh ra -------------------------------------------------
+  segments: data/segments/                   # video_segment ta cắt (optional, docs/03 §3)
   vector_store: stores/vector/
   inverted_store: stores/inverted/
   relational_db: stores/relational/app.db

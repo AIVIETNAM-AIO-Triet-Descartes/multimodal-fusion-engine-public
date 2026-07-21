@@ -28,9 +28,9 @@ class TestRealConfig:
 
     def test_paths_resolve_to_absolute_under_repo(self):
         config = load_config(LOCAL_YAML)
-        raw_path = Path(config.paths.raw)
-        assert raw_path.is_absolute()
-        assert raw_path == REPO_ROOT / "data" / "raw"
+        videos_path = Path(config.paths.videos)
+        assert videos_path.is_absolute()
+        assert videos_path == REPO_ROOT / "data" / "sample" / "videos"
 
     def test_paths_are_cwd_independent(self, tmp_path, monkeypatch):
         """The whole point of resolution: same stores from any working dir."""
@@ -51,7 +51,7 @@ class TestRealConfig:
     def test_modal_absolute_paths_not_rerooted(self):
         """A POSIX volume path stays absolute, even loaded on Windows."""
         config = load_config(REPO_ROOT / "config" / "modal.yaml")
-        assert config.paths.raw == "/vol/data/raw/"
+        assert config.paths.videos == "/vol/data/sample/videos/"
 
 
 class TestResolvePath:
@@ -76,8 +76,12 @@ class TestFailures:
         bad = tmp_path / "bad.yaml"
         bad.write_text(
             "paths:\n"
-            "  raw: data/raw/\n"
-            "  keyframes: data/keyframes/\n"
+            "  videos: data/sample/videos/\n"
+            "  keyframes: data/sample/keyframes/\n"
+            "  clip_features: data/sample/clip-features/\n"
+            "  map_keyframes: data/sample/map-keyframes/\n"
+            "  objects: data/sample/objects/\n"
+            "  media_info: data/sample/media-info/\n"
             "  segments: data/segments/\n"
             "  vector_store: stores/vector/\n"
             "  inverted_store: stores/inverted/\n"
@@ -102,8 +106,12 @@ class TestFailures:
         bad = tmp_path / "bad.yaml"
         bad.write_text(
             "paths:\n"
-            "  raw: data/raw/\n"
-            "  keyframes: data/keyframes/\n"
+            "  videos: data/sample/videos/\n"
+            "  keyframes: data/sample/keyframes/\n"
+            "  clip_features: data/sample/clip-features/\n"
+            "  map_keyframes: data/sample/map-keyframes/\n"
+            "  objects: data/sample/objects/\n"
+            "  media_info: data/sample/media-info/\n"
             "  segments: data/segments/\n"
             "  vector_store: stores/vector/\n"
             "  inverted_store: stores/inverted/\n"

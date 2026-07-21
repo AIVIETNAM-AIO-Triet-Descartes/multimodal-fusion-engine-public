@@ -8,8 +8,12 @@
 # ============================================================================
 
 paths:
-  raw: /vol/data/raw/
-  keyframes: /vol/data/keyframes/
+  videos: /vol/data/sample/videos/
+  keyframes: /vol/data/sample/keyframes/
+  clip_features: /vol/data/sample/clip-features/
+  map_keyframes: /vol/data/sample/map-keyframes/
+  objects: /vol/data/sample/objects/
+  media_info: /vol/data/sample/media-info/
   segments: /vol/data/segments/
   vector_store: /vol/stores/vector/
   inverted_store: /vol/stores/inverted/
