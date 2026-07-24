@@ -7,9 +7,9 @@
 Biến một thư mục video bất kỳ thành dữ liệu cho 4 kho, bằng **một lệnh**:
 
 ```bash
-python -m mfe.offline.ingest --input data/raw/ --config config/local.yaml
+python -m mfe.offline.ingest --input data/sample/ --config config/local.yaml
 # hoặc
-mfe-ingest --input data/raw/ --config config/local.yaml
+mfe-ingest --input data/sample/ --config config/local.yaml
 ```
 
 ## Tiêu chí thành công — không phải accuracy
