@@ -24,4 +24,4 @@ class RawKeyframeAdapter(SubmitAdapter):
     format_name = "raw_keyframe"
 
     def build(self, keyframe: KeyframeRow, video: VideoRow) -> dict[str, Any]:
-        raise NotImplementedError("TODO(Nhật Bảo): {keyframe_id}")
+        return {"keyframe_id": keyframe.keyframe_id}
