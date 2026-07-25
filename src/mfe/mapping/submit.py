@@ -31,4 +31,10 @@ def build_submission(
     raise ContractError(KEYFRAME_NOT_FOUND). docs/05 §2: "nếu keyframe_id không
     có trong Relational Map -> lỗi, không đoán".
     """
-    raise NotImplementedError("TODO(Nhật Bảo): dispatch schema_format -> adapter")
+    keyframe = relational_map.get_keyframe(keyframe_id)
+    video = relational_map.get_video(keyframe.video_id)
+    
+    from mfe.mapping.adapters.base import get_adapter
+    # Call str(schema_format) in case it's an enum
+    adapter = get_adapter(str(schema_format))
+    return adapter.build(keyframe, video)

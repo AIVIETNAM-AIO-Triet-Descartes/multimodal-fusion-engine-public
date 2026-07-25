@@ -24,5 +24,10 @@ class ByFrameRangeAdapter(SubmitAdapter):
 
     format_name = "by_frame_range"
 
+    def __init__(self, window: int = 5):
+        self.window = window
+
     def build(self, keyframe: KeyframeRow, video: VideoRow) -> dict[str, Any]:
-        raise NotImplementedError("TODO(Nhật Bảo): {video_id, frame_start, frame_end}, clamped")
+        frame_start = max(0, keyframe.frame_idx - self.window)
+        frame_end = min(video.total_frames - 1, keyframe.frame_idx + self.window)
+        return {"video_id": video.video_id, "frame_start": frame_start, "frame_end": frame_end}

@@ -23,7 +23,7 @@ Cài thêm theo workstream của bạn: `pip install -e ".[offline]"` (Quốc Đ
 Hai lệnh của sprint (chưa hiện thực):
 
 ```bash
-mfe-ingest --input data/sample/ --config config/local.yaml
+mfe-ingest --input data/raw/ --config config/local.yaml
 mfe-eval --queryset eval/queryset.jsonl --config config/local.yaml --out eval/results/
 ```
 

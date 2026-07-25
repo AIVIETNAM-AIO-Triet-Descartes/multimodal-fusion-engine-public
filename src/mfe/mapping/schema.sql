@@ -28,7 +28,8 @@ CREATE TABLE IF NOT EXISTS keyframes (
     frame_idx      INTEGER NOT NULL CHECK (frame_idx >= 0),       -- real source-video frame
     pts_time       REAL    NOT NULL CHECK (pts_time >= 0),        -- seconds
     timestamp_ms   INTEGER NOT NULL CHECK (timestamp_ms >= 0),    -- pts_time * 1000
-    shot_id        TEXT                       -- optional in Sprint 1
+    shot_id        TEXT,                       -- optional in Sprint 1
+    UNIQUE(video_id, keyframe_index)
 );
 
 -- The validator's "Trong biên" rule joins keyframes to videos on every submit
@@ -39,8 +40,3 @@ CREATE INDEX IF NOT EXISTS idx_keyframes_video_id ON keyframes(video_id);
 CREATE INDEX IF NOT EXISTS idx_keyframes_video_index ON keyframes(video_id, keyframe_index);
 
 CREATE INDEX IF NOT EXISTS idx_keyframes_shot_id ON keyframes(shot_id);
-
--- TODO(Nhật Bảo): a video_id + keyframe_index pair should be unique, and it is
--- implied by keyframe_id being the PK — but only if every writer builds the id
--- through mfe.contracts.ids. A UNIQUE(video_id, keyframe_index) constraint makes
--- that independent of writer discipline. Add it unless there is a reason not to.

@@ -24,4 +24,4 @@ class ByTimestampAdapter(SubmitAdapter):
     format_name = "by_timestamp"
 
     def build(self, keyframe: KeyframeRow, video: VideoRow) -> dict[str, Any]:
-        raise NotImplementedError("TODO(Nhật Bảo): {video_id, timestamp_ms}")
+        return {"video_id": video.video_id, "timestamp_ms": keyframe.timestamp_ms}

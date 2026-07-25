@@ -24,4 +24,4 @@ class ByFrameAdapter(SubmitAdapter):
     format_name = "by_frame"
 
     def build(self, keyframe: KeyframeRow, video: VideoRow) -> dict[str, Any]:
-        raise NotImplementedError("TODO(Nhật Bảo): {video_id, frame_idx}")
+        return {"video_id": video.video_id, "frame_idx": keyframe.frame_idx}
