@@ -11,15 +11,18 @@ The five rules:
     Trong biên       0 <= frame_idx < total_frames               -> block
     Timestamp hợp lệ 0 <= timestamp_ms <= duration_ms            -> block
     Đúng schema      record matches the required format          -> block
-    Có bằng chứng    answer traces to a real evidence_id         -> warn/block
+    Có bằng chứng    answer traces to a real evidence_id         -> block (chốt)
 """
 
 from __future__ import annotations
 
+import re
+
 from pydantic import BaseModel, ConfigDict
 
-from mfe.contracts.errors import ErrorCode, ContractError
-from mfe.contracts.tools import EvidenceId
+from mfe.contracts.errors import ContractError, ErrorCode
+from mfe.contracts.records import KeyframeRow, VideoRow
+from mfe.contracts.tools import EVIDENCE_ID_PATTERN, EvidenceId
 
 
 class ValidationFailure(BaseModel):
@@ -60,93 +63,108 @@ class Validator:
         time — which is the metric that actually matters (docs/04 §5: optimize
         TTCA, not just Recall).
         """
-        failures = []
+        failures: list[ValidationFailure] = []
 
-        f1 = self._check_exists(keyframe_id)
-        if f1:
-            failures.append(f1)
-            # If it doesn't exist, we can't check bounds
-            return ValidationResult(valid=False, failures=failures)
-            
-        f2 = self._check_frame_in_bounds(keyframe_id)
-        if f2: failures.append(f2)
-            
-        f3 = self._check_timestamp_in_bounds(keyframe_id)
-        if f3: failures.append(f3)
+        # Rule "Tồn tại" — one fetch; if it is missing, nothing else can be
+        # checked, so return early. (This is also the only fetch: the keyframe
+        # and its video are read once here and passed to the bounds rules,
+        # instead of each rule hitting the DB again.)
+        try:
+            keyframe = self.relational_map.get_keyframe(keyframe_id)
+        except ContractError as e:
+            if e.code == ErrorCode.KEYFRAME_NOT_FOUND:
+                return ValidationResult(
+                    valid=False,
+                    failures=[
+                        ValidationFailure(
+                            code=ErrorCode.KEYFRAME_NOT_FOUND,
+                            rule="Tồn tại",
+                            message=f"Keyframe {keyframe_id} not in Relational Map",
+                        )
+                    ],
+                )
+            raise
+        video = self.relational_map.get_video(keyframe.video_id)
 
-        # Build the record to check its schema
+        for check in (
+            self._check_frame_in_bounds(keyframe, video),
+            self._check_timestamp_in_bounds(keyframe, video),
+        ):
+            if check is not None:
+                failures.append(check)
+
+        # Rule "Đúng schema" — build the record, then check its shape.
         try:
             from mfe.mapping.submit import build_submission
+
             record = build_submission(keyframe_id, schema_format, self.relational_map)
-            f4 = self._check_schema(record, str(schema_format))
-            if f4: failures.append(f4)
-        except Exception as e:
-            failures.append(ValidationFailure(
-                code=ErrorCode.SCHEMA_MISMATCH,
-                rule="Đúng schema",
-                message=f"Failed to build submission: {str(e)}"
-            ))
-            
-        f5 = self._check_evidence(evidence_id)
-        if f5: failures.append(f5)
+            schema_failure = self._check_schema(record, str(schema_format))
+            if schema_failure is not None:
+                failures.append(schema_failure)
+        except Exception as e:  # noqa: BLE001 - a validator fails closed on any doubt
+            failures.append(
+                ValidationFailure(
+                    code=ErrorCode.SCHEMA_MISMATCH,
+                    rule="Đúng schema",
+                    message=f"Failed to build submission: {e}",
+                )
+            )
+
+        evidence_failure = self._check_evidence(evidence_id)
+        if evidence_failure is not None:
+            failures.append(evidence_failure)
 
         return ValidationResult(valid=len(failures) == 0, failures=failures)
 
     # --- individual rules, docs/05 §3 -------------------------------------
 
-    def _check_exists(self, keyframe_id: str) -> ValidationFailure | None:
-        """Rule "Tồn tại" -> KEYFRAME_NOT_FOUND."""
-        try:
-            self.relational_map.get_keyframe(keyframe_id)
-            return None
-        except ContractError as e:
-            if e.code == ErrorCode.KEYFRAME_NOT_FOUND:
-                return ValidationFailure(
-                    code=ErrorCode.KEYFRAME_NOT_FOUND,
-                    rule="Tồn tại",
-                    message=f"Keyframe {keyframe_id} not in Relational Map"
-                )
-            raise
-
-    def _check_frame_in_bounds(self, keyframe_id: str) -> ValidationFailure | None:
-        """Rule "Trong biên" -> FRAME_OUT_OF_BOUNDS."""
-        keyframe = self.relational_map.get_keyframe(keyframe_id)
-        video = self.relational_map.get_video(keyframe.video_id)
+    def _check_frame_in_bounds(
+        self, keyframe: KeyframeRow, video: VideoRow
+    ) -> ValidationFailure | None:
+        """Rule "Trong biên" -> FRAME_OUT_OF_BOUNDS. frame_idx is 0-indexed, so
+        the upper bound is exclusive."""
         if not (0 <= keyframe.frame_idx < video.total_frames):
             return ValidationFailure(
                 code=ErrorCode.FRAME_OUT_OF_BOUNDS,
                 rule="Trong biên",
-                message=f"frame_idx {keyframe.frame_idx} out of bounds for video {video.video_id} with {video.total_frames} frames"
+                message=(
+                    f"frame_idx {keyframe.frame_idx} out of bounds for video "
+                    f"{video.video_id} ({video.total_frames} frames)"
+                ),
             )
         return None
 
-    def _check_timestamp_in_bounds(self, keyframe_id: str) -> ValidationFailure | None:
-        """Rule "Timestamp hợp lệ" -> TIMESTAMP_OUT_OF_BOUNDS."""
-        keyframe = self.relational_map.get_keyframe(keyframe_id)
-        video = self.relational_map.get_video(keyframe.video_id)
+    def _check_timestamp_in_bounds(
+        self, keyframe: KeyframeRow, video: VideoRow
+    ) -> ValidationFailure | None:
+        """Rule "Timestamp hợp lệ" -> TIMESTAMP_OUT_OF_BOUNDS. duration is
+        inclusive."""
         if not (0 <= keyframe.timestamp_ms <= video.duration_ms):
             return ValidationFailure(
                 code=ErrorCode.TIMESTAMP_OUT_OF_BOUNDS,
                 rule="Timestamp hợp lệ",
-                message=f"timestamp_ms {keyframe.timestamp_ms} out of bounds for video {video.video_id} with duration {video.duration_ms} ms"
+                message=(
+                    f"timestamp_ms {keyframe.timestamp_ms} out of bounds for video "
+                    f"{video.video_id} (duration {video.duration_ms} ms)"
+                ),
             )
         return None
 
     def _check_schema(self, record: dict, schema_format: str) -> ValidationFailure | None:
-        """Rule "Đúng schema" -> SCHEMA_MISMATCH."""
-        # Simple structural check
-        if schema_format == "by_timestamp":
-            if "video_id" not in record or "timestamp_ms" not in record:
-                return ValidationFailure(code=ErrorCode.SCHEMA_MISMATCH, rule="Đúng schema", message="Missing video_id or timestamp_ms")
-        elif schema_format == "by_frame":
-            if "video_id" not in record or "frame_idx" not in record:
-                return ValidationFailure(code=ErrorCode.SCHEMA_MISMATCH, rule="Đúng schema", message="Missing video_id or frame_idx")
-        elif schema_format == "by_frame_range":
-            if "video_id" not in record or "frame_start" not in record or "frame_end" not in record:
-                return ValidationFailure(code=ErrorCode.SCHEMA_MISMATCH, rule="Đúng schema", message="Missing video_id, frame_start, or frame_end")
-        elif schema_format == "raw_keyframe":
-            if "keyframe_id" not in record:
-                return ValidationFailure(code=ErrorCode.SCHEMA_MISMATCH, rule="Đúng schema", message="Missing keyframe_id")
+        """Rule "Đúng schema" -> SCHEMA_MISMATCH. Structural check per format."""
+        required: dict[str, tuple[str, ...]] = {
+            "by_timestamp": ("video_id", "timestamp_ms"),
+            "by_frame": ("video_id", "frame_idx"),
+            "by_frame_range": ("video_id", "frame_start", "frame_end"),
+            "raw_keyframe": ("keyframe_id",),
+        }
+        missing = [k for k in required.get(schema_format, ()) if k not in record]
+        if missing:
+            return ValidationFailure(
+                code=ErrorCode.SCHEMA_MISMATCH,
+                rule="Đúng schema",
+                message=f"Record for {schema_format} missing: {', '.join(missing)}",
+            )
         return None
 
     def _check_evidence(self, evidence_id: EvidenceId | None) -> ValidationFailure | None:
@@ -155,13 +173,12 @@ class Validator:
             return ValidationFailure(
                 code=ErrorCode.MISSING_EVIDENCE,
                 rule="Có bằng chứng",
-                message="Submission lacks an evidence_id tracing it to a retrieval result"
+                message="Submission lacks an evidence_id tracing it to a retrieval result",
             )
-        import re
-        if not re.match(r"^[a-zA-Z0-9_]+:[a-zA-Z0-9_\-]+:\d+$", str(evidence_id)):
+        if not re.match(EVIDENCE_ID_PATTERN, str(evidence_id)):
             return ValidationFailure(
                 code=ErrorCode.MISSING_EVIDENCE,
                 rule="Có bằng chứng",
-                message=f"evidence_id '{evidence_id}' violates the format '{{tool_name}}:{{run_id}}:{{ordinal}}'"
+                message=f"evidence_id '{evidence_id}' violates format {{tool}}:{{run}}:{{ordinal}}",
             )
         return None

@@ -1,9 +1,11 @@
 import pytest
-from mfe.contracts.records import VideoRow, KeyframeRow
+
+from mfe.contracts.errors import ErrorCode
+from mfe.contracts.records import KeyframeRow, VideoRow
 from mfe.mapping.relational import RelationalMap
 from mfe.mapping.submit import build_submission
 from mfe.mapping.validator import Validator
-from mfe.contracts.errors import ErrorCode
+
 
 @pytest.fixture
 def db():
@@ -55,7 +57,6 @@ def test_verify_mapping(db):
 
 
 def test_adapters(db):
-    import mfe.mapping.adapters # trigger registry
     
     rec1 = build_submission("L21_V001#001", "by_frame", db)
     assert rec1 == {"video_id": "L21_V001", "frame_idx": 10}
@@ -71,17 +72,23 @@ def test_validator(db):
     val = Validator(db)
     
     # Valid
-    res_valid = val.validate("L21_V001#001", evidence_id="tool:run_1:1", schema_format="by_frame")
-    assert res_valid.valid == True
-    
+    res_valid = val.validate(
+        "L21_V001#001", evidence_id="tool:run_1:1", schema_format="by_frame"
+    )
+    assert res_valid.valid
+
     # Invalid evidence
-    res_no_ev = val.validate("L21_V001#001", evidence_id="invalid evidence", schema_format="by_frame")
-    assert res_no_ev.valid == False
+    res_no_ev = val.validate(
+        "L21_V001#001", evidence_id="invalid evidence", schema_format="by_frame"
+    )
+    assert not res_no_ev.valid
     assert res_no_ev.failures[0].code == ErrorCode.MISSING_EVIDENCE
-    
+
     # Out of bounds
-    res_oob = val.validate("L21_V001#002", evidence_id="tool:run_1:1", schema_format="by_frame")
-    assert res_oob.valid == False
+    res_oob = val.validate(
+        "L21_V001#002", evidence_id="tool:run_1:1", schema_format="by_frame"
+    )
+    assert not res_oob.valid
     
     # Should have frame and timestamp out of bounds
     codes = [f.code for f in res_oob.failures]

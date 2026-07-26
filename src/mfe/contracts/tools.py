@@ -13,14 +13,17 @@ An agent added in a later sprint calls the same tools. docs/context/buoi-3.md §
 
 from __future__ import annotations
 
-from typing import Generic, Literal, TypeVar
+from typing import Annotated, Generic, Literal, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from mfe.contracts.errors import ErrorCode
 
-from typing import Annotated
-from pydantic import StringConstraints
+#: The single source of truth for the evidence_id format. CHỐT (Phạm Trọng <->
+#: Nhật Bảo sync, docs/01 §1): "{tool_name}:{run_id}:{ordinal}".
+#: Anyone validating an evidence_id (e.g. the validator) imports THIS — do not
+#: re-inline the regex, or the two copies drift.
+EVIDENCE_ID_PATTERN = r"^[a-zA-Z0-9_]+:[a-zA-Z0-9_\-]+:\d+$"
 
 #: An opaque handle back to the tool call that produced a result.
 #:
@@ -28,11 +31,10 @@ from pydantic import StringConstraints
 #: answer traces to real retrieval output (docs/05 §3, rule "Có bằng chứng") and
 #: so a later agent can cite evidence per docs/context/buoi-3.md §7.
 #:
-#: Format (Phạm Trọng <-> Nhật Bảo sync): "{tool_name}:{run_id}:{ordinal}"
-#: Example: "search_text:req_abc123:0"
+#: Format: "{tool_name}:{run_id}:{ordinal}"  e.g. "search_text:req_abc123:0"
 #: Resolvable against the structured log written by mfe.core.logging. Keep it
 #: opaque to callers either way.
-EvidenceId = Annotated[str, StringConstraints(pattern=r"^[a-zA-Z0-9_]+:[a-zA-Z0-9_\-]+:\d+$")]
+EvidenceId = Annotated[str, StringConstraints(pattern=EVIDENCE_ID_PATTERN)]
 
 
 class ToolError(BaseModel):

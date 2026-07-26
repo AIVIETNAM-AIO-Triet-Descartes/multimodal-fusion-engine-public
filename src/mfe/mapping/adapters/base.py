@@ -13,6 +13,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
+from mfe.contracts.errors import ContractError, ErrorCode
 from mfe.contracts.records import KeyframeRow, VideoRow
 
 
@@ -39,8 +40,16 @@ def register(adapter_cls: type[SubmitAdapter]) -> None:
     _REGISTRY[adapter_cls.format_name] = adapter_cls
 
 
-def get_adapter(format_name: str) -> SubmitAdapter:
-    """Owner: Nhật Bảo. Get adapter instance by format_name."""
+def get_adapter(format_name: str, **kwargs: Any) -> SubmitAdapter:
+    """Owner: Nhật Bảo. Get adapter instance by format_name.
+
+    `kwargs` are forwarded to the adapter's constructor — e.g.
+    `get_adapter("by_frame_range", window=25)` so the config value reaches the
+    adapter instead of its hardcoded default.
+    """
     if format_name not in _REGISTRY:
-        raise ValueError(f"Unknown submit format: {format_name}")
-    return _REGISTRY[format_name]()
+        raise ContractError(
+            ErrorCode.INVALID_ARGUMENT,
+            f"unknown submit format {format_name!r}; known: {sorted(_REGISTRY)}",
+        )
+    return _REGISTRY[format_name](**kwargs)

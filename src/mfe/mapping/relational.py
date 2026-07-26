@@ -15,18 +15,32 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from mfe.contracts.records import KeyframeRow, VideoRow
 from mfe.contracts.errors import ContractError, ErrorCode
+from mfe.contracts.ids import pts_time_to_timestamp_ms
+from mfe.contracts.records import KeyframeRow, VideoRow
 
 
 class RelationalMap:
-    """Owner: Nhật Bảo. Backend: `backends/sqlite.py` or inline sqlite3."""
+    """Owner: Nhật Bảo. Backend: sqlite3 inlined here for Sprint 1 (foreign_keys
+    ON, executemany-in-transaction, Row factory). Extract into `backends/` when
+    adding Postgres — see backends/README.md."""
 
     def __init__(self, db_path: str) -> None:
         self.db_path = db_path
         self._conn = sqlite3.connect(self.db_path)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA foreign_keys = ON;")
+
+    def close(self) -> None:
+        """Close the SQLite connection. On Windows an open connection keeps a
+        lock on the db file, so callers (and tests) must release it."""
+        self._conn.close()
+
+    def __enter__(self) -> RelationalMap:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
 
     def init_schema(self) -> None:
         """Create tables from `schema.sql`. Idempotent."""
@@ -40,7 +54,8 @@ class RelationalMap:
     def upsert_video(self, video: VideoRow) -> None:
         """Insert or replace a video row."""
         sql = """
-            INSERT INTO videos (video_id, source_path, fps, duration_ms, total_frames, width, height)
+            INSERT INTO videos
+                (video_id, source_path, fps, duration_ms, total_frames, width, height)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(video_id) DO UPDATE SET
                 source_path=excluded.source_path,
@@ -67,7 +82,8 @@ class RelationalMap:
     def upsert_keyframes(self, rows: list[KeyframeRow]) -> int:
         """Bulk insert. Insert inside one transaction."""
         sql = """
-            INSERT INTO keyframes (keyframe_id, video_id, keyframe_index, frame_idx, pts_time, timestamp_ms, shot_id)
+            INSERT INTO keyframes
+                (keyframe_id, video_id, keyframe_index, frame_idx, pts_time, timestamp_ms, shot_id)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(keyframe_id) DO UPDATE SET
                 video_id=excluded.video_id,
@@ -137,7 +153,9 @@ class RelationalMap:
         if video_id is None:
             row = self._conn.execute("SELECT COUNT(*) as count FROM keyframes").fetchone()
         else:
-            row = self._conn.execute("SELECT COUNT(*) as count FROM keyframes WHERE video_id = ?", (video_id,)).fetchone()
+            row = self._conn.execute(
+                "SELECT COUNT(*) as count FROM keyframes WHERE video_id = ?", (video_id,)
+            ).fetchone()
         return row["count"]
 
     def verify_mapping(self) -> list[str]:
@@ -145,7 +163,9 @@ class RelationalMap:
         problems = []
         
         # Check if every keyframe_id agrees with its video_id and index
-        rows = self._conn.execute("SELECT keyframe_id, video_id, keyframe_index FROM keyframes").fetchall()
+        rows = self._conn.execute(
+            "SELECT keyframe_id, video_id, keyframe_index FROM keyframes"
+        ).fetchall()
         for r in rows:
             expected_id = f"{r['video_id']}#{r['keyframe_index']:03d}"
             if r['keyframe_id'] != expected_id:
@@ -169,7 +189,10 @@ class RelationalMap:
             WHERE k.frame_idx < 0 OR k.frame_idx >= v.total_frames
         """).fetchall()
         for b in out_of_bounds:
-            problems.append(f"keyframe {b['keyframe_id']} frame_idx {b['frame_idx']} out of bounds (0, {b['total_frames']})")
+            problems.append(
+                f"keyframe {b['keyframe_id']} frame_idx {b['frame_idx']} "
+                f"out of bounds (0, {b['total_frames']})"
+            )
             
         # Check timestamp bounds: 0 <= timestamp_ms <= videos.duration_ms
         time_out_of_bounds = self._conn.execute("""
@@ -179,15 +202,23 @@ class RelationalMap:
             WHERE k.timestamp_ms < 0 OR k.timestamp_ms > v.duration_ms
         """).fetchall()
         for t in time_out_of_bounds:
-            problems.append(f"keyframe {t['keyframe_id']} timestamp {t['timestamp_ms']} out of bounds (0, {t['duration_ms']})")
+            problems.append(
+                f"keyframe {t['keyframe_id']} timestamp {t['timestamp_ms']} "
+                f"out of bounds (0, {t['duration_ms']})"
+            )
             
-        # Check timestamp_ms == round(pts_time * 1000)
-        time_mismatch = self._conn.execute("""
-            SELECT keyframe_id, pts_time, timestamp_ms
-            FROM keyframes
-            WHERE timestamp_ms != ROUND(pts_time * 1000)
-        """).fetchall()
-        for tm in time_mismatch:
-            problems.append(f"keyframe {tm['keyframe_id']} timestamp_ms {tm['timestamp_ms']} != round({tm['pts_time']} * 1000)")
+        # Check timestamp_ms == pts_time_to_timestamp_ms(pts_time). Computed in
+        # Python, NOT with SQL ROUND(): SQLite rounds half-away (0.5->1) while
+        # Python round() is banker's (0.5->0), so a SQL check false-flags a
+        # keyframe whose timestamp was computed correctly at ingest.
+        for tm in self._conn.execute(
+            "SELECT keyframe_id, pts_time, timestamp_ms FROM keyframes"
+        ).fetchall():
+            expected = pts_time_to_timestamp_ms(tm["pts_time"])
+            if tm["timestamp_ms"] != expected:
+                problems.append(
+                    f"keyframe {tm['keyframe_id']} timestamp_ms {tm['timestamp_ms']} "
+                    f"!= {expected} (= round(pts_time {tm['pts_time']} * 1000))"
+                )
             
         return problems
