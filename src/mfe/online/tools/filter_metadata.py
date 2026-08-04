@@ -8,7 +8,8 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from mfe.contracts.tools import ToolResult
 

@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import time
-from typing import Mapping
+from collections.abc import Mapping
 
 from mfe.contracts.errors import ErrorCode
 from mfe.contracts.ids import build_keyframe_id, parse_keyframe_id

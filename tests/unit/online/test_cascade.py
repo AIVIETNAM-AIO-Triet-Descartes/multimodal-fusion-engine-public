@@ -2,7 +2,6 @@
 
 from unittest.mock import MagicMock
 
-from mfe.contracts.tools import Candidate
 from mfe.online.cascade import Cascade
 
 

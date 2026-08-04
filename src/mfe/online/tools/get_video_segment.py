@@ -8,7 +8,8 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from mfe.contracts.errors import ErrorCode
 from mfe.contracts.tools import ToolError, ToolResult
@@ -52,7 +53,12 @@ def get_video_segment(
         return ToolResult(
             tool=tool_name,
             items=[],
-            error=seg_res.error or ToolError(code=ErrorCode.NOT_FOUND, message="Failed to build segment", tool=tool_name),
+            error=seg_res.error
+            or ToolError(
+                code=ErrorCode.NOT_FOUND,
+                message="Failed to build segment",
+                tool=tool_name,
+            ),
             latency_ms=latency,
         )
 

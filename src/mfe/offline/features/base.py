@@ -18,6 +18,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
+from mfe.contracts.errors import ContractError, ErrorCode
+
 
 class FeatureModule(ABC):
     """One extractable signal for one keyframe image."""
@@ -44,23 +46,74 @@ class FeatureModule(ABC):
 
 _REGISTRY: dict[str, type[FeatureModule]] = {}
 
+#: docs/02 §3's required/optional split. A null under `models:` means "off" for
+#: an optional module and "misconfigured" for a required one — silently skipping
+#: CLIP would produce an empty Vector Index and a system that returns nothing.
+REQUIRED_MODULES = ("clip", "detector")
+
 
 def register(name: str, module_cls: type[FeatureModule]) -> None:
-    """Register a feature module under a config key.
+    """Register a feature module under a config key. Owner: Quốc Đạt.
 
-    Owner: Quốc Đạt. TODO(Quốc Đạt): implement.
+    Re-registering the same name is rejected rather than overwritten: two
+    modules claiming `clip` is a mistake, and the one that wins would depend on
+    import order.
     """
-    raise NotImplementedError("TODO(Quốc Đạt): register module class under name")
+    existing = _REGISTRY.get(name)
+    if existing is not None and existing is not module_cls:
+        raise ContractError(
+            ErrorCode.INVALID_ARGUMENT,
+            f"feature module {name!r} is already registered to {existing.__name__}",
+        )
+    _REGISTRY[name] = module_cls
 
 
-def build_enabled_modules(models_config: Any) -> list[FeatureModule]:
-    """Instantiate every module config switches on.
+def build_enabled_modules(
+    models_config: Any, features_config: Any = None
+) -> list[FeatureModule]:
+    """Instantiate every module config switches on. Owner: Quốc Đạt.
 
-    Owner: Quốc Đạt. TODO(Quốc Đạt): implement.
+    Two sources of features (docs/02 §3, `config.features.source`):
 
-    Must enforce docs/02 §3's required/optional split: CLIP and the detector are
-    required, so a null there is a config error, not a silent skip. OCR and
-    metadata are genuinely optional and a null is fine. docs/02 §6 requires the
-    pipeline to still run with OCR off.
+    - ``provided`` — Sprint 1. BTC ships `clip-features/*.npy` and
+      `objects/*.json`, so no checkpoint is loaded and no module runs. Returns
+      `[]`, and `mfe.offline.provided` supplies the same signals by reading
+      files. A non-null `models.*` here is a contradiction, not a preference.
+    - ``model`` — later sprint. Enforces the required/optional split above:
+      CLIP and the detector are required, so a null there is a config error;
+      OCR and metadata are genuinely optional and a null just switches them off
+      (docs/02 §6 requires the pipeline to still run with OCR off).
     """
-    raise NotImplementedError("TODO(Quốc Đạt): read config -> instantiate enabled modules")
+    source = getattr(features_config, "source", "provided") if features_config else "provided"
+
+    if source == "provided":
+        configured = [
+            name
+            for name in ("clip", "detector", "ocr", "metadata")
+            if getattr(models_config, name, None)
+        ]
+        if configured:
+            raise ContractError(
+                ErrorCode.INVALID_ARGUMENT,
+                f"features.source is 'provided' but models.{configured} are set. "
+                "Set features.source to 'model' to run checkpoints, or clear those keys.",
+            )
+        return []
+
+    modules: list[FeatureModule] = []
+    for name in REQUIRED_MODULES:
+        if not getattr(models_config, name, None):
+            raise ContractError(
+                ErrorCode.INVALID_ARGUMENT,
+                f"models.{name} is required when features.source is 'model' "
+                "(docs/02 §3); a null there would silently produce an empty store",
+            )
+
+    for name, module_cls in _REGISTRY.items():
+        model_name = getattr(models_config, name, None)
+        module = module_cls()
+        if not module.is_enabled(models_config):
+            continue
+        module.load(str(model_name))
+        modules.append(module)
+    return modules

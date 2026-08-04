@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import time
-from typing import Sequence
+from collections.abc import Sequence
 
 from mfe.contracts.errors import ErrorCode
 from mfe.contracts.ids import build_keyframe_id
@@ -38,7 +38,7 @@ def search_image(
     start_t = time.perf_counter()
     tool_name = "search_image"
 
-    if (image_bytes is None and keyframe_id is None) or (image_bytes is not None and keyframe_id is not None):
+    if (image_bytes is None) == (keyframe_id is None):
         latency = (time.perf_counter() - start_t) * 1000.0
         return ToolResult(
             tool=tool_name,

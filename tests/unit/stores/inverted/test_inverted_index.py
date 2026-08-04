@@ -37,7 +37,7 @@ def test_add_and_search_return_matching_candidate_with_terms(tmp_path):
     assert [candidate.keyframe_id for candidate in candidates] == ["L21_V001#001"]
     assert candidates[0].matched_terms == ["car", "18h"]
     assert candidates[0].video_id == "L21_V001"
-    assert candidates[0].evidence_id == "text_search:store:L21_V001#001"
+    assert candidates[0].evidence_id == "text_search:store:0"
 
 
 def test_search_fields_restrict_where_terms_can_match(tmp_path):

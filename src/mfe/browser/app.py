@@ -130,7 +130,7 @@ def render_grid(candidates: list[Candidate]) -> None:
 
     for row in rows:
         cols = st.columns(cols_per_row)
-        for col, cand in zip(cols, row):
+        for col, cand in zip(cols, row, strict=False):
             with col:
                 with st.container(border=True):
                     # Keyframe visual card header
@@ -273,8 +273,12 @@ def main() -> None:
     with st.sidebar:
         st.header("⚙️ Query Refinement & Options")
         top_k = st.slider("Top-K Candidates", min_value=5, max_value=200, value=20, step=5)
-        weight_text = st.slider("Text Weight (BM25)", min_value=0.0, max_value=2.0, value=1.0, step=0.1)
-        weight_vec = st.slider("Vector Weight (CLIP)", min_value=0.0, max_value=2.0, value=1.0, step=0.1)
+        weight_text = st.slider(
+            "Text Weight (BM25)", min_value=0.0, max_value=2.0, value=1.0, step=0.1
+        )
+        weight_vec = st.slider(
+            "Vector Weight (CLIP)", min_value=0.0, max_value=2.0, value=1.0, step=0.1
+        )
 
         st.session_state["cascade"].fusion_weights = {
             "search_text": weight_text,
@@ -285,18 +289,24 @@ def main() -> None:
         st.caption("AIC 2026 — Multimodal Fusion Engine")
 
     # Search Bar Section
-    query_text = st.text_input("Enter Video Search Query:", value="a person riding a bicycle near the beach")
+    query_text = st.text_input(
+        "Enter Video Search Query:", value="a person riding a bicycle near the beach"
+    )
 
     if st.button("🔍 Search Video Store", type="primary", use_container_width=True):
         if query_text.strip():
             start_t = time.perf_counter()
-            results = st.session_state["cascade"].search(query_text=query_text, top_k=top_k, run_id="browser_query")
+            results = st.session_state["cascade"].search(
+                query_text=query_text, top_k=top_k, run_id="browser_query"
+            )
             elapsed_ms = (time.perf_counter() - start_t) * 1000.0
 
             st.session_state["search_results"] = results
             st.session_state["active_timeline"] = None
 
-            logger.info("Query '%s' returned %d hits in %.2fms", query_text, len(results), elapsed_ms)
+            logger.info(
+                "Query '%s' returned %d hits in %.2fms", query_text, len(results), elapsed_ms
+            )
             st.toast(f"Retrieved {len(results)} hits in {elapsed_ms:.1f}ms", icon="⚡")
 
     # Display Selected Timeline panel if active

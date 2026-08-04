@@ -17,9 +17,11 @@ paths:
   segments: /vol/data/segments/
   vector_store: /vol/stores/vector/
   inverted_store: /vol/stores/inverted/
+  asset_store: /vol/stores/asset/
   relational_db: /vol/stores/relational/app.db
   eval_results: /vol/eval/results/
   throughput: /vol/eval/throughput.json
+  event_log: /vol/eval/results/events.jsonl
 
 storage:
   backend: modal
@@ -34,6 +36,11 @@ models:
   detector: null
   ocr: null
   metadata: null
+
+features:
+  source: provided
+  object_score_min: 0.3
+  metadata_fields: [title, keywords, author]
 
 retrieval:
   embed_dim: 512

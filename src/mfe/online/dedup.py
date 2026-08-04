@@ -30,7 +30,7 @@ def group_by_shot(candidates: list[Candidate], temporal_window: int = 5) -> list
     for c in candidates:
         video_groups.setdefault(c.video_id, []).append(c)
 
-    for vid, cands in video_groups.items():
+    for cands in video_groups.values():
         # Sort candidates in video by keyframe_index
         indexed_cands = []
         for c in cands:

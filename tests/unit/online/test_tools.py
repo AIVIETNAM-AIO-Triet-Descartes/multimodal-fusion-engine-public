@@ -1,6 +1,5 @@
 """Unit tests for online retrieval tool contracts (docs/04 §2)."""
 
-import pytest
 
 from mfe.contracts.errors import ErrorCode
 from mfe.online.tools import registry
@@ -9,7 +8,6 @@ from mfe.online.tools.evidence import create_evidence_id
 from mfe.online.tools.filter_metadata import filter_metadata
 from mfe.online.tools.get_neighbors import get_neighbors
 from mfe.online.tools.get_video_segment import get_video_segment
-from mfe.online.tools.rerank import rerank
 from mfe.online.tools.search_image import search_image
 from mfe.online.tools.search_text import search_text
 

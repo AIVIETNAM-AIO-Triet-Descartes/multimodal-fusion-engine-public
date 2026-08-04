@@ -11,9 +11,14 @@ like*. Neither should grow the other's columns.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from mfe.contracts.errors import ContractError, ErrorCode
 from mfe.contracts.records import AssetRecord, AssetType
 from mfe.core.storage import StorageBackend, get_backend
+
+_MANIFEST_FILENAME = "manifest.json"
 
 
 class AssetStore:
@@ -66,3 +71,35 @@ class AssetStore:
     def total_bytes(self) -> int:
         """Sum of `byte_size`. Feeds the Modal volume estimate (docs/02 §5)."""
         return sum(record.byte_size for record in self._records.values())
+
+    def save(self) -> None:
+        """Persist the manifest, mirroring VectorIndex/InvertedIndex.
+
+        Without this the manifest dies with the ingest process and the browser,
+        which runs separately, has no way to resolve a keyframe_id to bytes.
+        Written to a temp file then replaced, so an interrupted run cannot leave
+        a half-written manifest that loads without error.
+        """
+        store_dir = Path(self.store_path)
+        store_dir.mkdir(parents=True, exist_ok=True)
+        target = store_dir / _MANIFEST_FILENAME
+        temporary = target.with_suffix(f"{target.suffix}.tmp")
+        payload = [record.model_dump(mode="json") for record in self._records.values()]
+        temporary.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        temporary.replace(target)
+
+    @classmethod
+    def load(cls, store_path: str, backend: StorageBackend | None = None) -> AssetStore:
+        source = Path(store_path) / _MANIFEST_FILENAME
+        raw_records = json.loads(source.read_text(encoding="utf-8"))
+        if not isinstance(raw_records, list):
+            raise ValueError("Persisted asset manifest must contain a JSON list")
+
+        store = cls(store_path=store_path, backend=backend)
+        store.add([AssetRecord.model_validate(item) for item in raw_records])
+        return store
+
+    def __len__(self) -> int:
+        return len(self._records)

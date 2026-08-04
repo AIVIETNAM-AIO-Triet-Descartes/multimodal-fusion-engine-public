@@ -77,6 +77,7 @@ class InvertedIndex:
         query_text: str,
         fields: list[str] | None = None,
         top_k: int = 100,
+        run_id: str = "store",
     ) -> list[Candidate]:
         """The `text_search` API of docs/03 §2.
 
@@ -121,7 +122,10 @@ class InvertedIndex:
                     keyframe_id=record.keyframe_id,
                     video_id=record.video_id,
                     score=float(scores[position]),
-                    evidence_id=f"text_search:store:{record.keyframe_id}",
+                    # "{tool_name}:{run_id}:{ordinal}" — the ordinal is this hit's
+                    # rank in THIS call. keyframe_id cannot go here: it contains
+                    # '#' and the contract requires digits (contracts/tools.py).
+                    evidence_id=f"text_search:{run_id}:{len(candidates)}",
                     matched_terms=matched_terms,
                 )
             )

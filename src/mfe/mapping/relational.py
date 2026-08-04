@@ -158,6 +158,18 @@ class RelationalMap:
             ).fetchone()
         return row["count"]
 
+    def sample_keyframe_ids(self, limit: int = 1) -> list[str]:
+        """A few real keyframe_ids, for callers that need a known-good one.
+
+        The eval harness uses this to build its "valid submit must NOT be
+        blocked" probe (docs/00 §1) — a validator that blocked everything would
+        otherwise pass a bad-submits-only test.
+        """
+        rows = self._conn.execute(
+            "SELECT keyframe_id FROM keyframes ORDER BY keyframe_id LIMIT ?", (limit,)
+        ).fetchall()
+        return [row["keyframe_id"] for row in rows]
+
     def verify_mapping(self) -> list[str]:
         """Self-check the map. Returns a list of problems; empty means clean."""
         problems = []

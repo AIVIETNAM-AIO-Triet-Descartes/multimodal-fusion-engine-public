@@ -99,6 +99,7 @@ class VectorIndex:
         query_embedding: list[float],
         top_k: int,
         video_id: str | None = None,
+        run_id: str = "store",
     ) -> list[Candidate]:
         """Cosine top-k. The `vector_search` API of docs/03 §1.
 
@@ -149,7 +150,9 @@ class VectorIndex:
                     keyframe_id=self._sidecar.to_keyframe_id(internal_id),
                     video_id=candidate_video_id,
                     score=float(score),
-                    evidence_id=f"vector_search:store:{internal_id}",
+                    # "{tool_name}:{run_id}:{ordinal}" — ordinal is the rank in
+                    # THIS call, not the internal_id (contracts/tools.py).
+                    evidence_id=f"vector_search:{run_id}:{len(candidates)}",
                 )
             )
             if len(candidates) == top_k:

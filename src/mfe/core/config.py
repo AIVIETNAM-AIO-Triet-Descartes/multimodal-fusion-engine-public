@@ -39,9 +39,11 @@ class PathsConfig(_Section):
     segments: str
     vector_store: str
     inverted_store: str
+    asset_store: str
     relational_db: str
     eval_results: str
     throughput: str
+    event_log: str
 
 
 class StorageConfig(_Section):
@@ -66,6 +68,25 @@ class ModelsConfig(_Section):
     detector: str | None = None
     ocr: str | None = None
     metadata: str | None = None
+
+
+class FeaturesConfig(_Section):
+    """Where per-keyframe signals come from — docs/02 §3.
+
+    Sprint 1 uses `provided`: BTC ships `clip-features/*.npy` and `objects/*.json`
+    already computed, so no checkpoint is loaded and `models.*` may stay null.
+    Switching to `model` is what turns `offline/features/*.py` on; that is a
+    later sprint, and `build_enabled_modules` is what enforces the
+    required/optional split at that point.
+    """
+
+    source: Literal["provided", "model"] = "provided"
+    #: Detections below this score are dropped before they reach the Inverted
+    #: Index. The provided files carry 100 boxes per keyframe, most of them
+    #: noise; indexing all of them would drown the real labels in BM25.
+    object_score_min: float = Field(default=0.3, ge=0.0, le=1.0)
+    #: Metadata text fed to the Inverted Index, from media-info/*.json.
+    metadata_fields: list[str] = Field(default_factory=lambda: ["title", "keywords", "author"])
 
 
 class FusionWeights(_Section):
@@ -106,6 +127,7 @@ class Config(_Section):
     storage: StorageConfig = StorageConfig()
     compute: ComputeConfig = ComputeConfig()
     models: ModelsConfig = ModelsConfig()
+    features: FeaturesConfig = FeaturesConfig()
     retrieval: RetrievalConfig
     submit: SubmitConfig = SubmitConfig()
     eval: EvalConfig

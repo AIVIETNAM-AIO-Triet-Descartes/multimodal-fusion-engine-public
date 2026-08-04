@@ -19,11 +19,15 @@ def test_validate_submission_stub_success():
 
 
 def test_validate_submission_stub_missing_evidence():
-    cand = Candidate(
+    # `Candidate` refuses an empty evidence_id at construction (contracts/tools.py),
+    # so the only way to reach the browser's defensive guard is to bypass
+    # validation deliberately. model_construct is the supported way to do that.
+    cand = Candidate.model_construct(
         keyframe_id="L21_V001#001",
         video_id="L21_V001",
         score=0.95,
         evidence_id="",
+        matched_terms=[],
     )
     res = validate_submission_stub(cand)
     assert not res.ok
