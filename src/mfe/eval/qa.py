@@ -9,14 +9,18 @@ from __future__ import annotations
 import unicodedata
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
-__all__ = ["QAGroundTruth", "QASubmission", "answer_match", "score_qa"]
+__all__ = ("QAGroundTruth", "QASubmission", "answer_match", "score_qa")
 
-_NonBlankString = Annotated[
-    str,
-    StringConstraints(strip_whitespace=True, min_length=1, strict=True),
-]
+_StrictString = Annotated[str, StringConstraints(min_length=1, strict=True)]
 _FrameId = Annotated[int, Field(ge=0, strict=True)]
 
 # Deliberately conservative: strip only common wrapping punctuation. Meaning-
@@ -49,36 +53,6 @@ _VIETNAMESE_NUMBERS_0_TO_20 = (
     "m\u01b0\u1eddi ch\u00edn",
     "hai m\u01b0\u01a1i",
 )
-_NUMBER_WORD_TO_DIGIT = {
-    word: str(number) for number, word in enumerate(_VIETNAMESE_NUMBERS_0_TO_20)
-}
-
-
-class _QAModel(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-
-class QASubmission(_QAModel):
-    """One Q&A answer submitted for scoring."""
-
-    video_id: _NonBlankString
-    frame_id: _FrameId
-    answer: _NonBlankString
-
-
-class QAGroundTruth(_QAModel):
-    """One accepted video/frame interval and answer for a Q&A query."""
-
-    video_id: _NonBlankString
-    start_frame_id: _FrameId
-    end_frame_id: _FrameId
-    answer: _NonBlankString
-
-    @model_validator(mode="after")
-    def _range_is_ordered(self) -> QAGroundTruth:
-        if self.start_frame_id > self.end_frame_id:
-            raise ValueError("start_frame_id must be <= end_frame_id")
-        return self
 
 
 def _normalize_decimal_digits(text: str) -> str:
@@ -96,6 +70,11 @@ def _normalize_answer(answer: str) -> str:
     # NFKC handles canonical and compatibility-equivalent forms (for example,
     # composed/decomposed Vietnamese text and full-width decimal digits).
     normalized = unicodedata.normalize("NFKC", answer).casefold()
+    if any(
+        unicodedata.category(character) in {"Cc", "Cf"} and not character.isspace()
+        for character in normalized
+    ):
+        raise ValueError("answer contains unsupported control or format characters")
     normalized = _normalize_decimal_digits(normalized)
     normalized = " ".join(normalized.split())
     normalized = normalized.strip(_BOUNDARY_PUNCTUATION)
@@ -103,7 +82,56 @@ def _normalize_answer(answer: str) -> str:
     if not normalized:
         raise ValueError("answer must contain non-punctuation text")
 
-    return _NUMBER_WORD_TO_DIGIT.get(normalized, normalized)
+    if normalized in _VIETNAMESE_NUMBERS_0_TO_20:
+        return str(_VIETNAMESE_NUMBERS_0_TO_20.index(normalized))
+    return normalized
+
+
+class _QAModel(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    @field_validator("video_id", check_fields=False)
+    @classmethod
+    def _video_id_is_valid(cls, value: str) -> str:
+        # Preserve the original value for exact, case-sensitive comparison.
+        # Whitespace around a real ID therefore remains a mismatch, while a
+        # whitespace-only ID and hidden control/format characters are invalid.
+        if not value.strip():
+            raise ValueError("video_id must contain non-whitespace text")
+        if any(unicodedata.category(character) in {"Cc", "Cf"} for character in value):
+            raise ValueError("video_id contains unsupported control or format characters")
+        return value
+
+    @field_validator("answer", check_fields=False)
+    @classmethod
+    def _answer_is_valid(cls, value: str) -> str:
+        # Validate with the same policy used by answer_match so every model
+        # accepted by the contract can be scored without normalization errors.
+        _normalize_answer(value)
+        return value
+
+
+class QASubmission(_QAModel):
+    """One immutable Q&A answer submitted for scoring."""
+
+    video_id: _StrictString
+    frame_id: _FrameId
+    answer: _StrictString
+
+
+class QAGroundTruth(_QAModel):
+    """One immutable accepted video/frame interval and answer for a query."""
+
+    video_id: _StrictString
+    start_frame_id: _FrameId
+    end_frame_id: _FrameId
+    answer: _StrictString
+
+    @model_validator(mode="after")
+    def _range_is_ordered(self) -> QAGroundTruth:
+        if self.start_frame_id > self.end_frame_id:
+            raise ValueError("start_frame_id must be <= end_frame_id")
+        return self
 
 
 def answer_match(a: str, gt_a: str) -> bool:
@@ -112,6 +140,7 @@ def answer_match(a: str, gt_a: str) -> bool:
     Supported equivalences are NFKC Unicode normalization, case folding,
     whitespace collapsing, conservative wrapping-punctuation removal, Unicode
     decimal-digit normalization, and whole-answer Vietnamese number words 0-20.
+    Non-whitespace control/format characters are rejected instead of removed.
 
     This is not a general semantic judge: it deliberately does not remove
     Vietnamese diacritics, fuzzy-match, substring-match, or guess synonyms and
@@ -122,7 +151,7 @@ def answer_match(a: str, gt_a: str) -> bool:
     that become empty after safe normalization.
     """
 
-    return bool(_normalize_answer(a) == _normalize_answer(gt_a))
+    return _normalize_answer(a) == _normalize_answer(gt_a)
 
 
 def score_qa(submission: QASubmission, gt: QAGroundTruth) -> float:
@@ -132,6 +161,11 @@ def score_qa(submission: QASubmission, gt: QAGroundTruth) -> float:
     ``[start_frame_id, end_frame_id]``, and an answer accepted by
     :func:`answer_match`. R@k and Final Score are intentionally out of scope.
     """
+
+    if not isinstance(submission, QASubmission):
+        raise TypeError("submission must be a QASubmission")
+    if not isinstance(gt, QAGroundTruth):
+        raise TypeError("gt must be a QAGroundTruth")
 
     is_correct = (
         submission.video_id == gt.video_id
