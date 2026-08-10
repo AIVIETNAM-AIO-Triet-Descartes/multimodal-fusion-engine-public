@@ -2,6 +2,7 @@
 
 
 from mfe.contracts.errors import ErrorCode
+from mfe.contracts.tools import Candidate
 from mfe.online.tools import registry
 from mfe.online.tools.build_segment import build_segment
 from mfe.online.tools.evidence import create_evidence_id
@@ -17,12 +18,28 @@ def test_evidence_id_format():
     assert ev_id == "search_text:run123:0001"
 
 
-def test_search_text_success():
+def test_search_text_needs_a_cascade():
+    """Without a store it must report, not invent (docs/04 §2)."""
     res = search_text("red car driving on street", top_k=10, run_id="test_run")
+    assert not res.ok
+    assert res.error.code == ErrorCode.STORE_UNAVAILABLE
+
+
+def test_search_text_delegates_to_cascade():
+    class FakeCascade:
+        def search(self, query_text, top_k, run_id):
+            return [
+                Candidate(
+                    keyframe_id="L21_V001#001",
+                    video_id="L21_V001",
+                    score=0.9,
+                    evidence_id=f"search_text:{run_id}:0",
+                )
+            ]
+
+    res = search_text("red car", top_k=10, run_id="test_run", cascade=FakeCascade())
     assert res.ok
-    assert res.error is None
-    assert len(res.items) > 0
-    assert res.items[0].evidence_id.startswith("search_text:test_run:")
+    assert res.items[0].evidence_id == "search_text:test_run:0"
 
 
 def test_search_text_topk_constraint_exceeded():
@@ -51,9 +68,10 @@ def test_search_image_validation():
     assert not res_neither.ok
     assert res_neither.error.code == ErrorCode.INVALID_ARGUMENT
 
-    # Keyframe provided -> ok
-    res_ok = search_image(keyframe_id="L21_V001#001")
-    assert res_ok.ok
+    # Exactly one reference but no index -> structured error, never fake hits
+    res_no_index = search_image(keyframe_id="L21_V001#001")
+    assert not res_no_index.ok
+    assert res_no_index.error.code == ErrorCode.STORE_UNAVAILABLE
 
 
 def test_build_segment_single_keyframe():
@@ -99,11 +117,14 @@ def test_get_neighbors():
 
 
 def test_filter_metadata():
-    index = {
-        "L21_V001#001": {"objects": ["person", "car"]},
-        "L21_V001#002": {"objects": ["person", "bag"]},
-    }
-    res = filter_metadata({"object": "bag"}, metadata_index=index)
+    class FakeIndex:
+        """The tool must delegate, not filter on its own (CHOT)."""
+
+        def filter(self, constraints, candidate_ids=None):
+            assert constraints == {"object": "bag"}
+            return ["L21_V001#002"]
+
+    res = filter_metadata({"object": "bag"}, inverted_index=FakeIndex())
     assert res.ok
     assert res.items == ["L21_V001#002"]
 

@@ -9,8 +9,7 @@ from __future__ import annotations
 
 import time
 
-from mfe.contracts.errors import ErrorCode
-from mfe.contracts.tools import Candidate, ToolError, ToolResult
+from mfe.contracts.tools import Candidate, ToolResult
 from mfe.online.rerank import Reranker
 from mfe.online.tools.evidence import create_evidence_id
 
@@ -59,20 +58,10 @@ def rerank(
 
     r = reranker or Reranker(model_name="mock-cross-encoder", budget_ms=budget_ms)
 
-    try:
-        res_cands = r.rerank(query=query, candidates=cands)
-    except Exception as err:
-        latency = (time.perf_counter() - start_t) * 1000.0
-        return ToolResult(
-            tool=tool_name,
-            items=cands,  # Fallback to coarse candidates
-            error=ToolError(
-                code=ErrorCode.TOOL_TIMEOUT,
-                message=f"Reranking degraded: {err}",
-                tool=tool_name,
-            ),
-            latency_ms=latency,
-        )
+    # No try/except around this call: `Reranker.rerank` truncates on budget
+    # rather than raising (CHỐT, see mfe.online.rerank), so a handler here would
+    # be unreachable code that looks like a safety net.
+    res_cands = r.rerank(query=query, candidates=cands, run_id=run_id)
 
     latency = (time.perf_counter() - start_t) * 1000.0
     return ToolResult(

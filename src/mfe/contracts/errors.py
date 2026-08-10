@@ -24,6 +24,11 @@ class ErrorCode(StrEnum):
     TIMESTAMP_OUT_OF_BOUNDS = "timestamp_out_of_bounds"  # rule "Timestamp hợp lệ"
     SCHEMA_MISMATCH = "schema_mismatch"              # rule "Đúng schema"
     MISSING_EVIDENCE = "missing_evidence"            # rule "Có bằng chứng"
+    #: rule "Nhất quán frame". Its own code, not FRAME_OUT_OF_BOUNDS: a frame
+    #: inside the video that disagrees with its own pts_time is a different
+    #: failure from one past the end, and sharing a code made the two
+    #: indistinguishable in logs and untestable apart.
+    FRAME_INCONSISTENT = "frame_inconsistent"
 
     # --- Contract / ID model ------------------------------------------------
     INVALID_ID = "invalid_id"

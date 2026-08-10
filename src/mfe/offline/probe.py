@@ -120,9 +120,12 @@ def probe_video(source_path: str, video_id: str) -> VideoRow:
     Owner: Quốc Đạt. Not the Sprint 1 path — see the module docstring — but kept
     working for a dataset that ships videos without a map-keyframes CSV.
 
-    fps is reported as the exact rational the container declares (30000/1001 =
-    29.97), never rounded to 30.0: a 0.1% fps error is ~36 frames of drift over
-    10 minutes, far wider than a correct submission window.
+    A warning if you use this fps to derive `frame_idx`: the container reports
+    the exact NTSC rational (30000/1001 = 29.970029...), while the dataset
+    states the truncated 29.97, and `floor(pts_time * fps)` only reproduces
+    BTC's own `frame_idx` with the **truncated** value — 100% vs 41% on the
+    sample (contracts/ids.py). Prefer the CSV's fps whenever one exists; the
+    container's is for playback, not for agreeing with the scoreboard.
     """
     try:
         import av

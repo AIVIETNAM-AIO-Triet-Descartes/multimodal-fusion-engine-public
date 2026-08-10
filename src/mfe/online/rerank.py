@@ -1,7 +1,17 @@
 """Early-fusion rerank — stage C of docs/04 §1, §3.3.
 
-A cross-encoder model scoring query against keyframe images. Includes latency budget
-checking to ensure queries do not timeout.
+A cross-encoder model scoring query against keyframe images, under a latency
+budget.
+
+**Budget policy: truncate, never raise** (CHỐT — Vỹ Triết). Over budget, the
+reranker stops scoring and returns what it has, with the unscored tail appended
+in its incoming (coarse) order. It does not raise, and callers therefore do not
+wrap it in a try/except pretending to catch a timeout — an except branch that
+nothing can reach reads as insurance while providing none.
+
+This is a safe policy precisely because the tail keeps coarse order: the result
+is never worse than stage B's ranking, which is what "fallback bắt buộc" asks
+for. Degradation is graded rather than all-or-nothing.
 """
 
 from __future__ import annotations
@@ -13,7 +23,13 @@ from mfe.online.tools.evidence import create_evidence_id
 
 
 class Reranker:
-    """Cross-encoder reranker for Stage C early fusion."""
+    """Cross-encoder reranker for Stage C early fusion.
+
+    **Still a stub.** `_score_pair` hashes the strings; it does not look at the
+    image. `Cascade` therefore does not build one by default — measured against
+    the real stores, this stub reorders a good ranking into a bad one. Pass an
+    instance explicitly only in tests, or once `_score_pair` runs a real model.
+    """
 
     def __init__(self, model_name: str = "cross-encoder-v1", budget_ms: int = 2000) -> None:
         self.model_name = model_name
@@ -33,7 +49,10 @@ class Reranker:
             run_id: Tracing run ID.
 
         Returns:
-            Reranked candidate list.
+            Reranked candidate list: scored candidates first (best first), then
+            whatever the budget did not reach, in coarse order.
+
+        Never raises on timeout — see the module docstring.
         """
         if not candidates:
             return []
@@ -70,7 +89,13 @@ class Reranker:
         return scored_candidates + remaining
 
     def _score_pair(self, query: str, keyframe_id: str) -> float:
-        """Simulate cross-encoder forward pass scoring."""
-        # Simple deterministic scoring stub for testing
+        """STUB — deterministic hash, not a model. TODO(Phạm Trọng).
+
+        A real implementation loads a cross-encoder and scores the query
+        against `AssetStore.get_asset(keyframe_id)` — the *image*, which is what
+        makes stage C "early fusion" rather than a second text pass. Until then
+        this returns a number that correlates with nothing, which is why the
+        cascade leaves stage C switched off.
+        """
         hash_val = sum(ord(ch) for ch in query + keyframe_id)
         return round((hash_val % 100) / 100.0, 4)

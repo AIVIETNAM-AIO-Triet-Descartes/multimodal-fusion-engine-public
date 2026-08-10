@@ -39,4 +39,12 @@ CREATE INDEX IF NOT EXISTS idx_keyframes_video_id ON keyframes(video_id);
 -- Backs get_neighbors (docs/04 §2) and temporal grouping (docs/04 §3.2).
 CREATE INDEX IF NOT EXISTS idx_keyframes_video_index ON keyframes(video_id, keyframe_index);
 
+-- Backs find_bracketing_keyframes(): given an arbitrary pts_time from a keyframe
+-- the team extracted itself, find the official keyframes either side of it.
+-- The index above cannot serve that query — it is keyed by ordinal, and a
+-- self-extracted keyframe has no ordinal in this table. Without this index the
+-- lookup degrades to a scan of every keyframe in the video, on a mapping that
+-- is 177k rows for batch 1 alone.
+CREATE INDEX IF NOT EXISTS idx_keyframes_video_pts ON keyframes(video_id, pts_time);
+
 CREATE INDEX IF NOT EXISTS idx_keyframes_shot_id ON keyframes(shot_id);

@@ -45,16 +45,19 @@ features:
 retrieval:
   embed_dim: 512
   coarse_topk: 500
-  rerank_topk: 50
+  rerank_topk: 100
   fusion_weights:
     clip: 1.0
     bm25: 1.0
   rerank_budget_ms: 3000
+  temporal_window: 5
+  clip_checkpoint: clip-ViT-B-32
+  clip_text_checkpoint: sentence-transformers/clip-ViT-B-32-multilingual-v1
 
 submit:
-  schema_format: by_timestamp
+  schema_format: by_frame
   frame_range_window: 25
 
 eval:
   queryset: /vol/eval/queryset.jsonl
-  recall_at: [1, 5, 10]
+  recall_at: [1, 5, 20, 50, 100]

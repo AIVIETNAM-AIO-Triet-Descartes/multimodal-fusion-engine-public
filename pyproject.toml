@@ -35,7 +35,11 @@ stores = [
 ]
 online = [
     "mfe[stores]",
+    # clip-ViT-B-32 — the checkpoint the official PDF §3 names as the source of
+    # the shipped keyframe features. Verified at cosine 0.9992-1.0000 against
+    # them (scripts/verify_clip_checkpoint.py). Pulls torch.
     "sentence-transformers>=2.5",
+    "pillow>=10.0",
 ]
 browser = [
     "streamlit>=1.32",

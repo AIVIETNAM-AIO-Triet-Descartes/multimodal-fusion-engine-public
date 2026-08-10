@@ -16,7 +16,7 @@ import sqlite3
 from pathlib import Path
 
 from mfe.contracts.errors import ContractError, ErrorCode
-from mfe.contracts.ids import pts_time_to_timestamp_ms
+from mfe.contracts.ids import frame_idx_from_pts, pts_time_to_timestamp_ms
 from mfe.contracts.records import KeyframeRow, VideoRow
 
 
@@ -149,6 +149,57 @@ class RelationalMap:
         
         return [KeyframeRow(**dict(r)) for r in rows]
 
+    def find_bracketing_keyframes(
+        self, video_id: str, pts_time: float
+    ) -> tuple[KeyframeRow | None, KeyframeRow | None]:
+        """The official keyframes immediately before and after `pts_time`.
+
+        The entry point for validating a keyframe the team extracted itself
+        (DAKE or otherwise). `get_neighbors` cannot do this: it is keyed by
+        `keyframe_index`, so it needs the keyframe to already be a row in this
+        table — which a self-extracted one, by definition, is not.
+
+        Boundaries are deliberate and asymmetric:
+
+            prev = last official row with pts_time <= t
+            next = first official row with pts_time >  t
+
+        So an exact hit lands in `prev`, and a caller detects "this is already
+        an official keyframe" by testing `prev.pts_time == pts_time`. Splitting
+        it the other way would make an exact match look like it sat strictly
+        between two rows, which is a different claim.
+
+        Returns `(None, next)` before the first keyframe and `(prev, None)`
+        after the last. Both ends are real situations, not errors — but a caller
+        that treats a missing side as "nothing to check, therefore fine" is
+        asserting something it did not verify. See
+        `docs/triet/keyframe_validator_audit.md` C1/C2.
+
+        Uses two indexed single-row lookups (`idx_keyframes_video_pts`), not a
+        scan: batch 1 alone is ~177k keyframes.
+        """
+        previous_row = self._conn.execute(
+            """
+            SELECT * FROM keyframes
+            WHERE video_id = ? AND pts_time <= ?
+            ORDER BY pts_time DESC LIMIT 1
+            """,
+            (video_id, pts_time),
+        ).fetchone()
+        next_row = self._conn.execute(
+            """
+            SELECT * FROM keyframes
+            WHERE video_id = ? AND pts_time > ?
+            ORDER BY pts_time ASC LIMIT 1
+            """,
+            (video_id, pts_time),
+        ).fetchone()
+
+        return (
+            KeyframeRow(**dict(previous_row)) if previous_row is not None else None,
+            KeyframeRow(**dict(next_row)) if next_row is not None else None,
+        )
+
     def count_keyframes(self, video_id: str | None = None) -> int:
         if video_id is None:
             row = self._conn.execute("SELECT COUNT(*) as count FROM keyframes").fetchone()
@@ -183,6 +234,27 @@ class RelationalMap:
             if r['keyframe_id'] != expected_id:
                 problems.append(f"keyframe_id {r['keyframe_id']} mismatch: expected {expected_id}")
         
+        # Check frame_idx against floor(pts_time * fps).
+        #
+        # The whole map can be internally consistent and still be wrong about
+        # the one number that gets submitted. This is the check that catches an
+        # ingest run that used the wrong rounding mode, or the exact NTSC
+        # rational instead of the fps the dataset states — both of which put a
+        # plausible, wrong frame on the scoreboard (contracts/ids.py).
+        for row in self._conn.execute(
+            """
+            SELECT k.keyframe_id, k.frame_idx, k.pts_time, v.fps
+            FROM keyframes k
+            JOIN videos v ON k.video_id = v.video_id
+            """
+        ).fetchall():
+            expected = frame_idx_from_pts(row["pts_time"], row["fps"])
+            if row["frame_idx"] != expected:
+                problems.append(
+                    f"keyframe {row['keyframe_id']} frame_idx {row['frame_idx']} "
+                    f"!= floor(pts_time {row['pts_time']} * fps {row['fps']}) = {expected}"
+                )
+
         # Check orphaned keyframes (no video)
         orphans = self._conn.execute("""
             SELECT k.keyframe_id 

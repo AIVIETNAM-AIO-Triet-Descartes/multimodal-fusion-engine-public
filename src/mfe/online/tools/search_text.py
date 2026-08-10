@@ -11,26 +11,30 @@ from __future__ import annotations
 
 import time
 from collections.abc import Sequence
+from typing import Any
 
 from mfe.contracts.errors import ErrorCode
-from mfe.contracts.ids import build_keyframe_id
 from mfe.contracts.tools import Candidate, ToolError, ToolResult
-from mfe.online.tools.evidence import create_evidence_id
 
 
 def search_text(
     query_text: str,
     top_k: int = 100,
     run_id: str = "default_run",
+    cascade: Any = None,
     mock_candidates: Sequence[Candidate] | None = None,
 ) -> ToolResult[Candidate]:
     """Execute text search (semantic CLIP + text BM25).
+
+    This is the tool-contract wrapper (docs/00 §5) that the browser and the
+    Buổi 3 agent call; the retrieval itself lives in `mfe.online.cascade`.
 
     Args:
         query_text: The user query text description.
         top_k: Number of candidates to retrieve (must be <= 500).
         run_id: Run identifier for evidence tracing.
-        mock_candidates: Optional pre-constructed candidate list for testing/stubbing.
+        cascade: The `Cascade` to search through. Required unless mocking.
+        mock_candidates: Optional pre-constructed candidate list for testing.
 
     Returns:
         ToolResult[Candidate] envelope containing items or ToolError.
@@ -66,21 +70,23 @@ def search_text(
 
     if mock_candidates is not None:
         items = list(mock_candidates[:top_k])
+    elif cascade is not None:
+        items = cascade.search(query_text=query_text, top_k=top_k, run_id=run_id)
     else:
-        # Generate representative mock candidates adhering strictly to contracts
-        items = []
-        for i in range(min(top_k, 5)):
-            kf_id = build_keyframe_id("L21_V001", i + 1)
-            ev_id = create_evidence_id(tool_name, run_id, i + 1)
-            items.append(
-                Candidate(
-                    keyframe_id=kf_id,
-                    video_id="L21_V001",
-                    score=0.95 - (i * 0.05),
-                    evidence_id=ev_id,
-                    matched_terms=[term for term in query_text.split() if len(term) > 2],
-                )
-            )
+        # No cascade and no mock: say so. Returning invented keyframes here is
+        # exactly what docs/04 §2 forbids ("không bịa keyframe") — they would
+        # look like real hits all the way to the scoreboard.
+        latency = (time.perf_counter() - start_t) * 1000.0
+        return ToolResult(
+            tool=tool_name,
+            items=[],
+            error=ToolError(
+                code=ErrorCode.STORE_UNAVAILABLE,
+                message="search_text needs a Cascade to search; pass cascade=...",
+                tool=tool_name,
+            ),
+            latency_ms=latency,
+        )
 
     latency = (time.perf_counter() - start_t) * 1000.0
     return ToolResult(

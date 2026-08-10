@@ -41,21 +41,32 @@ features:
 retrieval:
   embed_dim: 512
   coarse_topk: 500
-  rerank_topk: 50
+  # 100 = so dap an toi da BTC cho nop moi truy van (PDF §2.2). Nop it hon la
+  # tu bo khong cong 4 trong 5 so hang cua Final Score.
+  rerank_topk: 100
   # Scores from CLIP (cosine) and BM25 are on different scales — normalize
   # before weighting, do not add raw (docs/04 §3.1).
   fusion_weights:
     clip: 1.0
     bm25: 1.0
-  # Over budget => skip rerank, fall back to coarse ranking (docs/04 §3.3).
+  # Qua budget => cat ngan, phan chua cham giu nguyen thu tu coarse (CHOT).
   rerank_budget_ms: 3000
+  temporal_window: 5                 # khoang cach gom nhom o giai doan B
+  # Checkpoint BTC dung, ghi ro trong PDF §3. Da xac minh: cosine 0.9992-1.0000
+  # so voi vector BTC cap (scripts/verify_clip_checkpoint.py).
+  clip_checkpoint: clip-ViT-B-32
+  # Thap text PHAI la ban multilingual: clip-ViT-B-32 goc khong doc duoc tieng
+  # Viet — 3 cau hoi khac nghia tra ve CUNG 3 keyframe. Ban nay chung cat vao
+  # DUNG khong gian anh cua clip-ViT-B-32 nen khong phai re-index.
+  clip_text_checkpoint: sentence-transformers/clip-ViT-B-32-multilingual-v1
 
 submit:
-  # BTC schema is TO_CONFIRM. Switching format must not require a code change
-  # (docs/05 §2). One of: by_timestamp | by_frame | by_frame_range | raw_keyframe
-  schema_format: by_timestamp
+  # DA CHOT theo PDF §2.1.1: dap an la <video_id>, <frame_id>.
+  # by_timestamp/by_frame_range/raw_keyframe giu lai cho sprint sau, khong dung.
+  schema_format: by_frame
   frame_range_window: 25             # only used by by_frame_range
 
 eval:
   queryset: eval/queryset.jsonl
-  recall_at: [1, 5, 10]
+  # Dung 5 moc cua Final Score (PDF §2.2), khong phai [1,5,10] tu doan.
+  recall_at: [1, 5, 20, 50, 100]

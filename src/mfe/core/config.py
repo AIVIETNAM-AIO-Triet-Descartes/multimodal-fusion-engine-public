@@ -100,9 +100,20 @@ class FusionWeights(_Section):
 class RetrievalConfig(_Section):
     embed_dim: int = Field(gt=0)
     coarse_topk: int = Field(gt=0, le=500, description="docs/04 §2: top_k <= 500")
-    rerank_topk: int = Field(gt=0)
+    rerank_topk: int = Field(
+        gt=0, description="Also the submit depth; PDF §2.2 allows 100 answers"
+    )
     fusion_weights: FusionWeights = FusionWeights()
-    rerank_budget_ms: int = Field(gt=0, description="Over budget -> fall back to coarse")
+    rerank_budget_ms: int = Field(gt=0, description="Over budget -> truncate, keep coarse order")
+    temporal_window: int = Field(default=5, ge=0, description="Stage B grouping distance")
+    clip_checkpoint: str = Field(
+        default="clip-ViT-B-32",
+        description="Image tower; named in official PDF §3, verified at cosine ~0.999",
+    )
+    clip_text_checkpoint: str = Field(
+        default="sentence-transformers/clip-ViT-B-32-multilingual-v1",
+        description="Text tower; same image space, but reads Vietnamese queries",
+    )
 
 
 class SubmitConfig(_Section):

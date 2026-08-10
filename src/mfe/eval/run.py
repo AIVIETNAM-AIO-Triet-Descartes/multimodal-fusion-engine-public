@@ -8,17 +8,16 @@ docs/01 §2 on why this exists: it is what tells the team whether there is real
 progress — "vai hay bị bỏ quên nhất". Nobody's workstream feels blocked without
 it, and that is exactly the problem.
 
-Sprint 1 scope of the default search path
------------------------------------------
-Stage A late fusion (docs/04 §1) wants CLIP *and* BM25. Encoding a text query
-into CLIP space needs the model's text tower, and Sprint 1 runs no checkpoint —
-`config.features.source` is `provided`, and BTC ships image embeddings only.
+The default search path is now the real cascade
+------------------------------------------------
+Stage A runs both arms — CLIP over the Faiss index and BM25 over the Inverted
+Index — fused by RRF. The vector arm was the missing piece: BTC ships keyframe
+features but not the model, so a text query had nowhere to go until the
+checkpoint was pinned to `clip-ViT-B-32` (official PDF §3) and verified at
+cosine 0.9992-1.0000 against the shipped vectors.
 
-So the harness searches the Inverted Index and says so, rather than quietly
-reporting a one-armed cascade as if it were the real thing. `run(...)` takes a
-`search_fn`, so the moment Quốc Đạt's text encoder or Phạm Trọng's wired cascade
-lands, it plugs in here with no change to the scoring, the logging or the exit
-criteria.
+`run(...)` still takes a `search_fn`, so an experiment can swap the search path
+without touching scoring, logging or the exit criteria.
 """
 
 from __future__ import annotations
@@ -39,7 +38,7 @@ from mfe.eval.exit_criteria import check_all
 from mfe.eval.metrics import QueryRecord, compute_ttca, recall_at_k, summarize
 from mfe.mapping.relational import RelationalMap
 from mfe.mapping.validator import Validator
-from mfe.online.dedup import dedup
+from mfe.online.cascade import Cascade
 from mfe.stores.asset.manifest import AssetStore
 from mfe.stores.inverted.index import InvertedIndex
 from mfe.stores.vector.index import VectorIndex
@@ -81,20 +80,20 @@ def load_queryset(path: str) -> list[QueryRecord]:
     return records
 
 
-def build_default_search(config: Config, inverted: InvertedIndex) -> SearchFn:
-    """BM25 over the Inverted Index, deduplicated. See the module docstring.
+def build_default_search(
+    config: Config, inverted: InvertedIndex, vector: VectorIndex | None
+) -> SearchFn:
+    """The full cascade: CLIP + BM25 -> fusion -> dedup -> rerank.
 
-    Returns [] for a query whose terms are all absent from the corpus, rather
-    than raising: an unmatched query is a miss to be scored, not a crash.
+    Returns [] for a query that matches nothing, rather than raising: an
+    unmatched query is a miss to be scored, not a crash.
     """
+    cascade = Cascade.from_config(
+        config, vector_index=vector, inverted_index=inverted, reranker=None
+    )
 
     def search(query_text: str, top_k: int, run_id: str) -> list[Candidate]:
-        candidates = inverted.search(
-            query_text=query_text,
-            top_k=min(config.retrieval.coarse_topk, 500),
-            run_id=run_id,
-        )
-        return dedup(candidates)[:top_k]
+        return cascade.search(query_text=query_text, top_k=top_k, run_id=run_id)
 
     return search
 
@@ -192,7 +191,7 @@ def run(
             lambda: AssetStore.load(config.paths.asset_store, backend=backend),
         )
 
-        search = search_fn or build_default_search(config, inverted)
+        search = search_fn or build_default_search(config, inverted, vector)
         rows = [_run_one_query(query, search, config, run_id) for query in queries]
 
         validator = Validator(relational)
