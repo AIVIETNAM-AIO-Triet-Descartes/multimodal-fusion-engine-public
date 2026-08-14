@@ -198,15 +198,20 @@ def test_trake_without_a_decomposition_searches_the_whole_query() -> None:
     assert len(query.ground_truth().events) == 2
 
 
-def test_strict_window_is_derived_from_the_anchor() -> None:
-    """One annotation, two windows — they cannot drift apart by hand."""
+def test_both_windows_are_taken_as_annotated() -> None:
+    """Neither is computed from the other — both are read off the video.
+
+    The strict width has to follow the query: a moment many adjacent frames
+    satisfy earns a wider window than one pinned to a single instant. A derived
+    `anchor ± 5` would encode one guess as the rule for every query.
+    """
     query = KISQuery(
         query_id="q",
         type="KIS",
         text="…",
         gt_video_id="L23_V001",
         gt_frame_range=(301, 625),
-        gt_anchor_frame=375,
+        gt_frame_range_strict=(370, 380),
     )
 
     wide = query.ground_truth()
@@ -216,8 +221,25 @@ def test_strict_window_is_derived_from_the_anchor() -> None:
     assert (strict.start_frame_id, strict.end_frame_id) == (370, 380)
 
 
-def test_no_anchor_means_no_strict_window() -> None:
-    """Wide-only is legal: the query is still scored, just on one ruler."""
+@pytest.mark.parametrize("strict", [(310, 320), (301, 625), (500, 500)])
+def test_strict_width_is_free_as_long_as_it_nests(strict: tuple[int, int]) -> None:
+    """Narrow, equal to the scene, or a single frame — all legal widths."""
+    query = KISQuery(
+        query_id="q",
+        type="KIS",
+        text="…",
+        gt_video_id="L23_V001",
+        gt_frame_range=(301, 625),
+        gt_frame_range_strict=strict,
+    )
+
+    result = query.ground_truth_strict()
+
+    assert (result.start_frame_id, result.end_frame_id) == strict
+
+
+def test_no_strict_window_is_legal() -> None:
+    """Scene-only is still scored, just on one ruler."""
     query = KISQuery(
         query_id="q",
         type="KIS",
@@ -230,28 +252,12 @@ def test_no_anchor_means_no_strict_window() -> None:
     assert query.ground_truth_strict() is None
 
 
-def test_strict_window_is_clamped_at_zero() -> None:
-    """An anchor at frame 0 must not produce a negative start."""
-    query = KISQuery(
-        query_id="q",
-        type="KIS",
-        text="…",
-        gt_video_id="L23_V001",
-        gt_frame_range=(0, 86),
-        gt_anchor_frame=0,
-    )
+@pytest.mark.parametrize("strict", [(200, 400), (500, 700), (100, 900)])
+def test_strict_window_outside_its_scene_is_refused(strict: tuple[int, int]) -> None:
+    """One of the two was read off the wrong moment.
 
-    strict = query.ground_truth_strict()
-
-    assert strict.start_frame_id == 0
-    assert strict.end_frame_id == 5
-
-
-def test_anchor_outside_its_own_scene_is_refused() -> None:
-    """The two numbers would then describe different moments.
-
-    Scoring either one would silently believe the wrong annotation, and the two
-    columns of the report would disagree for a reason nobody could see.
+    Both come from the same viewing, so they cannot legitimately disagree —
+    and scoring either would silently believe the wrong annotation.
     """
     query = KISQuery(
         query_id="q",
@@ -259,38 +265,52 @@ def test_anchor_outside_its_own_scene_is_refused() -> None:
         text="…",
         gt_video_id="L23_V001",
         gt_frame_range=(301, 625),
-        gt_anchor_frame=900,
+        gt_frame_range_strict=strict,
     )
     with pytest.raises(ContractError):
         query.ground_truth_strict()
 
 
-def test_trake_needs_one_anchor_per_event() -> None:
+def test_trake_needs_one_strict_window_per_event() -> None:
     query = TRAKEQuery(
         query_id="q",
         type="TRAKE",
         text="…",
         gt_video_id="L23_V001",
         gt_events=[(0, 86), (301, 625)],
-        gt_anchor_frames=[0],
+        gt_events_strict=[(0, 5)],
     )
     with pytest.raises(ContractError):
         query.ground_truth_strict()
 
 
-def test_trake_strict_windows_track_their_events() -> None:
+def test_trake_strict_windows_nest_in_their_own_event() -> None:
     query = TRAKEQuery(
         query_id="q",
         type="TRAKE",
         text="…",
         gt_video_id="L23_V001",
         gt_events=[(0, 86), (301, 625)],
-        gt_anchor_frames=[40, 375],
+        gt_events_strict=[(35, 45), (370, 380)],
     )
 
     strict = query.ground_truth_strict()
 
     assert [(e.start_frame, e.end_frame) for e in strict.events] == [(35, 45), (370, 380)]
+
+
+def test_trake_strict_window_in_the_wrong_event_is_refused() -> None:
+    """Event 2's window listed under event 1 — a swap the score would hide."""
+    query = TRAKEQuery(
+        query_id="q",
+        type="TRAKE",
+        text="…",
+        gt_video_id="L23_V001",
+        gt_events=[(0, 86), (301, 625)],
+        gt_events_strict=[(370, 380), (35, 45)],
+    )
+    with pytest.raises(ContractError):
+        query.ground_truth_strict()
 
 
 def test_inverted_frame_range_is_refused() -> None:

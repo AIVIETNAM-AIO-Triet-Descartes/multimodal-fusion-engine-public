@@ -30,29 +30,49 @@ leaderboard say. Keep both — the internal one is far more sensitive during
 development, because Final Score saturates at 0.8 as soon as anything correct
 lands in the top 5.
 
-Two ground-truth windows, and why one is not enough
-----------------------------------------------------
-Every query carries a **scene span** (`gt_frame_range`) and, optionally, an
-**anchor frame** (`gt_anchor_frame`). Both are source-video frame numbers, so
-neither depends on `keyframe_id` — but they behave very differently when the
-keyframe extraction changes, and that is the point.
+Two ground-truth windows, both annotated by hand
+------------------------------------------------
+Every query carries a **scene span** (`gt_frame_range`) and, optionally, a
+**strict window** (`gt_frame_range_strict`) nested inside it. Both are
+source-video frame numbers read off the video itself, never off a keyframe grid.
 
-* **Wide** = the scene span: every frame in which the answer is visible.
-  A scene runs a few seconds, so *any* reasonable extraction samples inside it.
-  This score is therefore comparable across extraction strategies, which is what
-  you want when asking "did retrieval improve".
-* **Strict** = `anchor ± STRICT_HALF_WINDOW`, the ~11-frame window BTC actually
-  uses (PDF §2.1.1). It is extraction-*dependent* on purpose: if our keyframes
-  are too sparse to land in an 11-frame window, we genuinely lose those points
-  at the competition, and this is the number that says so.
+* **Scene** = every frame in which the answer is visible, bounded by where the
+  shot starts and ends. A scene runs seconds, so any reasonable extraction
+  samples inside it — which makes this score comparable across extraction
+  strategies, the number to watch when asking "did retrieval improve".
+* **Strict** = the tight window the annotator believes BTC would give for *this*
+  query. Not derived, and deliberately not a fixed width.
 
-Measured, which is why both exist: with ground truth written as `anchor ± 5`
-against BTC's provided keyframes, re-extracting at every 30 frames — three times
-denser than the provided set — leaves **3 of 4 windows unreachable**. A one-window
-harness would have reported that denser extraction as a regression.
+Why the strict width has to be annotated, not computed
+-------------------------------------------------------
+It is tempting to define strict as `anchor ± 5`, because PDF §2.1.1's worked
+example scores `505` against `[500, 510]`. This module used to do exactly that,
+and it was wrong twice over.
 
-A wide score far above the strict score means "we find the moment, our sampling
-is too coarse to prove it". Those are different problems with different fixes.
+**The width follows the query, not a constant.** BTC's window has to be wide
+enough to cover the frames that genuinely answer the question. A query that many
+adjacent frames satisfy earns a wider window; one pinned to a single instant
+earns a narrow one. §2.1.3's "thường dưới 10 frame" describes TRAKE because
+*actions are short*, not because 10 is a universal number. Freezing one width
+across every query encodes a guess as if it were the rule.
+
+**The anchor must come from the video, not from `map-keyframes`.** The earlier
+design read the anchor out of BTC's CSV, which meant the strict window was
+centred on a keyframe *we happen to hold* — the test set quietly shaped by the
+system under test. A window built that way always contains exactly one keyframe,
+so it can never expose a sampling problem, and it rewards an extraction for
+landing near BTC's choice rather than near the real moment.
+
+The test set has to behave like BTC: watch the video, find the moment, place the
+window. If no keyframe in the index falls inside it, that is a finding about the
+**extraction**, and the right response is to fix the extraction — not to widen
+the ground truth until the system passes.
+
+Reading the two columns
+------------------------
+Scene high, strict low: the right shot is surfaced but not the right frame — a
+precision problem, which is what reranking is for. Both near zero: retrieval
+missed the scene outright.
 """
 
 from __future__ import annotations
@@ -116,41 +136,36 @@ class _Query(BaseModel):
     )
 
 
-#: Half-width of the strict window built around an anchor frame. BTC's own
-#: worked example scores `505` against `[500, 510]` (PDF §2.1.1) — 11 frames —
-#: and §2.1.3 calls TRAKE windows "thường dưới 10 frame". So 5 is not a knob to
-#: tune; it is what the competition looks like. Derived from the anchor rather
-#: than written per query so the two windows can never disagree by hand.
-STRICT_HALF_WINDOW = 5
-
-
-def _check_range(query_id: str, frame_range: _FrameRange) -> _FrameRange:
+def _check_range(query_id: str, frame_range: _FrameRange, label: str) -> _FrameRange:
     start, end = frame_range
     if start > end:
         raise ContractError(
             ErrorCode.INVALID_ARGUMENT,
-            f"{query_id}: gt_frame_range start {start} is after end {end}",
+            f"{query_id}: {label} start {start} is after end {end}",
         )
     return frame_range
 
 
-def _strict_range(
-    query_id: str, frame_range: _FrameRange, anchor: int
+def _check_nested(
+    query_id: str, wide: _FrameRange, strict: _FrameRange, label: str = ""
 ) -> _FrameRange:
-    """The BTC-sized window around `anchor`, checked against the wide one.
+    """The strict window must sit inside the scene it belongs to.
 
-    An anchor outside its own scene span is a contradiction in the annotation:
-    one of the two numbers describes a different moment than the other, and
-    scoring either would silently believe the wrong one.
+    Both are annotated by hand from the same viewing, so a strict window poking
+    outside its scene means one of the two was read off the wrong moment. Left
+    unchecked, the two columns of the report would disagree for a reason nobody
+    could see from the numbers.
     """
-    start, end = frame_range
-    if not start <= anchor <= end:
+    where = f"{query_id}{label}"
+    _check_range(where, wide, "scene range")
+    _check_range(where, strict, "strict range")
+    if strict[0] < wide[0] or strict[1] > wide[1]:
         raise ContractError(
             ErrorCode.INVALID_ARGUMENT,
-            f"{query_id}: anchor frame {anchor} is outside its own scene span "
-            f"[{start}, {end}]",
+            f"{where}: strict window {list(strict)} is not inside its scene "
+            f"{list(wide)}",
         )
-    return (max(0, anchor - STRICT_HALF_WINDOW), anchor + STRICT_HALF_WINDOW)
+    return strict
 
 
 class KISQuery(_Query):
@@ -159,24 +174,24 @@ class KISQuery(_Query):
     type: Literal["KIS"]
     text: str
     gt_video_id: str
-    #: The **scene span**: every frame in which the answer is visible. Wide on
-    #: purpose — see the module docstring on the two windows.
+    #: The **scene span**: every frame in which the answer is visible.
     gt_frame_range: _FrameRange
-    #: The one frame the annotator is certain about, used to derive the strict
-    #: window. Optional; without it the query is only scored on the wide window.
-    gt_anchor_frame: _FrameId | None = None
+    #: The tight window, annotated by watching the video — not derived. See the
+    #: module docstring for why its width has to vary with the query.
+    #: Optional; without it the query is only scored on the scene window.
+    gt_frame_range_strict: _FrameRange | None = None
 
     def ground_truth(self) -> KISGroundTruth:
-        start, end = _check_range(self.query_id, self.gt_frame_range)
+        start, end = _check_range(self.query_id, self.gt_frame_range, "gt_frame_range")
         return KISGroundTruth(
             video_id=self.gt_video_id, start_frame_id=start, end_frame_id=end
         )
 
     def ground_truth_strict(self) -> KISGroundTruth | None:
-        if self.gt_anchor_frame is None:
+        if self.gt_frame_range_strict is None:
             return None
-        start, end = _strict_range(
-            self.query_id, self.gt_frame_range, self.gt_anchor_frame
+        start, end = _check_nested(
+            self.query_id, self.gt_frame_range, self.gt_frame_range_strict
         )
         return KISGroundTruth(
             video_id=self.gt_video_id, start_frame_id=start, end_frame_id=end
@@ -208,7 +223,8 @@ class QAQuery(_Query):
     gt_video_id: str
     #: Scene span — see `KISQuery.gt_frame_range`.
     gt_frame_range: _FrameRange
-    gt_anchor_frame: _FrameId | None = None
+    #: Tight window, annotated — see `KISQuery.gt_frame_range_strict`.
+    gt_frame_range_strict: _FrameRange | None = None
     gt_answer: str
 
     def answer(self) -> str:
@@ -224,13 +240,17 @@ class QAQuery(_Query):
         )
 
     def ground_truth(self) -> QAGroundTruth:
-        return self._at(_check_range(self.query_id, self.gt_frame_range))
+        return self._at(
+            _check_range(self.query_id, self.gt_frame_range, "gt_frame_range")
+        )
 
     def ground_truth_strict(self) -> QAGroundTruth | None:
-        if self.gt_anchor_frame is None:
+        if self.gt_frame_range_strict is None:
             return None
         return self._at(
-            _strict_range(self.query_id, self.gt_frame_range, self.gt_anchor_frame)
+            _check_nested(
+                self.query_id, self.gt_frame_range, self.gt_frame_range_strict
+            )
         )
 
 
@@ -253,9 +273,11 @@ class TRAKEQuery(_Query):
     gt_video_id: str
     #: Scene span per event, in temporal order. Its length defines N.
     gt_events: list[_FrameRange] = Field(min_length=1)
-    #: One anchor frame per event, same order and length as `gt_events`.
-    #: Optional; without it the query is only scored on the wide windows.
-    gt_anchor_frames: list[_FrameId] | None = None
+    #: Tight window per event, same order and length as `gt_events`. This is
+    #: where BTC's "thường dưới 10 frame" belongs: TRAKE windows are narrow
+    #: because the *actions* are short, not because 10 is a universal width.
+    #: Optional; without it the query is only scored on the scene windows.
+    gt_events_strict: list[_FrameRange] | None = None
 
     def searches(self) -> list[str]:
         """One search string per event — the decomposition, or `text` repeated."""
@@ -273,27 +295,27 @@ class TRAKEQuery(_Query):
         self.searches()  # raises on a length mismatch before anything is scored
         events = []
         for index, frame_range in enumerate(self.gt_events, 1):
-            start, end = _check_range(f"{self.query_id} event {index}", frame_range)
+            start, end = _check_range(
+                self.query_id, frame_range, f"gt_events[{index}]"
+            )
             events.append(TRAKEEvent(start, end))
         return TRAKEGroundTruth(video_id=self.gt_video_id, events=events)
 
     def ground_truth_strict(self) -> TRAKEGroundTruth | None:
-        if not self.gt_anchor_frames:
+        if not self.gt_events_strict:
             return None
-        if len(self.gt_anchor_frames) != len(self.gt_events):
+        if len(self.gt_events_strict) != len(self.gt_events):
             raise ContractError(
                 ErrorCode.INVALID_ARGUMENT,
-                f"{self.query_id}: {len(self.gt_anchor_frames)} anchor frame(s) but "
-                f"{len(self.gt_events)} event(s) — one anchor per event, in order",
+                f"{self.query_id}: {len(self.gt_events_strict)} strict window(s) but "
+                f"{len(self.gt_events)} event(s) — one per event, in the same order",
             )
         events = []
-        for index, (frame_range, anchor) in enumerate(
-            zip(self.gt_events, self.gt_anchor_frames, strict=True), 1
+        for index, (wide, strict) in enumerate(
+            zip(self.gt_events, self.gt_events_strict, strict=True), 1
         ):
-            start, end = _strict_range(
-                f"{self.query_id} event {index}",
-                _check_range(f"{self.query_id} event {index}", frame_range),
-                anchor,
+            start, end = _check_nested(
+                self.query_id, wide, strict, f" event {index}"
             )
             events.append(TRAKEEvent(start, end))
         return TRAKEGroundTruth(video_id=self.gt_video_id, events=events)
@@ -466,8 +488,9 @@ class QueryOutcome(BaseModel):
     #: number to compare across extraction changes.
     wide: QueryScore
     #: BTC-sized window around the anchor frame. None when the query carries no
-    #: anchor. Deliberately extraction-*dependent*: it answers "is our sampling
-    #: dense enough to score at the competition", which is a real constraint.
+    #: anchor. Answers "did we rank the exact keyframe the annotator picked",
+    #: not "is our sampling dense enough" — the anchor *is* a keyframe, so the
+    #: window always contains one and sparseness cannot show up here.
     strict: QueryScore | None = None
 
     @property
@@ -630,13 +653,14 @@ def _print_report(
         )
     else:
         print(
-            f"  HEP  = cua so ~11 frame quanh anchor, co BTC that. MEAN "
+            f"  HEP  = cua so 11 frame quanh anchor. Hoi 'co xep dung CAI KEYFRAME "
+            f"do len cao khong', chat hon RONG. MEAN "
             f"{result.mean_final_score_strict:.3f} tren "
             f"{result.strict_queries}/{len(result.per_query)} truy van co anchor."
         )
         print(
-            "         HEP thap hon nhieu so voi RONG = mat do keyframe chua du "
-            "day, khong phai retrieval kem."
+            "         RONG cao ma HEP thap = tim dung canh, chua dung khung hinh "
+            "-> van de do chinh xac, rerank chua toi. Ca hai ~0 = truot han canh."
         )
 
     print("\nTruy van:")

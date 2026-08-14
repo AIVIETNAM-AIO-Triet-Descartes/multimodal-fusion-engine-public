@@ -171,31 +171,31 @@ def test_missing_manifests_directory_is_reported(workspace):
     assert mq.run() == 2
 
 
-def test_a_missing_anchor_warns_but_still_merges(workspace, capsys):
+def test_a_missing_strict_window_warns_but_still_merges(workspace, capsys):
     """Wide-only is degraded, not broken — blocking would stop the other 114."""
     tmp_path, dev, _, _ = workspace
     (dev / "dat.jsonl").write_text(_kis("dat_kis_01", "dat", "dev"), encoding="utf-8")
 
     assert mq.run() == 0
-    assert "no anchor frame" in capsys.readouterr().out
+    assert "no strict window" in capsys.readouterr().out
     assert (tmp_path / "queryset_dev.jsonl").exists()
 
 
-def test_an_anchor_outside_its_scene_is_an_error_not_a_warning(workspace, capsys):
+def test_a_strict_window_outside_its_scene_is_an_error_not_a_warning(workspace, capsys):
     """A contradictory annotation cannot be scored either way — that blocks."""
     _, dev, _, _ = workspace
     line = json.loads(_kis("dat_kis_01", "dat", "dev"))
-    line["gt_anchor_frame"] = 900  # outside [100, 110]
+    line["gt_frame_range_strict"] = [900, 910]  # outside [100, 110]
     (dev / "dat.jsonl").write_text(json.dumps(line, ensure_ascii=False), encoding="utf-8")
 
     assert mq.run() == 1
     assert "strict window is invalid" in capsys.readouterr().out
 
 
-def test_a_valid_anchor_produces_no_warning(workspace, capsys):
+def test_a_valid_strict_window_produces_no_warning(workspace, capsys):
     _, dev, _, _ = workspace
     line = json.loads(_kis("dat_kis_01", "dat", "dev"))
-    line["gt_anchor_frame"] = 105
+    line["gt_frame_range_strict"] = [104, 106]
     (dev / "dat.jsonl").write_text(json.dumps(line, ensure_ascii=False), encoding="utf-8")
 
     assert mq.run() == 0

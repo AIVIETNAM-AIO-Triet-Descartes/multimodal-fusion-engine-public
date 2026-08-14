@@ -126,9 +126,9 @@ def check_query(
     try:
         if query.ground_truth_strict() is None:
             warnings.append(
-                f"{where}: no anchor frame — scored on the wide window only. "
-                f"Add gt_anchor_frame (KIS/QA) or gt_anchor_frames (TRAKE); it is "
-                f"the keyframe you already looked at, so it costs nothing."
+                f"{where}: no strict window — scored on the scene window only. "
+                f"Add gt_frame_range_strict (KIS/QA) or gt_events_strict (TRAKE) "
+                f"once you have watched the moment closely enough to bound it."
             )
     except Exception as err:  # noqa: BLE001 — a *broken* anchor is an error
         problems.append(f"{where}: strict window is invalid ({err})")
