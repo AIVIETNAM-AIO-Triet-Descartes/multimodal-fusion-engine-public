@@ -52,12 +52,29 @@ def test_cascade_skips_stage_c_without_a_reranker():
 
 
 def test_cascade_runs_stage_c_when_a_reranker_is_injected():
+    """Stage C needs an Asset Store — it scores the query against the *image*."""
+    from tests.unit.online.test_rerank import FakeAssetStore, _wire_fake_model
+
     hits = [_cand(1, 9.0, ordinal=0), _cand(40, 8.0, ordinal=1)]
-    cascade = Cascade(inverted_index=FakeInverted(hits), reranker=Reranker(budget_ms=5000))
+    reranker = Reranker(asset_store=FakeAssetStore(), budget_ms=5000)
+    _wire_fake_model(reranker, [0.2, 0.8])
+    cascade = Cascade(inverted_index=FakeInverted(hits), reranker=reranker)
 
     results = cascade.search(query_text="blue sky sunset", top_k=5, run_id="test_cascade")
 
     assert all(c.evidence_id.startswith("rerank:test_cascade:") for c in results)
+    # Reordered by image score, so the lower-ranked coarse candidate leads.
+    assert results[0].keyframe_id.endswith("#040")
+
+
+def test_cascade_leaves_order_alone_when_stage_c_cannot_see_images():
+    """A reranker without an Asset Store must degrade, not reorder on guesswork."""
+    hits = [_cand(1, 9.0, ordinal=0), _cand(40, 8.0, ordinal=1)]
+    cascade = Cascade(inverted_index=FakeInverted(hits), reranker=Reranker())
+
+    results = cascade.search(query_text="blue sky sunset", top_k=5, run_id="test_cascade")
+
+    assert [c.keyframe_id for c in results] == [c.keyframe_id for c in hits]
 
 
 def test_cascade_fuses_both_arms():

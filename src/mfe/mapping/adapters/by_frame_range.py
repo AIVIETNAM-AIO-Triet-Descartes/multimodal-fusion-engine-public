@@ -9,7 +9,11 @@ from mfe.mapping.adapters.base import SubmitAdapter
 
 
 class ByFrameRangeAdapter(SubmitAdapter):
-    """Expand a window around the keyframe. Owner: Nhật Bảo. TODO(Nhật Bảo): implement.
+    """Expand a window around the keyframe. Owner: Nhật Bảo.
+
+    Not the Sprint 1 format — `by_frame` is (PDF §2.1.1). Kept working because
+    the *ground truth* is a range even though the *submission* is one frame, so
+    this is the shape to reach for if BTC ever accepts a range from us too.
 
     Why this format is plausible at all: docs/context/buoi-1.md §7 records the
     lecturer explaining BTC may treat a *contiguous range* of frames as correct

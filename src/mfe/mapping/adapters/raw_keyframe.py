@@ -9,7 +9,7 @@ from mfe.mapping.adapters.base import SubmitAdapter
 
 
 class RawKeyframeAdapter(SubmitAdapter):
-    """Pass the id straight through. Owner: Nhật Bảo. TODO(Nhật Bảo): implement.
+    """Pass the id straight through. Owner: Nhật Bảo.
 
     The only format that assumes BTC uses *our* id convention — which they will
     not, unless they ship the keyframes and we adopt their naming. Realistically

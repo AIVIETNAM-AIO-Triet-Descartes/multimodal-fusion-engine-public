@@ -50,6 +50,44 @@ logger = logging.getLogger(__name__)
 _VECTOR_BYTES_PER_COMPONENT = 4
 
 
+def _warn_untranslated_labels(config: Config, dataset: ProvidedDataset) -> None:
+    """Report detector classes with no Vietnamese entry in `labels_vi`.
+
+    An unmapped label is not an error — it degrades to English-only, which is
+    what every label did before the table existed. But it is invisible: the
+    keyframe still indexes, the run still succeeds, and the only symptom is a
+    query that never matches. So the gap is counted and named here, where the
+    person who just changed the dataset is watching.
+    """
+    if not config.features.translate_labels:
+        return
+
+    from mfe.offline.labels_vi import missing_labels
+
+    seen: set[str] = set()
+    for video_id in dataset.video_ids():
+        for row in dataset.read_map_keyframes(video_id):
+            seen.update(
+                dataset.read_object_labels(
+                    video_id, row.n, config.features.object_score_min, translate=False
+                )
+            )
+
+    missing = missing_labels(seen)
+    if missing:
+        shown = ", ".join(missing[:15])
+        logger.warning(
+            "%d/%d detector class(es) have no Vietnamese synonym and will only "
+            "match an English query: %s%s. Add them to offline/labels_vi.py.",
+            len(missing),
+            len(seen),
+            shown,
+            "…" if len(missing) > 15 else "",
+        )
+    else:
+        logger.info("labels_vi covers all %d detector class(es) in this dataset.", len(seen))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mfe-ingest",
@@ -243,7 +281,10 @@ def run(
                     keyframe_id=row.keyframe_id,
                     video_id=video_id,
                     object_labels=dataset.read_object_labels(
-                        video_id, row.keyframe_index, config.features.object_score_min
+                        video_id,
+                        row.keyframe_index,
+                        config.features.object_score_min,
+                        translate=config.features.translate_labels,
                     ),
                     ocr_text="",  # not shipped with the dataset; module off (docs/02 §3)
                     metadata_text=metadata_text,
@@ -269,6 +310,8 @@ def run(
                 asset_bytes=sum(record.byte_size for record in asset_records),
             )
             logger.info("%s: %d keyframes indexed", video_id, len(keyframe_rows))
+
+        _warn_untranslated_labels(config, dataset)
 
         writer.verify_stores_agree()
 

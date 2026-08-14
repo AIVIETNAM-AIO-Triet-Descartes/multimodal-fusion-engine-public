@@ -62,13 +62,13 @@ class Cascade:
         self.inverted_index = inverted_index
         self.encode_query = encode_query
         self.fusion_weights = self._resolve_weights(config)
-        # No default reranker. `Reranker` currently scores with a hash stub, and
-        # measured against the real stores it *destroys* the ranking: for
-        # "a person riding a motorbike", stage A+B put Motorcycle/Wheel/Tire
-        # keyframes on top and the stub replaced them with a Laptop/Glasses
-        # frame it happened to hash higher. A fake scorer in the final stage is
-        # strictly worse than no stage at all, because it is the last word on
-        # order. Stage C switches on the day a real cross-encoder is passed in.
+        # Still no *default* reranker: stage C is the last word on order, so a
+        # scorer that is missing, mis-wired or wrong is strictly worse than no
+        # stage at all. That was not theoretical — the old hash stub took a
+        # ranking with Motorcycle/Wheel/Tire on top for "a person riding a
+        # motorbike" and replaced it with a Laptop/Glasses frame it happened to
+        # hash higher. `from_config` now builds a real one when
+        # `models.reranker` names a checkpoint, and leaves this None otherwise.
         self.reranker = reranker
 
     @classmethod
@@ -116,7 +116,37 @@ class Cascade:
                 "encode_query",
                 lambda text: encode_query_text(text, checkpoint=text_checkpoint),
             ),
-            reranker=overrides.get("reranker"),
+            reranker=(
+                overrides["reranker"]
+                if "reranker" in overrides
+                else load("reranker", lambda: cls._build_reranker(config))
+            ),
+        )
+
+    @staticmethod
+    def _build_reranker(config: Any) -> Reranker | None:
+        """Stage C from config, or None when `models.reranker` is null.
+
+        Needs the Asset Store: stage C scores the query against the *image*, and
+        the Asset Store is what turns a `keyframe_id` into pixels. No Asset
+        Store means no stage C — reordering on anything else would not be early
+        fusion, it would be a second text pass wearing its name.
+        """
+        checkpoint = getattr(getattr(config, "models", None), "reranker", None)
+        if not checkpoint:
+            return None
+
+        from mfe.core.storage import get_backend
+        from mfe.stores.asset.manifest import AssetStore
+
+        backend = get_backend(
+            config.storage.backend, root=config.repo_root, volume=config.storage.volume
+        )
+        asset_store = AssetStore.load(config.paths.asset_store, backend=backend)
+        return Reranker(
+            asset_store=asset_store,
+            model_name=checkpoint,
+            budget_ms=config.retrieval.rerank_budget_ms,
         )
 
     def search(
@@ -145,10 +175,15 @@ class Cascade:
             return grouped[:top_k]
 
         # Stage C is scored under a budget and truncates rather than raising
-        # (mfe.online.rerank), so there is no timeout to catch here. Only the
-        # head is reranked: reranking is the expensive stage, and R@1 is the
-        # only term of the score that distinguishes the head from the tail.
-        head = grouped[: self._cfg("rerank_topk", 100)]
+        # (mfe.online.rerank), so there is no timeout to catch here.
+        #
+        # `rerank_depth` decides how deep stage C reaches; the tail keeps its
+        # stage B order. Default is the full submission depth, not a shallow
+        # head: measured on the 2026 sample, reranking all 100 moved a correct
+        # keyframe from rank 92 to rank 3, which a depth-25 pass never sees.
+        # See mfe.online.rerank for the numbers and what they cost.
+        depth = self._cfg("rerank_depth", 100)
+        head = grouped[:depth]
         tail = grouped[len(head) :]
         reranked = self._rerank(query_text, head, run_id=run_id)
 
@@ -200,15 +235,27 @@ class Cascade:
             return None
 
     def _group(self, candidates: list[Candidate]) -> list[Candidate]:
-        """Stage B — dedup + temporal grouping.
+        """Stage B — dedup + temporal grouping, applied only to the head.
 
-        Representatives first, then everything they represent. Under the
-        official scoring the tail is not waste: R@20/50/100 read that far down,
-        so dropping near-duplicates entirely would trade three terms of the
-        score for grid tidiness that only affects the first screen.
+        Diversity is worth something on the first screen an operator looks at,
+        and worth nothing below it: R@20/50/100 read 100 deep and only ask
+        whether a correct frame is present, not whether its neighbours are
+        interesting. So only the first `retrieval.dedup_depth` slots are
+        reordered; past that the fused ranking is passed through untouched.
+
+        Promoting *every* representative ahead of *every* non-representative —
+        what this did before — is a much larger intervention than it looks. On
+        the 2026 sample it produced 236 representatives, so a candidate that
+        fused at rank 60 came out at rank 270: outside the 100 answers we are
+        allowed to submit, scoring 0.0 on a query the vector arm had ranked
+        30th. Stage B was quietly deciding the score, and losing.
         """
         window = self._cfg("temporal_window", 5)
-        representatives = dedup(candidates, temporal_window=window)
+        depth = self._cfg("dedup_depth", 20)
+        if depth <= 0:
+            return candidates
+
+        representatives = dedup(candidates, temporal_window=window)[:depth]
         chosen = {candidate.keyframe_id for candidate in representatives}
         remainder = [c for c in candidates if c.keyframe_id not in chosen]
         return representatives + remainder

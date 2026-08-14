@@ -265,10 +265,17 @@ class Validator:
         return None
 
     def _check_schema(self, record: dict, schema_format: str) -> ValidationFailure | None:
-        """Rule "Đúng schema" -> SCHEMA_MISMATCH. Structural check per format."""
+        """Rule "Đúng schema" -> SCHEMA_MISMATCH. Structural check per format.
+
+        These key names must match what `mapping/adapters/*.build()` emits, key
+        for key. `by_frame` says `frame_id` — BTC's name for the field, adopted
+        at the adapter boundary — not our internal `frame_idx`. Getting the two
+        out of step blocks every valid submission with SCHEMA_MISMATCH, which
+        reads like a data problem rather than a rename that was half-finished.
+        """
         required: dict[str, tuple[str, ...]] = {
             "by_timestamp": ("video_id", "timestamp_ms"),
-            "by_frame": ("video_id", "frame_idx"),
+            "by_frame": ("video_id", "frame_id"),
             "by_frame_range": ("video_id", "frame_start", "frame_end"),
             "raw_keyframe": ("keyframe_id",),
         }

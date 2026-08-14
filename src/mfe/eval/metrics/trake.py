@@ -35,7 +35,8 @@ class TRAKEEvent:
         if self.start_frame > self.end_frame:
             raise ContractError(
                 ErrorCode.INVALID_ARGUMENT,
-                f"start_frame ({self.start_frame}) cannot be greater than end_frame ({self.end_frame})",
+                f"start_frame ({self.start_frame}) cannot be greater than "
+                f"end_frame ({self.end_frame})",
             )
 
     def contains(self, frame_id: int) -> bool:
@@ -142,7 +143,7 @@ def score_trake(submission: TRAKESubmission, gt: TRAKEGroundTruth) -> float:
     # Rule 3: Match each frame_id against corresponding event range [start_frame, end_frame]
     matched_count = sum(
         1
-        for frame_id, event in zip(submission.frame_ids, gt.events)
+        for frame_id, event in zip(submission.frame_ids, gt.events, strict=True)
         if event.contains(frame_id)
     )
 

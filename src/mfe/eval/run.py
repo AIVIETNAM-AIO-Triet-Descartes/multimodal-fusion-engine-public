@@ -88,9 +88,8 @@ def build_default_search(
     Returns [] for a query that matches nothing, rather than raising: an
     unmatched query is a miss to be scored, not a crash.
     """
-    cascade = Cascade.from_config(
-        config, vector_index=vector, inverted_index=inverted, reranker=None
-    )
+    # Stage C comes from `models.reranker` in config — not pinned off here.
+    cascade = Cascade.from_config(config, vector_index=vector, inverted_index=inverted)
 
     def search(query_text: str, top_k: int, run_id: str) -> list[Candidate]:
         return cascade.search(query_text=query_text, top_k=top_k, run_id=run_id)

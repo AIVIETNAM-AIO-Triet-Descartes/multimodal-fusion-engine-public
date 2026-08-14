@@ -226,8 +226,14 @@ class ProvidedDataset:
             return {}
         return json.loads(source.read_text(encoding="utf-8"))
 
-    def read_object_labels(self, video_id: str, n: int, score_min: float) -> list[str]:
+    def read_object_labels(
+        self, video_id: str, n: int, score_min: float, translate: bool = False
+    ) -> list[str]:
         """Object entity names for keyframe `n`, above `score_min`, deduplicated.
+
+        With `translate=True`, Vietnamese synonyms are appended (labels_vi.py).
+        BTC names entities in English and asks in Vietnamese, so untranslated
+        labels give the text arm nothing a query can match at keyframe level.
 
         The shipped files carry ~100 boxes per keyframe, the long tail of which
         is noise below 0.05. Indexing all of them would bury the real labels:
@@ -256,6 +262,11 @@ class ProvidedDataset:
             if name and key not in seen:
                 seen.add(key)
                 labels.append(name)
+
+        if translate:
+            from mfe.offline.labels_vi import translate_labels
+
+            return translate_labels(labels)
         return labels
 
     def keyframe_image_path(self, video_id: str, n: int) -> Path:

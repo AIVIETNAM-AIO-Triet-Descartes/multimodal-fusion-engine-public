@@ -54,6 +54,11 @@ all = ["mfe[offline,stores,online,browser,dev]"]
 [project.scripts]
 mfe-ingest = "mfe.offline.ingest:main"
 mfe-eval = "mfe.eval.run:main"
+# Cham diem theo cong thuc chinh thuc cua BTC (PDF §2). Khac mfe-eval: do la
+# benchmark noi bo (Recall@K tren keyframe_id, TTCA, exit criteria).
+mfe-official = "mfe.eval.official:main"
+# Gop bo test cua 5 nguoi (eval/dev/*, eval/heldout/*) sau khi validate.
+mfe-merge-queryset = "mfe.eval.merge_queryset:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mfe"]

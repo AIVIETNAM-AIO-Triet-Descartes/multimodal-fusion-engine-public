@@ -9,16 +9,17 @@ from mfe.mapping.adapters.base import SubmitAdapter
 
 
 class ByTimestampAdapter(SubmitAdapter):
-    """Owner: Nhật Bảo. TODO(Nhật Bảo): implement.
+    """Owner: Nhật Bảo. **Not used** — BTC scores frames, not timestamps.
+
+    PDF §2.1.1 answers the question this adapter was waiting on: the submission
+    is `<video_id>, <frame_id>` and the ground truth is a frame interval. The
+    millisecond-versus-second worry that used to sit here is therefore moot, and
+    asking BTC about it would waste a question. Kept because a format we have
+    tested is cheaper to revive than one we have to write under time pressure.
 
     Read `keyframe.timestamp_ms` directly (it is `pts_time * 1000`, both from the
     CSV). Do not recompute anything from `fps` — that is the whole reason
     docs/00 §3 stores the columns instead of deriving them.
-
-    TODO(Nhật Bảo, Vỹ Triết): ask BTC whether the unit is milliseconds or seconds.
-    docs/context/buoi-1.md §7 has the lecturer saying "timestamp đến mili-giây",
-    which is guidance, not a rule. A 1000x unit error submits a valid-looking
-    record pointing at the wrong moment.
     """
 
     format_name = "by_timestamp"

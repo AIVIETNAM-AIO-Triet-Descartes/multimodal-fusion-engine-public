@@ -68,6 +68,12 @@ class ModelsConfig(_Section):
     detector: str | None = None
     ocr: str | None = None
     metadata: str | None = None
+    #: Stage C checkpoint. Null leaves stage C off, which is the safe default:
+    #: the last stage is the last word on order, so a reranker that is missing
+    #: or wrong is worse than no reranker (docs/triet/report.html điểm 10).
+    #: Must be a *different* model from `retrieval.clip_checkpoint` — rescoring
+    #: with the same one reproduces stage A exactly.
+    reranker: str | None = None
 
 
 class FeaturesConfig(_Section):
@@ -87,6 +93,13 @@ class FeaturesConfig(_Section):
     object_score_min: float = Field(default=0.3, ge=0.0, le=1.0)
     #: Metadata text fed to the Inverted Index, from media-info/*.json.
     metadata_fields: list[str] = Field(default_factory=lambda: ["title", "keywords", "author"])
+    #: Append Vietnamese synonyms to each keyframe's object labels at ingest
+    #: (mfe.offline.labels_vi). BTC ships English OpenImages names and asks in
+    #: Vietnamese, so without this the text arm has no keyframe-level term the
+    #: query can ever match. A switch rather than a constant because turning it
+    #: off is how the A/B gets measured — and it changes the index, so flipping
+    #: it means re-running ingest.
+    translate_labels: bool = True
 
 
 class FusionWeights(_Section):
@@ -105,7 +118,20 @@ class RetrievalConfig(_Section):
     )
     fusion_weights: FusionWeights = FusionWeights()
     rerank_budget_ms: int = Field(gt=0, description="Over budget -> truncate, keep coarse order")
+    #: How deep stage C reaches. Defaults to the full submission depth: on the
+    #: 2026 sample a full-depth rerank moved a correct keyframe from rank 92 to
+    #: rank 3, which any shallow head misses entirely. Costs ~12 s/query on CPU
+    #: (116 ms/image) — lower it only if TTCA matters more than Final Score.
+    rerank_depth: int = Field(default=100, ge=0)
     temporal_window: int = Field(default=5, ge=0, description="Stage B grouping distance")
+    dedup_depth: int = Field(
+        default=20,
+        ge=0,
+        description=(
+            "How many head slots stage B may reorder for diversity. Beyond this "
+            "the fused ranking is left alone — see Cascade._group"
+        ),
+    )
     clip_checkpoint: str = Field(
         default="clip-ViT-B-32",
         description="Image tower; named in official PDF §3, verified at cosine ~0.999",

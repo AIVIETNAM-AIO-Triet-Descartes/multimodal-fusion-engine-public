@@ -8,8 +8,8 @@ import unicodedata
 import pytest
 from pydantic import ValidationError
 
-import mfe.eval.qa as qa_module
-from mfe.eval.qa import QAGroundTruth, QASubmission, answer_match, score_qa
+import mfe.eval.metrics.qa as qa_module
+from mfe.eval.metrics.qa import QAGroundTruth, QASubmission, answer_match, score_qa
 
 _NUMBER_WORDS_0_TO_20 = (
     "kh\u00f4ng",

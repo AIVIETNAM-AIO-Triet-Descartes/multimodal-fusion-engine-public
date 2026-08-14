@@ -44,16 +44,25 @@ def probe_from_provided(
         media_info: Parsed `media-info/{video_id}.json` (may be empty).
         frame_size: (width, height) read off the first keyframe image.
 
-    `total_frames` is the number the validator bound-checks a submitted frame
-    against (docs/05 §1.1), so its failure modes are asymmetric: too small
-    blocks correct submissions, too large lets wrong ones through. Neither the
-    CSV nor media-info states it, so it is derived as
+    `total_frames` and `duration_ms` are the two numbers the validator
+    bound-checks a submission against (docs/05 §1.1), so their failure modes are
+    asymmetric: too small blocks correct submissions, too large lets wrong ones
+    through. Both are therefore taken as the max of an estimate and a fact:
 
-        max(int(duration_s * fps) + 1, max(frame_idx) + 1)
+        duration_s   = max(media-info "length", max(pts_time))
+        total_frames = max(int(duration_s * fps) + 1, max(frame_idx) + 1)
 
-    and logged when the two disagree. The second term is a fact — we hold a
-    keyframe at that frame, so the video is at least that long. The first is an
-    estimate, and it only ever widens the bound.
+    The second term of each is a fact — we hold a keyframe at that time and at
+    that frame, so the video is at least that long. The estimate only ever
+    widens the bound, never narrows it.
+
+    Widening by `pts_time` is not hypothetical. BTC stores `media-info.length`
+    as **whole seconds**, so any video whose last keyframe falls in the final
+    fractional second is declared shorter than its own keyframes: on the 2026
+    sample, L25_V003 has `length` 1162 against a last `pts_time` of 1162.12,
+    and the resulting `timestamp_ms` 1162120 was rejected as out of bounds. The
+    keyframe is real and BTC shipped it; the rounded duration is the wrong side
+    of the comparison.
     """
     validate_video_id(video_id)
     if not map_rows:
@@ -79,7 +88,15 @@ def probe_from_provided(
 
     declared_length_s = media_info.get("length")
     if isinstance(declared_length_s, (int, float)) and declared_length_s > 0:
-        duration_s = float(declared_length_s)
+        duration_s = max(float(declared_length_s), last_pts_time)
+        if duration_s != float(declared_length_s):
+            logger.info(
+                "%s: duration widened to %.3fs to cover the last keyframe's pts_time "
+                "(media-info 'length' declared only %s s)",
+                video_id,
+                duration_s,
+                declared_length_s,
+            )
     else:
         # No media-info: the last keyframe is a floor on the real duration.
         duration_s = last_pts_time

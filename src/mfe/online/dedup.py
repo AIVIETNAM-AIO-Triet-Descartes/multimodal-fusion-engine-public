@@ -13,9 +13,23 @@ from mfe.contracts.tools import Candidate
 def group_by_shot(candidates: list[Candidate], temporal_window: int = 5) -> list[list[Candidate]]:
     """Cluster candidates into shot groups or temporal proximity clusters.
 
+    A group spans at most `temporal_window` keyframes, measured from the first
+    keyframe in the group — not from the previous one.
+
+    Measuring from the previous keyframe chains transitively: keyframes 1, 6,
+    11, ... 262 each sit within 5 of their predecessor, so they collapse into a
+    single "shot" covering the entire video. That is not hypothetical — on the
+    2026 sample it produced a 216-candidate group spanning keyframes 1 to 262 of
+    L27_V004, leaving one representative for a 22-minute video. Because
+    `Cascade._group` places every representative ahead of every non-
+    representative, the effect was to bury correct answers: the ground-truth
+    keyframe of the KIS baseline query fell from fused rank 60 to rank 180 and
+    out of the submitted top 100, scoring 0.0 on a query the vector arm had
+    ranked 30th.
+
     Args:
         candidates: Candidate list sorted by rank/score.
-        temporal_window: Keyframe index distance threshold for clustering (default 5).
+        temporal_window: Keyframe index span of one group (default 5).
 
     Returns:
         List of candidate groups (each group is a list of Candidate objects).
@@ -43,15 +57,17 @@ def group_by_shot(candidates: list[Candidate], temporal_window: int = 5) -> list
         indexed_cands.sort(key=lambda item: item[0])
 
         current_group: list[Candidate] = []
-        last_idx: int | None = None
+        anchor_idx: int | None = None
 
         for kf_idx, c in indexed_cands:
-            if last_idx is None or (kf_idx - last_idx) <= temporal_window:
+            if anchor_idx is None or (kf_idx - anchor_idx) <= temporal_window:
                 current_group.append(c)
+                if anchor_idx is None:
+                    anchor_idx = kf_idx
             else:
                 groups.append(current_group)
                 current_group = [c]
-            last_idx = kf_idx
+                anchor_idx = kf_idx
 
         if current_group:
             groups.append(current_group)

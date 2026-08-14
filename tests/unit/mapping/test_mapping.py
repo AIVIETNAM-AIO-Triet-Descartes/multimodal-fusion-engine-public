@@ -59,7 +59,7 @@ def test_verify_mapping(db):
 def test_adapters(db):
     
     rec1 = build_submission("L21_V001#001", "by_frame", db)
-    assert rec1 == {"video_id": "L21_V001", "frame_idx": 10}
+    assert rec1 == {"video_id": "L21_V001", "frame_id": 10}  # BTC goi la frame_id
 
     rec2 = build_submission("L21_V001#001", "by_timestamp", db)
     assert rec2 == {"video_id": "L21_V001", "timestamp_ms": 400}
