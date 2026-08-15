@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import unicodedata
 from collections import Counter
 from pathlib import Path
 
@@ -86,6 +87,49 @@ def check_no_shared_videos(owned: dict[str, set[str]]) -> list[str]:
     return problems
 
 
+#: Fields that carry Vietnamese prose and therefore a normalization form.
+#: `query_id`, `video_id` and every number are ASCII and cannot decompose.
+_TEXT_FIELDS = ("text", "retrieval_text", "system_answer", "gt_answer", "note")
+
+
+def _decomposed_fields(query: AnyQuery) -> list[str]:
+    """Names of the text fields that are NOT in NFC form.
+
+    Why this is checked at merge time rather than left to the stores: a
+    decomposed query scores zero on every text arm without raising anything
+    (verified against the live Elasticsearch — the same Vietnamese query returned
+    5 hits as NFC and 0 as NFD). The member who wrote it would see a low score
+    and conclude their query was hard, or that the OCR arm is worthless. Catching
+    it here names the file, the query and the likely cause.
+    """
+    found: list[str] = []
+    for field in _TEXT_FIELDS:
+        value = getattr(query, field, None)
+        if isinstance(value, str) and value != unicodedata.normalize("NFC", value):
+            found.append(field)
+    events = getattr(query, "event_texts", None) or []
+    if any(e != unicodedata.normalize("NFC", e) for e in events):
+        found.append("event_texts")
+    return found
+
+
+def normalize_query(query: AnyQuery) -> AnyQuery:
+    """Return the query with every prose field in NFC. Frozen models -> a copy."""
+    updates: dict[str, object] = {}
+    for field in _TEXT_FIELDS:
+        value = getattr(query, field, None)
+        if isinstance(value, str):
+            normalized = unicodedata.normalize("NFC", value)
+            if normalized != value:
+                updates[field] = normalized
+    events = getattr(query, "event_texts", None)
+    if events:
+        normalized_events = [unicodedata.normalize("NFC", e) for e in events]
+        if normalized_events != list(events):
+            updates["event_texts"] = normalized_events
+    return query.model_copy(update=updates) if updates else query
+
+
 def check_query(
     query: AnyQuery, member: str, split: str, owned: dict[str, set[str]]
 ) -> tuple[list[str], list[str]]:
@@ -116,6 +160,17 @@ def check_query(
         problems.append(
             f"{where}: gt_video_id '{query.gt_video_id}' is not in {member}'s sample. "
             f"This query can never be answered — the video is not in their index."
+        )
+
+    decomposed = _decomposed_fields(query)
+    if decomposed:
+        warnings.append(
+            f"{where}: {', '.join(decomposed)} chứa dấu tổ hợp (Unicode NFD), "
+            f"không phải dạng dựng sẵn (NFC). Đã chuẩn hoá khi gộp, nhưng nên "
+            f"sửa ở nguồn: nhiều khả năng bộ gõ đang để bảng mã 'Unicode tổ hợp' "
+            f"— đổi sang 'Unicode dựng sẵn' trong Unikey. Lý do quan trọng: "
+            f"Elasticsearch chỉ gấp được dấu dựng sẵn, nên một câu NFD ăn 0 điểm "
+            f"ở MỌI arm văn bản mà không báo lỗi gì."
         )
 
     try:
@@ -154,7 +209,9 @@ def collect(
             errors, warns = check_query(query, member, split, owned)
             problems.extend(errors)
             warnings.extend(warns)
-        queries.extend(lines)
+        # Normalize AFTER checking, so the warning still names the file that
+        # needs fixing at source, and the merged output is uniformly NFC.
+        queries.extend(normalize_query(query) for query in lines)
     return queries, problems, warnings
 
 

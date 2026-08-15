@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import unicodedata
 from collections.abc import Callable, Iterable
 from typing import Any
 
@@ -194,6 +195,11 @@ class ElasticsearchTextStore:
             raise ValueError("query text must be non-empty")
         if not 1 <= top_k <= 500:
             raise ValueError("top_k must be between 1 and 500")
+        # Match the normalization `StorageRecord.validate_text` applied on write.
+        # Skipping this makes a decomposed query silently return nothing against
+        # a precomposed index — verified on the live service: the same Vietnamese
+        # query returned 5 hits as NFC and 0 as NFD.
+        text = unicodedata.normalize("NFC", text)
         filters: list[dict[str, Any]] = []
         if video_id is not None:
             filters.append({"term": {"video_id": video_id}})

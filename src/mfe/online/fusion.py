@@ -11,17 +11,33 @@ from typing import Literal
 from mfe.contracts.tools import Candidate
 from mfe.online.tools.evidence import create_evidence_id
 
+Normalizer = Literal["rrf", "linear_rank", "min_max"]
+
 
 def normalize_scores(
     candidates: list[Candidate],
-    method: Literal["rrf", "min_max"] = "rrf",
+    method: Normalizer = "rrf",
     rrf_k: int = 60,
 ) -> list[Candidate]:
     """Normalize candidate scores within a single tool result list.
 
+    Three methods, and the choice is not cosmetic:
+
+    ``rrf``          ``1/(k + rank)`` — reads rank only, so an arm cannot
+                     dominate through the size of its numbers. Steep at the top.
+    ``linear_rank``  ``1 - (rank-1)/n`` — also rank-only, but decays evenly. The
+                     honest partner for `weighted_sum`: with both modes reading
+                     rank, the only difference left between them is the decay
+                     shape, which is the thing worth measuring.
+    ``min_max``      ``(s-min)/(max-min)`` — reads the raw values, so use it only
+                     where they are calibrated. **Fragile to outliers**: measured
+                     on SOTA_AIC's subtitle arm, one exact-match score of 100.0
+                     against a [0.05, 1.0] body collapses the entire rest of the
+                     arm into [0, 0.005] — see ke-hoach-merge-sota.md §3.4b.
+
     Args:
         candidates: Input list of candidates.
-        method: Normalization method ('rrf' or 'min_max'). Default 'rrf'.
+        method: Normalization method. Default 'rrf'.
         rrf_k: RRF constant factor (default 60).
 
     Returns:
@@ -42,6 +58,18 @@ def normalize_scores(
                     keyframe_id=c.keyframe_id,
                     video_id=c.video_id,
                     score=rrf_score,
+                    evidence_id=c.evidence_id,
+                    matched_terms=c.matched_terms,
+                )
+            )
+    elif method == "linear_rank":
+        total = len(sorted_cands)
+        for rank, c in enumerate(sorted_cands, start=1):
+            norm_cands.append(
+                Candidate(
+                    keyframe_id=c.keyframe_id,
+                    video_id=c.video_id,
+                    score=1.0 - (rank - 1) / total,
                     evidence_id=c.evidence_id,
                     matched_terms=c.matched_terms,
                 )
@@ -71,13 +99,26 @@ def weighted_fusion(
     result_lists: dict[str, list[Candidate]],
     weights: dict[str, float],
     run_id: str = "fusion_run",
+    normalizer: Normalizer = "rrf",
+    rrf_k: int = 60,
 ) -> list[Candidate]:
     """Merge multiple per-tool result lists into a unified ranking.
 
+    Every arm is normalized independently, then weighted, then summed. Which
+    normalizer runs decides what "mode" means: `rrf` reproduces Reciprocal Rank
+    Fusion, `linear_rank` gives the evenly-decaying weighted sum.
+
+    **A weight of 0 does not disable an arm.** The arm still contributes its
+    candidates to the pool, it just adds nothing to their score — which is why a
+    zero-weighted BM25 arm was still visibly changing results. To remove an arm,
+    take it out of `result_lists` (or disable it in `ArmRegistry`).
+
     Args:
-        result_lists: Dictionary mapping tool_name -> candidate_list.
-        weights: Dictionary mapping tool_name -> fusion_weight.
+        result_lists: Dictionary mapping arm name -> candidate_list.
+        weights: Dictionary mapping arm name -> fusion_weight.
         run_id: Tracing identifier for fused evidence.
+        normalizer: How each arm's scores are made comparable.
+        rrf_k: RRF constant, used only by the `rrf` normalizer.
 
     Returns:
         List of fused Candidate objects sorted by score descending.
@@ -88,7 +129,7 @@ def weighted_fusion(
     # Normalize each list independently
     normalized_map: dict[str, list[Candidate]] = {}
     for tool_name, cands in result_lists.items():
-        normalized_map[tool_name] = normalize_scores(cands, method="rrf")
+        normalized_map[tool_name] = normalize_scores(cands, method=normalizer, rrf_k=rrf_k)
 
     # Aggregate scores by keyframe_id
     combined_scores: dict[str, float] = {}

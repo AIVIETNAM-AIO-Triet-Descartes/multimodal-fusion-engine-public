@@ -102,12 +102,75 @@ class FeaturesConfig(_Section):
     translate_labels: bool = True
 
 
-class FusionWeights(_Section):
+class FusionWeights(BaseModel):
     """docs/04 §3.1. Weights stay in config so nobody calibrates them deep into
-    last year's data (docs/00 §8 risk 4)."""
+    last year's data (docs/00 §8 risk 4).
+
+    One key per stage-A arm (`mfe.online.arms`). Unlike every other section this
+    one accepts extra keys, because the arm set is open: merging SOTA_AIC added
+    six text arms and more will follow. Names are validated where it can be done
+    properly — `Cascade._build_arms` reads a weight per *registered* arm, so a
+    typo yields the 1.0 default rather than a crash.
+
+    Weight 0 means "contribute nothing to the ranking", NOT "switch the arm off":
+    a zero-weighted arm still admits its candidates into the fused pool. To
+    remove an arm entirely, disable it in the registry (`ArmRegistry.set_enabled`).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="allow")
 
     clip: float = 1.0
     bm25: float = 1.0
+
+
+class FusionConfig(_Section):
+    """How stage A combines its arms. See `mfe.online.fusion`.
+
+    `mode` and `normalizer` are separate on purpose. Naming only the mode would
+    hide the choice that actually decides the outcome: with a rank-based
+    normalizer the two modes differ solely in decay shape, while with `min_max`
+    a single outlier score can decide the ranking on its own.
+    """
+
+    mode: Literal["rrf", "weighted_sum"] = "rrf"
+    normalizer: Literal["rrf", "linear_rank", "min_max"] | None = None
+    rrf_k: int = Field(default=60, gt=0)
+
+    def resolved_normalizer(self) -> str:
+        """The normalizer to use, defaulting to the one each mode implies."""
+        if self.normalizer is not None:
+            return self.normalizer
+        return "rrf" if self.mode == "rrf" else "linear_rank"
+
+
+class TranslationConfig(_Section):
+    """VI→EN for arms whose model has no Vietnamese — see `mfe.online.translate`.
+
+    `tiers` is deliberately a closed list of *producing* tiers. Two things it
+    cannot express, both on purpose:
+
+    * **A "keep the Vietnamese" tier.** There is no such value, so no config can
+      ask an English-only tower to read Vietnamese. Out of translations means the
+      arm sits out (docs/handoff.md §5.1).
+    * **Skipping the hand-written form.** `text_en` on a query always wins; it is
+      not a tier and cannot be turned off.
+
+    An empty `tiers` list is legal and means "hand-written only" — the state the
+    pilot ran in before this existed.
+    """
+
+    enabled: bool = True
+    tiers: list[Literal["mt", "llm"]] = Field(default_factory=lambda: ["mt"])
+    mt_checkpoint: str = "VietAI/envit5-translation"
+    #: Greedy by default: a query set scored twice must give the same two
+    #: numbers. Part of the cache key, so raising it invalidates rather than
+    #: mixes (`MachineTranslator.model_id`).
+    mt_num_beams: int = Field(default=1, ge=1)
+    mt_max_new_tokens: int = Field(default=128, gt=0)
+    #: Tracked in git, unlike everything under `stores/`: with an LLM tier the
+    #: cache *is* what makes two runs comparable, so it has to travel with the
+    #: query set rather than being rebuilt per machine.
+    cache_path: str = "eval/translations.json"
 
 
 class RetrievalConfig(_Section):
@@ -117,6 +180,8 @@ class RetrievalConfig(_Section):
         gt=0, description="Also the submit depth; PDF §2.2 allows 100 answers"
     )
     fusion_weights: FusionWeights = FusionWeights()
+    fusion: FusionConfig = FusionConfig()
+    translation: TranslationConfig = TranslationConfig()
     rerank_budget_ms: int = Field(gt=0, description="Over budget -> truncate, keep coarse order")
     #: How deep stage C reaches. Defaults to the full submission depth: on the
     #: 2026 sample a full-depth rerank moved a correct keyframe from rank 92 to
@@ -131,7 +196,7 @@ class RetrievalConfig(_Section):
         ge=0,
         description=(
             "How many head slots stage B may reorder for diversity. Beyond this "
-            "the fused ranking is left alone — see Cascade._group"
+            "the fused ranking is left alone — see Cascade.group"
         ),
     )
     clip_checkpoint: str = Field(

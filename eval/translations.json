@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "text": "Biển số của chiếc xe máy màu xanh dương dựng ở hiện trường ban đêm là gì?",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "What's the plate number of the blue motorcycle that was parked at the scene at night?"
+    },
+    {
+      "text": "Cảnh trong vườn thú: con lừa hoang trưởng thành cúi xuống gặm cỏ, sau đó con lừa con bước đi dọc hàng rào gỗ",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Scene at the zoo: adult wild ass bent down to graze, then young donkey walking along the wooden fence"
+    },
+    {
+      "text": "Lá cờ treo trên nóc toà nhà ngân hàng trung ương trong bản tin là cờ nước nào?",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Which country's flag hangs on the roof of the central bank in the news?"
+    },
+    {
+      "text": "Một con lừa hoang con lông vàng nhạt đang bước đi cạnh hàng rào gỗ trong vườn thú",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "A pale yellow wild ass walking by the wooden fence in the zoo"
+    },
+    {
+      "text": "Nhóm cán bộ đội mũ bảo hộ trắng và mũ tai bèo đứng chụm lại xem hiện trường sạt lở bờ sông",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "A group of officers wearing white helmets and straw hats gathered around the riverbank to watch the scene of the river landslide."
+    },
+    {
+      "text": "Phóng sự về tiền tệ: cận cảnh tờ tiền chưa cắt trên dây chuyền in, sau đó là toàn cảnh toà nhà ngân hàng trung ương",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Money story: close - up of the uncut note on the print line, then a panoramic view of the central bank building"
+    },
+    {
+      "text": "Theo băng rôn dưới màn hình, Cần Thơ thiệt hại bao nhiêu tiền do sạt lở bờ sông?",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "According to the banner below, how much money did Can Tho lose due to a riverbank landslide?"
+    },
+    {
+      "text": "Toà nhà cổ điển châu Âu có hàng cột đá lớn và lá cờ Anh treo trên nóc, bầu trời nhiều mây xám",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The European classicist building has a row of large stone columns and the British flag hangs on the roof, the sky is gray with clouds"
+    },
+    {
+      "text": "Đoàn cán bộ khảo sát điểm sạt lở bờ sông: đứng xem hiện trường, xem bản vẽ thiết kế, rồi tới bờ kè bê tông đã sập xuống sông",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The survey team shall observe the site, the design drawing and the concrete embankment that has collapsed into the river."
+    }
+  ]
+}

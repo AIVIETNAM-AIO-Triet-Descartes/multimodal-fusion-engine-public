@@ -14,7 +14,11 @@ class MilvusConfig(BaseModel):
     uri: str = "http://127.0.0.1:19530"
     token: SecretStr | None = None
     collection: str = "aic_keyframe_embeddings_v1"
-    dimension: Literal[512] = 512
+    #: One collection per embedding model — Milvus cannot mix dimensions in one.
+    #: Still a Literal rather than an int: it must stay impossible to point a
+    #: config at a dimension no model produces, which is how a typo becomes a
+    #: collection that accepts everything and matches nothing.
+    dimension: Literal[512, 1024, 1152] = 512
     metric: Literal["COSINE"] = "COSINE"
     index_type: Literal["AUTOINDEX"] = "AUTOINDEX"
     consistency_level: Literal["Strong"] = "Strong"
@@ -25,10 +29,18 @@ class MilvusConfig(BaseModel):
     @classmethod
     def from_env(cls) -> MilvusConfig:
         token = os.getenv("MFE_MILVUS_TOKEN")
+        dimension = os.getenv("MFE_MILVUS_DIMENSION")
+        overrides: dict[str, object] = {}
+        if dimension:
+            overrides["dimension"] = int(dimension)
+        fingerprint = os.getenv("MFE_MILVUS_MODEL_FINGERPRINT")
+        if fingerprint:
+            overrides["model_fingerprint"] = fingerprint
         return cls(
             uri=os.getenv("MFE_MILVUS_URI", cls.model_fields["uri"].default),
             token=SecretStr(token) if token else None,
             collection=os.getenv("MFE_MILVUS_COLLECTION", cls.model_fields["collection"].default),
+            **overrides,
         )
 
 

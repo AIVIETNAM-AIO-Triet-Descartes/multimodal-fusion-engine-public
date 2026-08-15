@@ -4,12 +4,25 @@ from __future__ import annotations
 
 import math
 import re
+import unicodedata
 from typing import Any, Self
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-EMBEDDING_DIM = 512
+#: Dimensions the project actually indexes, one per embedding model:
+#:   512  clip-ViT-B-32                    (BTC's shipped features)
+#:   1024 BAAI/bge-m3                      (dense captions, cross-lingual)
+#:   1152 google/siglip-so400m-patch14-384 (SOTA_AIC's visual tier)
+#:
+#: This is a *sanity* list, not the per-collection contract. A record does not
+#: know which collection it is headed for, so it can only reject a length that
+#: belongs to no model at all. The exact check lives in `MilvusVectorStore`,
+#: which knows its own `config.dimension` — see ke-hoach-merge-sota.md §3.2.
+#: Widening this without keeping the store-level check would delete the guard
+#: while appearing to preserve it.
+SUPPORTED_EMBEDDING_DIMS: tuple[int, ...] = (512, 1024, 1152)
+
 MAX_VIDEO_ID_BYTES = 255
 MAX_INT64 = 2**63 - 1
 SOURCE_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
@@ -48,8 +61,11 @@ class StorageRecord(BaseModel):
     def validate_embedding(cls, value: tuple[float, ...] | None) -> tuple[float, ...] | None:
         if value is None:
             return None
-        if len(value) != EMBEDDING_DIM:
-            raise ValueError(f"embedding must contain exactly {EMBEDDING_DIM} values")
+        if len(value) not in SUPPORTED_EMBEDDING_DIMS:
+            raise ValueError(
+                f"embedding has {len(value)} values, which matches no model this "
+                f"project indexes {SUPPORTED_EMBEDDING_DIMS}"
+            )
         if not all(math.isfinite(item) for item in value):
             raise ValueError("embedding contains NaN or infinity")
         if not any(item != 0.0 for item in value):
@@ -65,7 +81,15 @@ class StorageRecord(BaseModel):
             raise ValueError("text must be non-empty when present")
         if "\x00" in value:
             raise ValueError("text contains a NUL character")
-        return value
+        # Normalize to NFC before it reaches the index. Elasticsearch's
+        # `asciifolding` only folds precomposed characters: measured on the live
+        # 9.4.4 service, "Thành phố" as NFC analyses to ["thanh", "pho"] while the
+        # same string as NFD analyses to ["thành", "phố"]. A decomposed document
+        # and a precomposed query then never match — no error, no warning, zero
+        # hits. Vietnamese arrives decomposed more often than one expects: Unikey
+        # has a "Unicode tổ hợp" output mode, and web/PDF copy-paste can carry it.
+        # Both ends must agree; `ElasticsearchTextStore.search` normalizes too.
+        return unicodedata.normalize("NFC", value)
 
     @field_validator("source")
     @classmethod

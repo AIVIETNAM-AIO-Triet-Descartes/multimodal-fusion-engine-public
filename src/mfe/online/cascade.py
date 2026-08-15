@@ -30,15 +30,39 @@ import logging
 from typing import Any
 
 from mfe.contracts.tools import Candidate
+from mfe.online.arms import Arm, ArmRegistry
 from mfe.online.dedup import DEFAULT_TEMPORAL_WINDOW_FRAMES, dedup
 from mfe.online.fusion import weighted_fusion
 from mfe.online.rerank import Reranker
 
 logger = logging.getLogger(__name__)
 
-#: Config `fusion_weights` names the *signals* (clip, bm25); fusion keys the
-#: *tools* that produced them. One place to map between the two.
-_WEIGHT_KEY = {"vector_search": "clip", "search_text": "bm25"}
+
+def _no_dense_store(collection: str, dimension: int):
+    """Default dense-store factory: there isn't one.
+
+    Raising rather than returning None keeps `build_dense_arms` on one path —
+    every failure to open a collection, including "nobody configured Milvus",
+    becomes an unavailable arm with a readable reason.
+    """
+    raise RuntimeError("Milvus not configured (set MFE_MILVUS_URI)")
+
+
+def _milvus_store_factory(collection: str, dimension: int):
+    """Open one Milvus collection, verifying it matches what the arm expects."""
+    from mfe.stores.production.config import MilvusConfig
+    from mfe.stores.production.milvus import MilvusVectorStore
+
+    config = MilvusConfig.from_env().model_copy(
+        update={"collection": collection, "dimension": dimension}
+    )
+    store = MilvusVectorStore(config)
+    health = store.health()
+    if not health.connection_ok:
+        raise RuntimeError(health.message or "connection failed")
+    if not health.schema_ready:
+        raise RuntimeError("chưa ingest — chạy scripts/ingest_sota_vectors.py")
+    return store
 
 
 class Cascade:
@@ -56,12 +80,20 @@ class Cascade:
         inverted_index: Any = None,
         reranker: Reranker | None = None,
         encode_query: Any = None,
+        text_store: Any = None,
+        dense_store_factory: Any = None,
+        translator: Any = None,
     ) -> None:
         self.config = config
         self.vector_index = vector_index
         self.inverted_index = inverted_index
         self.encode_query = encode_query
-        self.fusion_weights = self._resolve_weights(config)
+        self.text_store = text_store
+        self.dense_store_factory = dense_store_factory
+        #: Fills in `query_text_en` when the caller has none. None means the only
+        #: English is hand-written, which is where the pilot started.
+        self.translator = translator
+        self.arms = self._build_arms(config)
         # Still no *default* reranker: stage C is the last word on order, so a
         # scorer that is missing, mis-wired or wrong is strictly worse than no
         # stage at all. That was not theoretical — the old hash stub took a
@@ -80,6 +112,7 @@ class Cascade:
         missing, rather than refusing at import time.
         """
         from mfe.online.encoder import DEFAULT_TEXT_CHECKPOINT, encode_query_text
+        from mfe.online.translate import build_translator
         from mfe.stores.inverted.index import InvertedIndex
         from mfe.stores.vector.index import VectorIndex
 
@@ -121,7 +154,37 @@ class Cascade:
                 if "reranker" in overrides
                 else load("reranker", lambda: cls._build_reranker(config))
             ),
+            text_store=(
+                overrides["text_store"]
+                if "text_store" in overrides
+                else load("text store", cls._build_text_store)
+            ),
+            dense_store_factory=overrides.get("dense_store_factory", _milvus_store_factory),
+            translator=(
+                overrides["translator"]
+                if "translator" in overrides
+                else load("translator", lambda: build_translator(config))
+            ),
         )
+
+    @staticmethod
+    def _build_text_store() -> Any:
+        """Open Elasticsearch from the environment, or None if it is not there.
+
+        Endpoint and index come from env (`MFE_ELASTICSEARCH_URL`,
+        `MFE_ELASTICSEARCH_INDEX`) rather than YAML because they differ per
+        machine — see ke-hoach-merge-sota.md §4. `health()` is checked here so a
+        dead service becomes "arm unavailable, here is why" instead of an
+        exception on the first query.
+        """
+        from mfe.stores.production.config import ElasticsearchConfig
+        from mfe.stores.production.elasticsearch import ElasticsearchTextStore
+
+        store = ElasticsearchTextStore(ElasticsearchConfig.from_env())
+        health = store.health()
+        if not health.connection_ok or not health.index_ready:
+            raise RuntimeError(f"Elasticsearch not ready: {health.message}")
+        return store
 
     @staticmethod
     def _build_reranker(config: Any) -> Reranker | None:
@@ -154,22 +217,28 @@ class Cascade:
         query_text: str,
         top_k: int | None = None,
         run_id: str = "cascade_run",
+        query_text_en: str | None = None,
     ) -> list[Candidate]:
         """Run stage A -> B -> C and return a ranked candidate list.
 
         Args:
-            query_text: The description to search for.
+            query_text: The description to search for, in Vietnamese.
             top_k: How many to return. Defaults to `retrieval.rerank_topk`,
                 which config sets to the 100 the scoring rewards.
             run_id: Tracing id; ends up inside every `evidence_id`.
+            query_text_en: Optional English form. Arms whose model has no
+                Vietnamese (SigLIP's text tower, CLAP, ColPali) need it and sit
+                out without it — see `Arm.query_language`. Left unset, a
+                configured translator fills it in (`mfe.online.translate`).
         """
         top_k = top_k or self._cfg("rerank_topk", 100)
+        query_text_en = self.resolve_english(query_text, query_text_en)
 
-        coarse = self._coarse(query_text, run_id=run_id)
+        coarse = self._coarse(query_text, run_id=run_id, query_text_en=query_text_en)
         if not coarse:
             return []
 
-        grouped = self._group(coarse)
+        grouped = self.group(coarse)
 
         if self.reranker is None:
             return grouped[:top_k]
@@ -189,36 +258,70 @@ class Cascade:
 
         return (reranked + tail)[:top_k]
 
-    def _coarse(self, query_text: str, run_id: str = "cascade_run") -> list[Candidate]:
-        """Stage A — late fusion of the vector and text arms over the whole store."""
+    def resolve_english(self, query_text: str, query_text_en: str | None) -> str | None:
+        """The English form to hand the English-only arms, or None.
+
+        Order of precedence, and the two skips that keep it cheap:
+
+        1. A hand-written `query_text_en` wins outright — the test set stays
+           reproducible and a bad machine translation stays overridable.
+        2. No translator configured: nothing to do.
+        3. **No active arm reads English:** do not translate. Otherwise a run
+           with SigLIP switched off would still pay to load a 1.2 GB checkpoint
+           and translate every query for nobody.
+
+        A translator that returns None is not an error here. The arms handle it:
+        they sit out, loudly. The Vietnamese is never substituted.
+
+        Precedence itself lives in `QueryTranslator.translate`, not here — the
+        hand-written form is passed *into* it rather than checked before it, so
+        there is one implementation of "manual wins" and its usage counter sees
+        every query rather than only the translated ones.
+        """
+        manual = query_text_en if query_text_en and query_text_en.strip() else None
+        if self.translator is None or not self.arms.needs_english():
+            return manual
+        translation = self.translator.translate(query_text, manual=manual)
+        return translation.text_en if translation is not None else None
+
+    def _coarse(
+        self,
+        query_text: str,
+        run_id: str = "cascade_run",
+        query_text_en: str | None = None,
+    ) -> list[Candidate]:
+        """Stage A — late fusion over every active arm (`mfe.online.arms`)."""
         coarse_topk = self._cfg("coarse_topk", 500)
-        result_lists: dict[str, list[Candidate]] = {}
-
-        if self.inverted_index is not None:
-            try:
-                result_lists["search_text"] = self.inverted_index.search(
-                    query_text=query_text, top_k=coarse_topk, run_id=run_id
-                )
-            except ValueError as err:
-                # Query with no indexable term: a miss, not a crash.
-                logger.info("text arm returned nothing for %r (%s)", query_text, err)
-
-        vector_hits = self._vector_arm(query_text, coarse_topk, run_id)
-        if vector_hits is not None:
-            result_lists["vector_search"] = vector_hits
+        result_lists = self.arms.run(
+            query_text, coarse_topk, run_id, query_text_en=query_text_en
+        )
 
         if not result_lists:
-            logger.warning("no store available for query %r; returning nothing", query_text)
+            logger.warning(
+                "no arm produced candidates for %r; arms: %s",
+                query_text,
+                ", ".join(f"{a.name}={a.status()}" for a in self.arms),
+            )
             return []
 
-        return weighted_fusion(result_lists, weights=self.fusion_weights, run_id=run_id)
+        fusion_cfg = getattr(getattr(self.config, "retrieval", None), "fusion", None)
+        normalizer = fusion_cfg.resolved_normalizer() if fusion_cfg else "rrf"
+        rrf_k = fusion_cfg.rrf_k if fusion_cfg else 60
+
+        return weighted_fusion(
+            result_lists,
+            weights=self.arms.weights(),
+            run_id=run_id,
+            normalizer=normalizer,
+            rrf_k=rrf_k,
+        )
 
     def _vector_arm(
         self, query_text: str, top_k: int, run_id: str
     ) -> list[Candidate] | None:
         """Encode the query and search Faiss. None when the arm is unavailable.
 
-        A failure here degrades to a BM25-only stage A and says so. That is a
+        A failure here degrades to a text-only stage A and says so. That is a
         real loss of recall on descriptive queries, so it is logged at warning
         rather than swallowed — running one-armed without noticing is how a
         team spends a week tuning fusion weights that never applied.
@@ -231,10 +334,10 @@ class Cascade:
                 query_embedding=embedding.tolist(), top_k=top_k, run_id=run_id
             )
         except Exception as err:  # noqa: BLE001 — degrade, do not abort the query
-            logger.warning("vector arm unavailable (%s); stage A is BM25-only", err)
+            logger.warning("vector arm unavailable (%s); stage A is text-only", err)
             return None
 
-    def _group(self, candidates: list[Candidate]) -> list[Candidate]:
+    def group(self, candidates: list[Candidate]) -> list[Candidate]:
         """Stage B — dedup + temporal grouping, applied only to the head.
 
         Diversity is worth something on the first screen an operator looks at,
@@ -274,11 +377,78 @@ class Cascade:
     def _cfg(self, name: str, default: Any) -> Any:
         return getattr(getattr(self.config, "retrieval", None), name, default)
 
-    @staticmethod
-    def _resolve_weights(config: Any) -> dict[str, float]:
-        """Map config's signal names (clip, bm25) onto fusion's tool names."""
+    def _build_arms(self, config: Any) -> ArmRegistry:
+        """Register the arms this cascade can run.
+
+        Arms are named after the config weight they read — `bm25`, `clip` — so
+        there is no translation table between "what fusion calls it" and "what
+        config calls it". That table existed and was one more place to drift.
+
+        An arm whose store did not load is registered anyway, `available=False`
+        with a reason. Leaving it out entirely would make the browser's switch
+        list change shape depending on what happened to load, and would give an
+        operator no way to find out why their arm is silent.
+        """
         weights = getattr(getattr(config, "retrieval", None), "fusion_weights", None)
-        return {
-            tool: float(getattr(weights, signal, 1.0)) if weights else 1.0
-            for tool, signal in _WEIGHT_KEY.items()
-        }
+
+        def weight_of(name: str) -> float:
+            return float(getattr(weights, name, 1.0)) if weights else 1.0
+
+        registry = ArmRegistry()
+
+        registry.register(
+            Arm(
+                name="bm25",
+                search=(
+                    (
+                        lambda q, k, run: self.inverted_index.search(
+                            query_text=q, top_k=k, run_id=run
+                        )
+                    )
+                    if self.inverted_index is not None
+                    else None
+                ),
+                weight=weight_of("bm25"),
+                unavailable_reason=(
+                    None if self.inverted_index is not None else "inverted index not loaded"
+                ),
+                description="BM25 over object labels / OCR / metadata",
+            )
+        )
+
+        vector_ready = self.vector_index is not None and self.encode_query is not None
+        registry.register(
+            Arm(
+                name="clip",
+                search=(
+                    (lambda q, k, run: self._vector_arm(q, k, run) or []) if vector_ready else None
+                ),
+                weight=weight_of("clip"),
+                unavailable_reason=(
+                    None
+                    if vector_ready
+                    else "vector index or query encoder not loaded"
+                ),
+                description="clip-ViT-B-32 cosine over the Faiss index",
+            )
+        )
+
+        # Elasticsearch-backed arms — one per `source` from SOTA_AIC's exports.
+        # Registered even when the store is absent, marked unavailable with a
+        # reason (mfe.online.text_arms).
+        from mfe.online.text_arms import TEXT_ARM_SPECS, build_text_arms
+
+        arm_weights = {name: weight_of(name) for name in TEXT_ARM_SPECS}
+        for arm in build_text_arms(self.text_store, weights=arm_weights):
+            registry.register(arm)
+
+        # Milvus-backed dense arms, one collection per embedding model.
+        from mfe.online.dense_arms import DENSE_ARM_SPECS, build_dense_arms
+
+        dense_weights = {name: weight_of(name) for name in DENSE_ARM_SPECS}
+        for arm in build_dense_arms(
+            self.dense_store_factory or _no_dense_store, weights=dense_weights
+        ):
+            registry.register(arm)
+
+        return registry

@@ -113,6 +113,15 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Process at most N videos. For the small-sample vertical slice (docs/00 §8 risk 3).",
     )
+    parser.add_argument(
+        "--videos",
+        default=None,
+        help=(
+            "Comma-separated video_ids to ingest, e.g. L21_V001,L21_V002. "
+            "Unlike --limit this names them, so a run stays reproducible when the "
+            "dataset gains videos. Unknown ids are an error, not a silent skip."
+        ),
+    )
     return parser
 
 
@@ -166,6 +175,7 @@ def run(
     config_path: str,
     input_dir: str | None = None,
     limit: int | None = None,
+    videos: list[str] | None = None,
 ) -> dict:
     """Run the full offline pipeline. Owner: Quốc Đạt.
 
@@ -195,6 +205,19 @@ def run(
     recorder = ThroughputRecorder()
 
     video_ids = dataset.video_ids()
+    if videos is not None:
+        # Name the videos rather than taking a prefix: `--limit 3` happens to
+        # select the pilot set today only because the list is sorted, which is a
+        # coincidence that breaks the day the dataset grows.
+        available = set(video_ids)
+        missing = [v for v in videos if v not in available]
+        if missing:
+            raise ContractError(
+                ErrorCode.STORE_UNAVAILABLE,
+                f"--videos names {missing} but the dataset has no map-keyframes CSV for them; "
+                f"available: {', '.join(sorted(available))}",
+            )
+        video_ids = [v for v in video_ids if v in set(videos)]
     if limit is not None:
         video_ids = video_ids[:limit]
     if not video_ids:
@@ -341,7 +364,8 @@ def run(
 def main() -> None:
     setup_console()
     args = build_parser().parse_args()
-    run(config_path=args.config, input_dir=args.input, limit=args.limit)
+    selected = [v.strip() for v in args.videos.split(",") if v.strip()] if args.videos else None
+    run(config_path=args.config, input_dir=args.input, limit=args.limit, videos=selected)
 
 
 if __name__ == "__main__":

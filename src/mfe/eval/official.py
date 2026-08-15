@@ -124,6 +124,11 @@ class _Query(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     query_id: str
+    #: English form of the query, for arms whose model has no Vietnamese:
+    #: SigLIP SO400M's text tower, CLAP, ColPali. Optional — omit it and those
+    #: arms sit out with a logged reason rather than searching in a language
+    #: they cannot read. Cross-lingual arms (BAAI/bge-m3) never need it.
+    text_en: str | None = None
     #: Who wrote it. Also the key `merge_queryset` uses to check that a query
     #: only refers to videos in that person's own sample.
     author: str | None = None
@@ -502,11 +507,51 @@ class QueryOutcome(BaseModel):
         return self.wide.query_type
 
 
+class RunProvenance(BaseModel):
+    """What produced these numbers — §3.6 of ke-hoach-merge-sota.md.
+
+    Two scores run with different arms enabled, or a different fusion mode, are
+    two numbers that cannot be compared, and nothing in the report used to say
+    which was which. That is not hypothetical: `eval/results_pilot/official-score.json`
+    held 0.663/0.574 (a `weighted_sum` run) while `config/pilot.yaml` said
+    `mode: rrf`, whose measured pair is 0.711/0.533. Whoever read the file next
+    would have taken the wrong baseline and attributed the gap to their change.
+
+    Recorded from the *live registry* rather than from config, so an arm that
+    config asks for but that could not open its store shows up here as
+    unavailable instead of being reported as if it had voted.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    config_path: str
+    queryset_path: str
+    n_queries: int
+    top_k: int
+    fusion_mode: str
+    #: What each arm's scores were actually converted to before weighting. Worth
+    #: recording separately from `fusion_mode`: the mode picks a default, and a
+    #: config may override it, so the mode alone does not determine the run.
+    fusion_normalizer: str
+    rrf_k: int
+    #: One row per registered arm: `name`, `status` ("on" / "off" /
+    #: "unavailable — reason"), and `weight`. Named after the field §3.6 asks for.
+    tiers_enabled: list[dict[str, object]]
+    #: Where each query's English form came from, e.g. `{"manual": 7, "mt": 2}`;
+    #: `"none"` counts queries that got none, whose English-only arms sat out.
+    #: Filled after scoring, so it reports what happened rather than what was
+    #: configured — SigLIP on hand-written English (rank 2.0) and SigLIP on
+    #: machine English are different measurements wearing the same arm name.
+    translation_used: dict[str, int] = Field(default_factory=dict)
+
+
 class OfficialRunResult(BaseModel):
     """One run of the official metrics over a query set."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    #: Optional so that a result assembled in a test need not fake a cascade.
+    provenance: RunProvenance | None = None
     per_query: list[QueryOutcome]
     mean_final_score: float
     #: Mean over the queries that carry an anchor. None when none do.
@@ -528,7 +573,12 @@ def score_one(
     """
     if isinstance(query, TRAKEQuery):
         per_event = [
-            cascade.search(query_text=text, top_k=top_k, run_id=query.query_id)
+            cascade.search(
+                query_text=text,
+                top_k=top_k,
+                run_id=query.query_id,
+                query_text_en=query.text_en,
+            )
             for text in query.searches()
         ]
         submissions: list[object] = list(
@@ -541,7 +591,10 @@ def score_one(
             else query.text
         )
         candidates = cascade.search(
-            query_text=search_text, top_k=top_k, run_id=query.query_id
+            query_text=search_text,
+            top_k=top_k,
+            run_id=query.query_id,
+            query_text_en=query.text_en,
         )
         if isinstance(query, QAQuery):
             submissions = list(
@@ -561,6 +614,32 @@ def score_one(
     )
 
 
+def describe_run(
+    cascade: Cascade,
+    config: Config,
+    config_path: str,
+    queryset_path: str,
+    n_queries: int,
+    top_k: int,
+) -> RunProvenance:
+    """Snapshot the settings a score depends on, taken after the arms are built."""
+    fusion = config.retrieval.fusion
+    return RunProvenance(
+        config_path=config_path,
+        queryset_path=queryset_path,
+        n_queries=n_queries,
+        top_k=top_k,
+        fusion_mode=fusion.mode,
+        fusion_normalizer=fusion.resolved_normalizer(),
+        rrf_k=fusion.rrf_k,
+        tiers_enabled=[
+            {"name": row["name"], "status": row["status"], "weight": row["weight"]}
+            for row in cascade.arms.report()
+        ],
+        translation_used=dict(getattr(cascade.translator, "usage", {}) or {}),
+    )
+
+
 def run(
     config_path: str = "config/sample2026.yaml",
     queryset_path: str | None = None,
@@ -576,6 +655,7 @@ def run(
     top_k = min(config.retrieval.rerank_topk, MAX_ANSWERS_PER_QUERY)
 
     relational = RelationalMap(config.paths.relational_db)
+    cascade: Cascade | None = None
     try:
         relational.init_schema()
         # No `reranker=None` override: stage C is a config decision now
@@ -583,7 +663,22 @@ def run(
         # a run reporting that a working reranker changed nothing.
         cascade = Cascade.from_config(config)
         results = [score_one(query, cascade, relational, top_k) for query in queries]
+        # After scoring, not before: `translation_used` reports what actually
+        # happened to each query, which is only known once they have all run.
+        provenance = describe_run(
+            cascade,
+            config=config,
+            config_path=config_path,
+            queryset_path=queryset_path,
+            n_queries=len(queries),
+            top_k=top_k,
+        )
     finally:
+        # Persist any translation paid for this run, including on the way out of
+        # a failure: the entries are correct regardless of what went wrong later,
+        # and the next run should not buy them twice.
+        if cascade is not None and cascade.translator is not None:
+            cascade.translator.save_cache()
         relational.close()
 
     by_type: dict[str, float] = {}
@@ -593,6 +688,7 @@ def run(
 
     with_anchor = [o.strict.final_score for o in results if o.strict is not None]
     result = OfficialRunResult(
+        provenance=provenance,
         per_query=results,
         mean_final_score=(
             sum(o.wide.final_score for o in results) / len(results) if results else 0.0
@@ -612,10 +708,33 @@ def run(
     return result
 
 
+def _print_provenance(provenance: RunProvenance) -> None:
+    """Print what this run was, above the numbers it produced."""
+    print(
+        f"\ncau hinh: {provenance.config_path}  ·  truy van: {provenance.queryset_path} "
+        f"({provenance.n_queries})  ·  top_k {provenance.top_k}"
+    )
+    normalizer = provenance.fusion_normalizer
+    detail = f", k={provenance.rrf_k}" if normalizer == "rrf" else ""
+    print(f"fusion: mode={provenance.fusion_mode}, normalizer={normalizer}{detail}")
+    if provenance.translation_used:
+        source = ", ".join(
+            f"{tier}={count}" for tier, count in sorted(provenance.translation_used.items())
+        )
+        print(f"text_en lay tu: {source}")
+    on = [row for row in provenance.tiers_enabled if row["status"] == "on"]
+    print(f"arm dang chay ({len(on)}/{len(provenance.tiers_enabled)}):")
+    for row in provenance.tiers_enabled:
+        mark = "+" if row["status"] == "on" else "-"
+        print(f"  {mark} {str(row['name']):<18} w={row['weight']:<5} {row['status']}")
+
+
 def _print_report(
     queries: list[AnyQuery], result: OfficialRunResult, report: Path
 ) -> None:
     by_id = {query.query_id: query for query in queries}
+    if result.provenance is not None:
+        _print_provenance(result.provenance)
     header = (
         f"{'query_id':<16} {'type':<6} {'answers':>7} {'hit@':>5}  "
         f"{'R@1':>5} {'R@5':>5} {'R@20':>5} {'R@50':>5} {'R@100':>5}  "

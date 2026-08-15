@@ -7,7 +7,7 @@ from collections.abc import Iterable, Sequence
 from typing import Any
 
 from .config import MilvusConfig
-from .contracts import EMBEDDING_DIM, HealthStatus, IngestReport, StorageHit, StorageRecord
+from .contracts import HealthStatus, IngestReport, StorageHit, StorageRecord
 from .ids import milvus_primary_key, milvus_string_literal
 
 
@@ -40,7 +40,7 @@ class MilvusVectorStore:
         schema.add_field("ev", DataType.INT64, nullable=True)
         schema.add_field("model_fingerprint", DataType.VARCHAR, max_length=128)
         schema.add_field("schema_version", DataType.VARCHAR, max_length=16)
-        schema.add_field("embedding", DataType.FLOAT_VECTOR, dim=EMBEDDING_DIM)
+        schema.add_field("embedding", DataType.FLOAT_VECTOR, dim=self.config.dimension)
         indexes = self.client.prepare_index_params()
         # AUTOINDEX is a vector index type; VARCHAR scalar filters use INVERTED.
         indexes.add_index(field_name="video_id", index_type="INVERTED")
@@ -140,7 +140,7 @@ class MilvusVectorStore:
         )
         embedding = next((field for field in fields if field.get("name") == "embedding"), {})
         dimension = embedding.get("params", {}).get("dim")
-        if missing or wrong or (dimension is not None and int(dimension) != EMBEDDING_DIM):
+        if missing or wrong or (dimension is not None and int(dimension) != self.config.dimension):
             raise RuntimeError(
                 "Milvus schema mismatch: "
                 f"missing={missing}, wrong_type={wrong}, embedding_dim={dimension!r}; "
@@ -156,6 +156,20 @@ class MilvusVectorStore:
             raise ValueError("duplicate (video_id, frame_id) in one Milvus batch")
         if not vector_records:
             return IngestReport(backend="milvus", attempted=0)
+
+        # The exact dimension check. `StorageRecord` can only reject lengths that
+        # belong to no model at all, because a record does not know its
+        # destination; this store does. Without this, a 1024-dim BGE-M3 vector
+        # would sail through validation and be refused by Milvus with a message
+        # about the wire format rather than about the mistake.
+        expected_dim = self.config.dimension
+        wrong = {len(r.embedding) for r in vector_records if len(r.embedding) != expected_dim}
+        if wrong:
+            raise ValueError(
+                f"collection {self.config.collection!r} holds {self.config.dimension}-dim "
+                f"vectors but the batch contains {sorted(wrong)}-dim ones; "
+                f"one collection per embedding model"
+            )
 
         primary_keys = [milvus_primary_key(*key) for key in keys]
         existing: set[str] = set()

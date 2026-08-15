@@ -284,10 +284,29 @@ def main() -> None:
             "Vector Weight (CLIP)", min_value=0.0, max_value=2.0, value=1.0, step=0.1
         )
 
-        st.session_state["cascade"].fusion_weights = {
-            "search_text": weight_text,
-            "vector_search": weight_vec,
-        }
+        cascade = st.session_state["cascade"]
+        cascade.arms.set_weight("bm25", weight_text)
+        cascade.arms.set_weight("clip", weight_vec)
+
+        # One switch per arm. An arm that cannot run shows disabled with the
+        # reason instead of a live-looking switch that does nothing — the exact
+        # failure in SOTA_AIC's UI, where the ColPali toggle defaults to on
+        # while search_engine.py pins has_colpali = False.
+        st.markdown("**Tầng truy hồi**")
+        for arm in cascade.arms:
+            if arm.available:
+                cascade.arms.set_enabled(
+                    arm.name,
+                    st.checkbox(
+                        arm.name, value=arm.enabled, help=arm.description, key=f"arm_{arm.name}"
+                    ),
+                )
+            else:
+                st.checkbox(
+                    arm.name, value=False, disabled=True, key=f"arm_{arm.name}",
+                    help=f"Không chạy được: {arm.unavailable_reason}",
+                )
+                st.caption(f"↳ {arm.unavailable_reason}")
 
         st.markdown("---")
         st.caption("AIC 2026 — Multimodal Fusion Engine")

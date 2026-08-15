@@ -38,7 +38,7 @@ def group_by_shot(
     each within the window of its predecessor collapses into a single "shot"
     covering the entire video. That is not hypothetical — on the 2026 sample it
     produced a 216-candidate group spanning keyframes 1 to 262 of L27_V004,
-    leaving one representative for a 22-minute video. Because `Cascade._group`
+    leaving one representative for a 22-minute video. Because `Cascade.group`
     places every representative ahead of every non-representative, the effect was
     to bury correct answers: the ground-truth keyframe of the KIS baseline query
     fell from fused rank 60 to rank 180 and out of the submitted top 100, scoring
