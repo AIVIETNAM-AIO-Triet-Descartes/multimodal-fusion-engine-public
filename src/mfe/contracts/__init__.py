@@ -11,7 +11,7 @@ happens.
 
 from mfe.contracts.errors import ContractError, ErrorCode
 from mfe.contracts.ids import (
-    KEYFRAME_INDEX_DIGITS,
+    FRAME_ID_DIGITS,
     build_keyframe_id,
     build_shot_id,
     parse_keyframe_id,
@@ -36,7 +36,7 @@ from mfe.contracts.tools import (
 )
 
 __all__ = [
-    "KEYFRAME_INDEX_DIGITS",
+    "FRAME_ID_DIGITS",
     "AssetRecord",
     "AssetType",
     "Candidate",

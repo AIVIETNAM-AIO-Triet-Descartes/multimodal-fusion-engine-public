@@ -92,9 +92,25 @@ def build_segment(
         if pts_map and kf_id in pts_map:
             timestamps_ms.append(pts_map[kf_id])
         else:
-            # Fallback for mocking: derive frame index * 1000ms
-            _, idx = parse_keyframe_id(kf_id)
-            timestamps_ms.append(idx * 1000)
+            # No fallback. This used to guess `ordinal * 1000ms`, which was
+            # already a mock and became nonsense once the id started encoding a
+            # frame number (frame 90 is 3s in, not 90s). A segment with invented
+            # bounds plays the wrong part of the video and looks entirely normal
+            # doing it, so the tool refuses instead.
+            latency = (time.perf_counter() - start_t) * 1000.0
+            return ToolResult(
+                tool=tool_name,
+                items=[],
+                error=ToolError(
+                    code=ErrorCode.INVALID_ARGUMENT,
+                    message=(
+                        f"no timestamp for {kf_id}: pass pts_map with an entry for "
+                        "every keyframe. Timestamps cannot be derived from the id."
+                    ),
+                    tool=tool_name,
+                ),
+                latency_ms=latency,
+            )
 
     min_pts = min(timestamps_ms)
     max_pts = max(timestamps_ms)

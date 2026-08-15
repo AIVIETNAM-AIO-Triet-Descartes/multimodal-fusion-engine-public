@@ -47,12 +47,14 @@ def sample_video_integer_fps() -> VideoRow:
 
 @pytest.fixture
 def sample_keyframe() -> KeyframeRow:
-    """A keyframe in the real-data ID model (docs/00 §3): keyframe_index and
-    frame_idx are different numbers, both from the map-keyframes CSV."""
+    """A keyframe in the real-data ID model (docs/00 §3): the id keys off
+    `frame_idx`, while `keyframe_index` (the ordinal that names the image file)
+    is a different number. Both come from the map-keyframes CSV — row n=2 of
+    L21_V001 really is frame 90."""
     return KeyframeRow(
-        keyframe_id="L21_V001#001",
+        keyframe_id="L21_V001#000090",
         video_id="L21_V001",
-        keyframe_index=1,
+        keyframe_index=2,
         frame_idx=90,
         pts_time=3.0,
         timestamp_ms=3000,

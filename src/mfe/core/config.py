@@ -123,7 +123,9 @@ class RetrievalConfig(_Section):
     #: rank 3, which any shallow head misses entirely. Costs ~12 s/query on CPU
     #: (116 ms/image) — lower it only if TTCA matters more than Final Score.
     rerank_depth: int = Field(default=100, ge=0)
-    temporal_window: int = Field(default=5, ge=0, description="Stage B grouping distance")
+    temporal_window_frames: int = Field(
+        default=640, ge=0, description="Stage B grouping distance, in source-video frames"
+    )
     dedup_depth: int = Field(
         default=20,
         ge=0,

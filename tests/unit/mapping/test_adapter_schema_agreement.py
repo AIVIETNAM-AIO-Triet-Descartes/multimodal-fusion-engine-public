@@ -23,7 +23,7 @@ from mfe.mapping.validator import Validator
 @pytest.fixture
 def keyframe() -> KeyframeRow:
     return KeyframeRow(
-        keyframe_id="L23_V001#008",
+        keyframe_id="L23_V001#000375",
         video_id="L23_V001",
         keyframe_index=8,
         frame_idx=375,

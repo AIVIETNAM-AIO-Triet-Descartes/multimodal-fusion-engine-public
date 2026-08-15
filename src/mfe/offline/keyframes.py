@@ -11,6 +11,7 @@ Yielding them as a pair is what makes disagreement impossible: there is one
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -20,12 +21,47 @@ from mfe.contracts.records import AssetRecord, AssetType, KeyframeRow, VideoRow
 from mfe.core.storage import StorageBackend
 from mfe.offline.provided import MapRow, read_jpeg_size
 
+logger = logging.getLogger(__name__)
+
 #: Gap in seconds between consecutive keyframes that starts a new shot.
 #: The provided keyframes are already shot-change driven, so consecutive ones a
 #: long way apart are almost always different scenes. Deliberately coarse: this
 #: only feeds Phạm Trọng's dedup (docs/04 §3.2), where over-merging costs grid
 #: diversity and under-merging costs nothing but a longer grid.
 SHOT_GAP_SECONDS = 5.0
+
+
+def collapse_duplicate_frames(map_rows: list[MapRow]) -> tuple[list[MapRow], list[tuple[int, int]]]:
+    """Drop rows whose `frame_idx` a lower-ordinal row already claims.
+
+    Since `keyframe_id` keys off `frame_idx` (contracts/ids), two CSV rows with
+    the same `frame_idx` would mint the same id. They exist: 614 adjacent pairs
+    in batch 1's 177,321 rows, 5 rows of the 1240-row sample. All of them look
+    like this —
+
+        n=353  pts_time=1269.57  fps=29.97  frame_idx=38049
+        n=354  pts_time=1269.60  fps=29.97  frame_idx=38049
+
+    0.03s apart at 29.97fps is *less than one frame*, so both timestamps land on
+    frame 38049. The two images are two renderings of one source frame, and
+    keeping one is a de-duplication, not a loss.
+
+    The lowest `n` wins, so the choice is deterministic across runs. Returns the
+    kept rows and the (dropped_n, kept_n) pairs, for the caller to report.
+    """
+    kept: list[MapRow] = []
+    collapsed: list[tuple[int, int]] = []
+    seen: dict[int, int] = {}  # frame_idx -> the n that claimed it
+
+    for row in sorted(map_rows, key=lambda r: r.n):
+        claimed_by = seen.get(row.frame_idx)
+        if claimed_by is not None:
+            collapsed.append((row.n, claimed_by))
+            continue
+        seen[row.frame_idx] = row.n
+        kept.append(row)
+
+    return kept, collapsed
 
 
 def extract_keyframes(
@@ -47,14 +83,29 @@ def extract_keyframes(
     (docs/00 §3, adr/0002). `keyframe_index` (n) is the keyframe's ordinal and
     image filename; it is a different number from `frame_idx`.
 
+    Note the asymmetry: the *id* keys off `frame_idx` while the *image file* is
+    still named after `n`, because BTC named it. That is the only place the two
+    numbers meet, and it is why the ordinal stays a column. Keyframes the team
+    extracts itself should name their images after the frame instead.
+
     docs/context/buoi-1.md slide 44: BTC guarantees a query segment contains at
     least one provided keyframe — which only helps if we index exactly the
     keyframes they provide, so a missing image is an error, not a skip.
     """
     keyframe_root = Path(keyframes_dir) / video.video_id
 
+    map_rows, collapsed = collapse_duplicate_frames(map_rows)
+    if collapsed:
+        logger.info(
+            "%s: collapsed %d keyframe(s) sharing a frame_idx with an earlier one "
+            "(dropped n -> kept n: %s)",
+            video.video_id,
+            len(collapsed),
+            ", ".join(f"{dropped}->{kept}" for dropped, kept in collapsed),
+        )
+
     for row in map_rows:
-        keyframe_id = build_keyframe_id(video.video_id, row.n)
+        keyframe_id = build_keyframe_id(video.video_id, row.frame_idx)
         image_path = keyframe_root / f"{row.n:03d}.jpg"
 
         image_path_str = str(image_path)

@@ -56,9 +56,9 @@ class TestVideoRow:
 def _keyframe(**overrides):
     """A valid KeyframeRow (docs/00 §3 example), with per-test overrides."""
     fields = dict(
-        keyframe_id="L21_V001#001",
+        keyframe_id="L21_V001#000090",
         video_id="L21_V001",
-        keyframe_index=1,
+        keyframe_index=2,
         frame_idx=90,
         pts_time=3.0,
         timestamp_ms=3000,
@@ -83,27 +83,33 @@ class TestKeyframeRow:
         with pytest.raises(ValidationError, match="encodes video_id"):
             _keyframe(video_id="L21_V002")
 
-    def test_rejects_id_disagreeing_with_keyframe_index(self):
-        with pytest.raises(ValidationError, match="encodes keyframe_index"):
-            _keyframe(keyframe_index=2)
+    def test_rejects_id_disagreeing_with_frame_idx(self):
+        with pytest.raises(ValidationError, match="encodes frame_idx"):
+            _keyframe(frame_idx=91)
 
     def test_rejects_malformed_keyframe_id(self):
         with pytest.raises(ValidationError):
-            _keyframe(keyframe_id="L21_V001#1", keyframe_index=1)  # under-padded
+            _keyframe(keyframe_id="L21_V001#90")  # under-padded
 
-    def test_frame_idx_independent_of_keyframe_index(self):
-        """The whole point of the real-data model: frame_idx (90) is not derived
-        from keyframe_index (1). They are different numbers on the same row."""
-        row = _keyframe()
-        assert row.keyframe_index == 1
+    def test_ordinal_does_not_have_to_match_the_id(self):
+        """The ordinal is a column now, not an identity.
+
+        Row n=2 of L21_V001 is frame 90, and the id spells the frame. Changing
+        the ordinal alone must not be rejected — a re-extraction renumbers every
+        ordinal while the frames stay put, and that is the whole reason the key
+        moved off the ordinal.
+        """
+        row = _keyframe(keyframe_index=7)
+        assert row.keyframe_index == 7
         assert row.frame_idx == 90
+        assert row.keyframe_id == "L21_V001#000090"
 
 
 class TestVectorRecord:
     def test_accepts_normalized_embedding(self):
         record = VectorRecord(
             internal_id=0,
-            keyframe_id="L21_V001#000",
+            keyframe_id="L21_V001#000000",
             video_id="L21_V001",
             embedding=_unit_vector(),
         )
@@ -115,7 +121,7 @@ class TestVectorRecord:
         with pytest.raises(ValidationError, match="L2-normalized"):
             VectorRecord(
                 internal_id=0,
-                keyframe_id="L21_V001#000",
+                keyframe_id="L21_V001#000000",
                 video_id="L21_V001",
                 embedding=[1.0, 1.0, 1.0, 1.0],  # norm 2.0
             )
@@ -124,7 +130,7 @@ class TestVectorRecord:
         with pytest.raises(ValidationError):
             VectorRecord(
                 internal_id=0,
-                keyframe_id="L21_V001#000",
+                keyframe_id="L21_V001#000000",
                 video_id="L21_V001",
                 embedding=[],
             )
@@ -133,7 +139,7 @@ class TestVectorRecord:
 class TestInvertedRecord:
     def test_text_fields_default_empty(self):
         """OCR off => empty ocr_text, not a missing field (docs/03 §2.1)."""
-        record = InvertedRecord(keyframe_id="L21_V002#118", video_id="L21_V002")
+        record = InvertedRecord(keyframe_id="L21_V002#000118", video_id="L21_V002")
         assert record.ocr_text == ""
         assert record.asr_text == ""
         assert record.object_labels == []
@@ -141,7 +147,7 @@ class TestInvertedRecord:
     def test_accepts_docs_example(self):
         # docs/03 §2.1(c)
         record = InvertedRecord(
-            keyframe_id="L21_V001#025",
+            keyframe_id="L21_V001#000025",
             video_id="L21_V001",
             object_labels=["person", "handbag", "car"],
             ocr_text="BẢN TIN 18H",
@@ -154,7 +160,7 @@ class TestAssetRecord:
     def test_accepts_both_docs_examples(self):
         # docs/03 §3(c): one keyframe, two asset rows.
         image = AssetRecord(
-            keyframe_id="L21_V001#025",
+            keyframe_id="L21_V001#000025",
             asset_type=AssetType.IMAGE,
             asset_path="data/keyframes/L21_V001/025.jpg",
             width=1280,
@@ -162,7 +168,7 @@ class TestAssetRecord:
             byte_size=148213,
         )
         segment = AssetRecord(
-            keyframe_id="L21_V001#025",
+            keyframe_id="L21_V001#000025",
             asset_type=AssetType.VIDEO_SEGMENT,
             asset_path="data/segments/L21_V001/025.mp4",
             width=1280,
@@ -174,7 +180,7 @@ class TestAssetRecord:
     def test_rejects_unknown_asset_type(self):
         with pytest.raises(ValidationError):
             AssetRecord(
-                keyframe_id="L21_V001#025",
+                keyframe_id="L21_V001#000025",
                 asset_type="thumbnail",
                 asset_path="x.jpg",
                 width=1,

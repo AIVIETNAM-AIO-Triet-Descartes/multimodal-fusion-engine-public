@@ -177,7 +177,11 @@ def render_timeline(keyframe_id: str) -> None:
 
     st.subheader(f"🎞️ Temporal Context Timeline around `{keyframe_id}`")
 
-    res = get_neighbors(keyframe_id=keyframe_id, window=5)
+    # The tool cannot invent which frames are keyframes, so hand it the ones this
+    # search already surfaced. A timeline built only from the result set is thin,
+    # but it is real — see get_neighbors' docstring.
+    known = [c.keyframe_id for c in st.session_state.get("search_results", [])]
+    res = get_neighbors(keyframe_id=keyframe_id, window=5, known_keyframe_ids=known)
     if not res.ok or not res.items:
         st.error(f"Failed to load neighbors: {res.error}")
         return

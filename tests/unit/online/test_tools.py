@@ -74,8 +74,20 @@ def test_search_image_validation():
     assert res_no_index.error.code == ErrorCode.STORE_UNAVAILABLE
 
 
+#: Five keyframes of L21_V001 with their real millisecond positions. Timestamps
+#: are supplied, never derived — the id carries a frame number, and turning that
+#: into milliseconds needs the video's fps, which no tool here has.
+PTS_MAP = {
+    "L21_V001#000060": 2000,
+    "L21_V001#000090": 3000,
+    "L21_V001#000150": 5000,
+    "L21_V001#000210": 7000,
+    "L21_V001#000300": 10000,
+}
+
+
 def test_build_segment_single_keyframe():
-    res = build_segment(["L21_V001#005"], lead_pad_ms=500, trail_pad_ms=500)
+    res = build_segment(["L21_V001#000150"], lead_pad_ms=500, trail_pad_ms=500, pts_map=PTS_MAP)
     assert res.ok
     assert len(res.items) == 1
     seg = res.items[0]
@@ -85,7 +97,12 @@ def test_build_segment_single_keyframe():
 
 
 def test_build_segment_multi_keyframe():
-    res = build_segment(["L21_V001#002", "L21_V001#005"], lead_pad_ms=1000, trail_pad_ms=1000)
+    res = build_segment(
+        ["L21_V001#000060", "L21_V001#000150"],
+        lead_pad_ms=1000,
+        trail_pad_ms=1000,
+        pts_map=PTS_MAP,
+    )
     assert res.ok
     seg = res.items[0]
     assert seg["video_id"] == "L21_V001"
@@ -93,14 +110,26 @@ def test_build_segment_multi_keyframe():
     assert seg["end_ms"] == 6000  # max(2000, 5000) + 1000
 
 
+def test_build_segment_without_a_timestamp_refuses():
+    """No pts_map entry -> structured error, never an invented boundary.
+
+    The old code guessed `ordinal * 1000ms`. Read as a frame number that guess
+    is off by the video's whole frame rate, and a segment with invented bounds
+    plays the wrong scene while looking perfectly normal.
+    """
+    res = build_segment(["L21_V001#000150"])
+    assert not res.ok
+    assert res.error.code == ErrorCode.INVALID_ARGUMENT
+
+
 def test_build_segment_mixed_videos_error():
-    res = build_segment(["L21_V001#001", "L21_V002#001"])
+    res = build_segment(["L21_V001#000060", "L21_V002#000060"])
     assert not res.ok
     assert res.error.code == ErrorCode.INVALID_ARGUMENT
 
 
 def test_get_video_segment():
-    res = get_video_segment(["L21_V001#001"])
+    res = get_video_segment(["L21_V001#000060"], pts_map=PTS_MAP)
     assert res.ok
     assert "video_path" in res.items[0]
     assert "start_ms" in res.items[0]
@@ -108,12 +137,24 @@ def test_get_video_segment():
 
 
 def test_get_neighbors():
-    res = get_neighbors("L21_V001#005", window=2)
+    res = get_neighbors("L21_V001#000150", window=2, pts_map=PTS_MAP)
     assert res.ok
-    assert len(res.items) == 4  # idx 3, 4, 6, 7
+    assert len(res.items) == 4
     kf_ids = [n.keyframe_id for n in res.items]
-    assert "L21_V001#003" in kf_ids
-    assert "L21_V001#007" in kf_ids
+    assert "L21_V001#000060" in kf_ids
+    assert "L21_V001#000300" in kf_ids
+
+
+def test_get_neighbors_refuses_without_the_keyframe_set():
+    """Neighbours cannot be derived from the id.
+
+    Frame 150 minus one is frame 149, which is almost certainly not a keyframe.
+    Walking the id the way the old ordinal-based code did would return a list of
+    keyframes that do not exist.
+    """
+    res = get_neighbors("L21_V001#000150", window=2)
+    assert not res.ok
+    assert res.error.code == ErrorCode.INVALID_ARGUMENT
 
 
 def test_filter_metadata():

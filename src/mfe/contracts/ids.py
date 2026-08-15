@@ -7,9 +7,26 @@ find yourself writing an f-string with a `#` in it, call in here instead.
 Anchored on the real dataset (Kaggle AI Challenge 2025). See
 docs/adr/0002-id-format.md.
 
-    keyframe_id    = {video_id}#{keyframe_index:03d}      e.g. L21_V001#001
-    keyframe_index = the keyframe's sequential position `n`, matching its image
-                     filename (001.jpg). It is NOT the source-video frame number.
+    keyframe_id = {video_id}#{frame_id:06d}        e.g. L21_V001#031124
+    frame_id    = the real frame number in the source video (CSV `frame_idx`).
+
+**This used to key off the ordinal `n`** (`L21_V001#001`, matching the image
+filename `001.jpg`). It no longer does, and the reason is stability: `n` is a
+property of *the extraction run*, not of the video. Re-run keyframe extraction
+with a different threshold and every ordinal shifts, which silently invalidates
+any ground truth or index built against the old numbering. `frame_id` does not
+move. Two extraction runs that both pick frame 31124 produce the same id, so two
+keyframe sets can be compared as sets (docs/triet/ke-hoach-merge-sota.md §3.1).
+
+The ordinal survives as a plain column (`KeyframeRow.keyframe_index`) — it still
+backs rank-based neighbour windows and the trace back to BTC's CSV — but it is
+no longer an identity.
+
+One consequence that must not be forgotten: `frame_idx` is **not unique** in the
+shipped keyframe set. 614 adjacent pairs out of 177,321 in batch 1 (5 rows of
+1240 in the sample) share a frame_idx, because BTC extracted two images from
+timestamps less than one frame apart — they denote the same source frame. Ingest
+collapses them; see `mfe.offline.keyframes.collapse_duplicate_frames`.
 
 `frame_idx` (the real frame in the source video) is derivable, with two
 conditions that are not optional (both measured on the shipped sample, 1240 rows
@@ -39,15 +56,19 @@ import re
 
 from mfe.contracts.errors import ContractError, ErrorCode
 
-#: Zero-pad width of `keyframe_index` inside a `keyframe_id`. The dataset uses
-#: 3 (`001.jpg`). Indices >= 1000 simply use more digits; parsing accepts 3+.
-KEYFRAME_INDEX_DIGITS = 3
+#: Zero-pad width of `frame_id` inside a `keyframe_id`. Six digits cover 999,999
+#: frames — 9.2 hours at 30fps, against a longest shipped video of ~35k frames.
+#: The padding is not cosmetic: it makes lexicographic order match numeric order,
+#: which matters for sorted listings and for range scans on a VARCHAR primary key
+#: (Milvus, see src/mfe/stores/production/). Frames >= 10^6 simply use more
+#: digits; parsing accepts 6+.
+FRAME_ID_DIGITS = 6
 
 #: Width of the zero-padded shot number inside a `shot_id` (`L21_V001#s07`).
 SHOT_DIGITS = 2
 
 _KEYFRAME_RE = re.compile(
-    rf"^(?P<video_id>[^\s#]+)#(?P<index>\d{{{KEYFRAME_INDEX_DIGITS},}})$"
+    rf"^(?P<video_id>[^\s#]+)#(?P<frame_id>\d{{{FRAME_ID_DIGITS},}})$"
 )
 _SHOT_RE = re.compile(r"^(?P<video_id>[^\s#]+)#s(?P<shot>\d+)$")
 _VIDEO_ID_RE = re.compile(r"^[^\s#]+$")
@@ -67,39 +88,41 @@ def validate_video_id(video_id: str) -> str:
     return video_id
 
 
-def build_keyframe_id(video_id: str, keyframe_index: int) -> str:
-    """Build the global keyframe key: ``{video_id}#{keyframe_index:03d}``.
+def build_keyframe_id(video_id: str, frame_id: int) -> str:
+    """Build the global keyframe key: ``{video_id}#{frame_id:06d}``.
 
-    `keyframe_index` is the keyframe's ordinal `n` (matching its image
-    filename), not the source-video frame number.
+    `frame_id` is the source-video frame number (CSV `frame_idx`), *not* the
+    keyframe's ordinal. `L21_V001#031124` is frame 31124, which happens to be
+    the 250th keyframe — the two numbers are far apart and confusing them is the
+    single easiest way to ship a wrong submission.
 
-    >>> build_keyframe_id("L21_V001", 1)
-    'L21_V001#001'
-    >>> build_keyframe_id("L21_V001", 250)
-    'L21_V001#250'
+    >>> build_keyframe_id("L21_V001", 0)
+    'L21_V001#000000'
+    >>> build_keyframe_id("L21_V001", 31124)
+    'L21_V001#031124'
     """
     validate_video_id(video_id)
-    if keyframe_index < 0:
+    if frame_id < 0:
         raise ContractError(
-            ErrorCode.INVALID_ID, f"keyframe_index must be >= 0, got {keyframe_index}"
+            ErrorCode.INVALID_ID, f"frame_id must be >= 0, got {frame_id}"
         )
-    return f"{video_id}#{keyframe_index:0{KEYFRAME_INDEX_DIGITS}d}"
+    return f"{video_id}#{frame_id:0{FRAME_ID_DIGITS}d}"
 
 
 def parse_keyframe_id(keyframe_id: str) -> tuple[str, int]:
-    """Inverse of :func:`build_keyframe_id`. Returns ``(video_id, keyframe_index)``.
+    """Inverse of :func:`build_keyframe_id`. Returns ``(video_id, frame_id)``.
 
-    >>> parse_keyframe_id("L21_V001#001")
-    ('L21_V001', 1)
+    >>> parse_keyframe_id("L21_V001#031124")
+    ('L21_V001', 31124)
     """
     match = _KEYFRAME_RE.match(keyframe_id)
     if match is None:
         raise ContractError(
             ErrorCode.INVALID_ID,
             f"malformed keyframe_id {keyframe_id!r}; "
-            f"expected {{video_id}}#{{keyframe_index:0{KEYFRAME_INDEX_DIGITS}d}}",
+            f"expected {{video_id}}#{{frame_id:0{FRAME_ID_DIGITS}d}}",
         )
-    return match.group("video_id"), int(match.group("index"))
+    return match.group("video_id"), int(match.group("frame_id"))
 
 
 def build_shot_id(video_id: str, shot_number: int) -> str:

@@ -19,22 +19,31 @@ from mfe.contracts.ids import (
 
 class TestBuildKeyframeId:
     @pytest.mark.parametrize(
-        ("video_id", "keyframe_index", "expected"),
+        ("video_id", "frame_id", "expected"),
         [
-            ("L21_V001", 1, "L21_V001#001"),  # docs/00 §3
-            ("L21_V001", 250, "L21_V001#250"),
-            ("L21_V001", 0, "L21_V001#000"),  # boundary
-            ("L30_V099", 91, "L30_V099#091"),
+            ("L21_V001", 90, "L21_V001#000090"),  # row n=2 of the real CSV
+            ("L21_V001", 31124, "L21_V001#031124"),  # row n=250
+            ("L21_V001", 0, "L21_V001#000000"),  # boundary
+            ("L30_V099", 91, "L30_V099#000091"),
         ],
     )
-    def test_matches_docs_format(self, video_id, keyframe_index, expected):
-        assert build_keyframe_id(video_id, keyframe_index) == expected
+    def test_matches_docs_format(self, video_id, frame_id, expected):
+        assert build_keyframe_id(video_id, frame_id) == expected
 
-    def test_index_over_999_uses_more_digits(self):
-        """3 is a minimum pad width, not a ceiling — a long video keeps working."""
-        assert build_keyframe_id("L21_V001", 1234) == "L21_V001#1234"
+    def test_frame_over_999999_uses_more_digits(self):
+        """6 is a minimum pad width, not a ceiling — a long video keeps working."""
+        assert build_keyframe_id("L21_V001", 1234567) == "L21_V001#1234567"
 
-    def test_rejects_negative_index(self):
+    def test_ordinal_is_not_the_key(self):
+        """The regression this format exists to prevent.
+
+        Keyframe n=250 of L21_V001 is frame 31124. Under the old scheme its id
+        was `#250`, which reads like a frame number and is not one — submitting
+        it would name a frame 17 minutes early.
+        """
+        assert build_keyframe_id("L21_V001", 31124) != "L21_V001#000250"
+
+    def test_rejects_negative_frame_id(self):
         with pytest.raises(ContractError) as exc:
             build_keyframe_id("L21_V001", -1)
         assert exc.value.code is ErrorCode.INVALID_ID
@@ -52,28 +61,29 @@ class TestParseKeyframeId:
     @pytest.mark.parametrize(
         ("keyframe_id", "expected"),
         [
-            ("L21_V001#001", ("L21_V001", 1)),
-            ("L21_V001#000", ("L21_V001", 0)),
-            ("L21_V001#250", ("L21_V001", 250)),
+            ("L21_V001#000090", ("L21_V001", 90)),
+            ("L21_V001#000000", ("L21_V001", 0)),
+            ("L21_V001#031124", ("L21_V001", 31124)),
         ],
     )
     def test_matches_docs_examples(self, keyframe_id, expected):
         assert parse_keyframe_id(keyframe_id) == expected
 
     def test_strips_zero_padding_to_int(self):
-        _, index = parse_keyframe_id("L21_V001#001")
-        assert index == 1
-        assert isinstance(index, int)
+        _, frame_id = parse_keyframe_id("L21_V001#000090")
+        assert frame_id == 90
+        assert isinstance(frame_id, int)
 
     @pytest.mark.parametrize(
         "malformed",
         [
-            "L21_V001",  # no index part
-            "L21_V001#1",  # under-padded (< 3 digits)
-            "L21_V001#12",  # under-padded
-            "L21_V001#abc",  # non-numeric
+            "L21_V001",  # no frame part
+            "L21_V001#1",  # under-padded (< 6 digits)
+            "L21_V001#001",  # the OLD ordinal-based format — must not parse
+            "L21_V001#31124",  # right number, missing a digit of padding
+            "L21_V001#abcdef",  # non-numeric
             "L21_V001#s07",  # that's a shot_id, not a keyframe_id
-            "#001",  # no video_id
+            "#000001",  # no video_id
         ],
     )
     def test_rejects_malformed(self, malformed):
@@ -81,12 +91,12 @@ class TestParseKeyframeId:
             parse_keyframe_id(malformed)
         assert exc.value.code is ErrorCode.INVALID_ID
 
-    @pytest.mark.parametrize("keyframe_index", [0, 1, 91, 250, 999, 1234])
-    def test_round_trips(self, keyframe_index):
+    @pytest.mark.parametrize("frame_id", [0, 1, 91, 250, 999, 31124, 1234567])
+    def test_round_trips(self, frame_id):
         video_id = "L21_V001"
-        assert parse_keyframe_id(build_keyframe_id(video_id, keyframe_index)) == (
+        assert parse_keyframe_id(build_keyframe_id(video_id, frame_id)) == (
             video_id,
-            keyframe_index,
+            frame_id,
         )
 
 

@@ -50,7 +50,7 @@ retrieval:
     clip: 1.0
     bm25: 1.0
   rerank_budget_ms: 3000
-  temporal_window: 5
+  temporal_window_frames: 640     # don vi FRAME video goc, xem config/local.yaml
   clip_checkpoint: clip-ViT-B-32
   clip_text_checkpoint: sentence-transformers/clip-ViT-B-32-multilingual-v1
 

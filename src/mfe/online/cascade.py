@@ -30,7 +30,7 @@ import logging
 from typing import Any
 
 from mfe.contracts.tools import Candidate
-from mfe.online.dedup import dedup
+from mfe.online.dedup import DEFAULT_TEMPORAL_WINDOW_FRAMES, dedup
 from mfe.online.fusion import weighted_fusion
 from mfe.online.rerank import Reranker
 
@@ -250,12 +250,12 @@ class Cascade:
         allowed to submit, scoring 0.0 on a query the vector arm had ranked
         30th. Stage B was quietly deciding the score, and losing.
         """
-        window = self._cfg("temporal_window", 5)
+        window = self._cfg("temporal_window_frames", DEFAULT_TEMPORAL_WINDOW_FRAMES)
         depth = self._cfg("dedup_depth", 20)
         if depth <= 0:
             return candidates
 
-        representatives = dedup(candidates, temporal_window=window)[:depth]
+        representatives = dedup(candidates, temporal_window_frames=window)[:depth]
         chosen = {candidate.keyframe_id for candidate in representatives}
         remainder = [c for c in candidates if c.keyframe_id not in chosen]
         return representatives + remainder

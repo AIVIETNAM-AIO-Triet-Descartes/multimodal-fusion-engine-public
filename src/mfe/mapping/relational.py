@@ -16,7 +16,7 @@ import sqlite3
 from pathlib import Path
 
 from mfe.contracts.errors import ContractError, ErrorCode
-from mfe.contracts.ids import frame_idx_from_pts, pts_time_to_timestamp_ms
+from mfe.contracts.ids import build_keyframe_id, frame_idx_from_pts, pts_time_to_timestamp_ms
 from mfe.contracts.records import KeyframeRow, VideoRow
 
 
@@ -225,12 +225,14 @@ class RelationalMap:
         """Self-check the map. Returns a list of problems; empty means clean."""
         problems = []
         
-        # Check if every keyframe_id agrees with its video_id and index
+        # Check if every keyframe_id agrees with its video_id and frame_idx.
+        # Built through contracts.ids rather than an f-string here: spelling the
+        # format a second time is how the two drift apart.
         rows = self._conn.execute(
-            "SELECT keyframe_id, video_id, keyframe_index FROM keyframes"
+            "SELECT keyframe_id, video_id, frame_idx FROM keyframes"
         ).fetchall()
         for r in rows:
-            expected_id = f"{r['video_id']}#{r['keyframe_index']:03d}"
+            expected_id = build_keyframe_id(r["video_id"], r["frame_idx"])
             if r['keyframe_id'] != expected_id:
                 problems.append(f"keyframe_id {r['keyframe_id']} mismatch: expected {expected_id}")
         

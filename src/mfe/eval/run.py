@@ -126,7 +126,7 @@ def run_submit_probes(validator: Validator, known_good_keyframe_id: str | None) 
             expected_block=should_block,
         )
 
-    record("keyframe không tồn tại", "L99_V999#001", "search_text:probe:0", True)
+    record("keyframe không tồn tại", "L99_V999#000001", "search_text:probe:0", True)
     record("keyframe_id sai định dạng", "not-a-keyframe-id", "search_text:probe:1", True)
     if known_good_keyframe_id:
         record("thiếu bằng chứng", known_good_keyframe_id, None, True)

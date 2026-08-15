@@ -18,9 +18,9 @@ CREATE TABLE IF NOT EXISTS videos (
 );
 
 CREATE TABLE IF NOT EXISTS keyframes (
-    keyframe_id    TEXT PRIMARY KEY,          -- {video_id}#{keyframe_index:03d}
+    keyframe_id    TEXT PRIMARY KEY,          -- {video_id}#{frame_idx:06d}
     video_id       TEXT    NOT NULL REFERENCES videos(video_id),
-    keyframe_index INTEGER NOT NULL CHECK (keyframe_index >= 0),  -- ordinal n, matches image file
+    keyframe_index INTEGER NOT NULL CHECK (keyframe_index >= 0),  -- ordinal n, names the image file
     -- frame_idx and pts_time come straight from map-keyframes/{video_id}.csv and
     -- are NEVER computed: round(pts_time*fps) was wrong on 83-93% of 29.97fps
     -- rows (docs/00 §3, adr/0002). Both stored because BTC has not fixed which
@@ -29,7 +29,13 @@ CREATE TABLE IF NOT EXISTS keyframes (
     pts_time       REAL    NOT NULL CHECK (pts_time >= 0),        -- seconds
     timestamp_ms   INTEGER NOT NULL CHECK (timestamp_ms >= 0),    -- pts_time * 1000
     shot_id        TEXT,                       -- optional in Sprint 1
-    UNIQUE(video_id, keyframe_index)
+    UNIQUE(video_id, keyframe_index),
+    -- keyframe_id is built from (video_id, frame_idx), so this is the same
+    -- constraint spelled a second way -- deliberately. 614 CSV row pairs in
+    -- batch 1 share a frame_idx (two images less than one frame apart); ingest
+    -- collapses them. If a future extractor stops collapsing, this fails the
+    -- insert instead of letting one keyframe silently overwrite another.
+    UNIQUE(video_id, frame_idx)
 );
 
 -- The validator's "Trong biên" rule joins keyframes to videos on every submit
