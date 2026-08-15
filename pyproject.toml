@@ -33,6 +33,15 @@ stores = [
     "pyarrow>=15.0",
     "rank-bm25>=0.2.2",
 ]
+production-stores = [
+    "elasticsearch==9.4.1",
+    "numpy>=1.26",
+    "pymilvus==2.6.16",
+]
+production-lite = [
+    "mfe[production-stores]",
+    "milvus-lite==3.2.0",
+]
 online = [
     "mfe[stores]",
     # clip-ViT-B-32 — the checkpoint the official PDF §3 names as the source of
@@ -49,7 +58,7 @@ dev = [
     "pytest-cov>=4.1",
     "ruff>=0.3",
 ]
-all = ["mfe[offline,stores,online,browser,dev]"]
+all = ["mfe[offline,stores,production-stores,production-lite,online,browser,dev]"]
 
 [project.scripts]
 mfe-ingest = "mfe.offline.ingest:main"
@@ -59,6 +68,8 @@ mfe-eval = "mfe.eval.run:main"
 mfe-official = "mfe.eval.official:main"
 # Gop bo test cua 5 nguoi (eval/dev/*, eval/heldout/*) sau khi validate.
 mfe-merge-queryset = "mfe.eval.merge_queryset:main"
+# Quan ly kho production (Milvus + Elasticsearch) — Cong Quang.
+mfe-production-store = "mfe.stores.production.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mfe"]
@@ -68,6 +79,7 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 markers = [
     "stub: test targets a NotImplementedError stub; xfail until the owner implements it",
+    "integration: requires live Milvus and Elasticsearch services",
 ]
 
 [tool.ruff]
