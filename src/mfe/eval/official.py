@@ -701,8 +701,28 @@ def run(
     )
 
     report = Path(out_dir) / "official-score.json"
+    if is_heldout(queries):
+        # The file gets the same treatment as the console: aggregates only. Hiding
+        # per-query behaviour on screen while writing it to disk would be theatre —
+        # the temptation is the file, not the print. Re-run after the config is
+        # frozen if a per-query audit is ever needed.
+        payload: dict = {
+            "split": "heldout",
+            "provenance": provenance.model_dump(),
+            "n_queries": len(result.per_query),
+            "mean_final_score": result.mean_final_score,
+            "mean_final_score_strict": result.mean_final_score_strict,
+            "strict_queries": result.strict_queries,
+            "by_type": result.by_type,
+            "withheld": (
+                "per_query bi luoc CO Y — ky luat hop den, "
+                "docs/task/bo-test-dev-heldout.md §7"
+            ),
+        }
+    else:
+        payload = result.model_dump()
     report.write_text(
-        json.dumps(result.model_dump(), ensure_ascii=False, indent=2), encoding="utf-8"
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     _print_report(queries, result, report)
     return result
@@ -729,9 +749,56 @@ def _print_provenance(provenance: RunProvenance) -> None:
         print(f"  {mark} {str(row['name']):<18} w={row['weight']:<5} {row['status']}")
 
 
+def is_heldout(queries: list[AnyQuery]) -> bool:
+    """Whether this query set is held out, and therefore may only be *scored*.
+
+    Read off `split` on the queries themselves rather than the file path, so the
+    rule holds however the harness is invoked.
+    """
+    return any(query.split == "heldout" for query in queries)
+
+
+def _print_heldout_report(result: OfficialRunResult, report: Path) -> None:
+    """Aggregate numbers only — the whole point of a held-out set.
+
+    Kỷ luật hộp đen (docs/task/bo-test-dev-heldout.md §7): on held-out data we may
+    know **what the BTC metric says** and nothing else. No per-query rows, no first
+    hit ranks, no R@k curve, no query text. Those are behaviour, and reading
+    behaviour is how a held-out set quietly turns into a second dev set — after
+    which nothing is left to measure generalisation with.
+
+    Every number withheld here is available on `eval/dev/*`, which is where tuning
+    belongs.
+    """
+    print("\n=== HELD-OUT: chi bao cao diem tong hop ===")
+    if result.provenance is not None:
+        _print_provenance(result.provenance)
+    print(f"\nSo truy van: {len(result.per_query)}")
+    print("\nFinal Score theo loai truy van (cua so RONG):")
+    for query_type, value in result.by_type.items():
+        print(f"  {query_type:<6} {value:.3f}")
+    print(f"  {'MEAN':<6} {result.mean_final_score:.3f}")
+    if result.mean_final_score_strict is not None:
+        print(
+            f"\nMEAN cua so HEP: {result.mean_final_score_strict:.3f} "
+            f"tren {result.strict_queries}/{len(result.per_query)} truy van co cua so hep."
+        )
+    print(
+        "\nDA AN CO Y: bang tung cau, hang trung binh, R@k tung cau, va noi dung truy van.\n"
+        "Muon xem hanh vi de sua he thong thi quay ve bo dev — do la ranh gioi lam cho\n"
+        "con so heldout con y nghia. Chi tiet van nam trong file JSON de kiem toan sau\n"
+        "khi da CHOT cau hinh, khong phai de dieu chinh no."
+    )
+    print(f"\nBao cao: {report}\n")
+
+
 def _print_report(
     queries: list[AnyQuery], result: OfficialRunResult, report: Path
 ) -> None:
+    if is_heldout(queries):
+        _print_heldout_report(result, report)
+        return
+
     by_id = {query.query_id: query for query in queries}
     if result.provenance is not None:
         _print_provenance(result.provenance)

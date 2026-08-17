@@ -26,7 +26,7 @@ from pathlib import Path
 from mfe.core.cli import setup_console
 from mfe.core.config import load_config
 from mfe.eval.metrics.final_score import MAX_ANSWERS_PER_QUERY
-from mfe.eval.official import QAQuery, TRAKEQuery, load_official_queryset
+from mfe.eval.official import QAQuery, TRAKEQuery, is_heldout, load_official_queryset
 from mfe.eval.tuning import (
     OFF,
     WEIGHT_GRID,
@@ -110,6 +110,20 @@ def main() -> None:
     queryset = args.queryset or config.resolve_path(config.eval.queryset)
     queries = load_official_queryset(queryset)
     top_k = min(config.retrieval.rerank_topk, MAX_ANSWERS_PER_QUERY)
+
+    # Kỷ luật hộp đen — docs/task/bo-test-dev-heldout.md §7.
+    # Everything this script prints is *behaviour*: per-arm sweeps, mean first-hit
+    # rank, ablation deltas. None of it may be observed on held-out data, because
+    # tuning against it is exactly what destroys its only purpose. Refuse rather
+    # than warn: a warning gets scrolled past, and the damage is not undoable —
+    # once you have seen which held-out queries an arm breaks, you cannot unsee it.
+    if is_heldout(queries):
+        raise SystemExit(
+            f"{queryset} chua cau HELD-OUT. Script nay quan sat HANH VI (quet tung arm, "
+            "hang trung binh, ablation) nen khong duoc chay tren heldout.\n"
+            "Chinh trong so tren eval/dev/*, roi CONG BO tren heldout bang "
+            "`python -m mfe.eval.official`, thu chi in diem tong hop."
+        )
 
     relational = RelationalMap(config.paths.relational_db)
     relational.init_schema()
