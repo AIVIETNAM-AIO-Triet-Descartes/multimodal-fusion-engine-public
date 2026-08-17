@@ -84,3 +84,35 @@ def test_pool_frame_clusters_deduplication() -> None:
     assert len(pooled) == 3
     assert [h.frame_id for h in pooled if h.video_id == "v1"] == [100, 200]
     assert [h.video_id for h in pooled] == ["v1", "v1", "v2"]
+
+
+def test_smooth_hits_cross_video_isolation() -> None:
+    """Ensure energy from video A does not leak into video B even if frame_ids match exactly."""
+    hits = [
+        StorageHit(video_id="v1", frame_id=10, score=1.0),
+        StorageHit(video_id="v2", frame_id=11, score=0.5),
+    ]
+    smoothed = TemporalReranker.smooth_hits(hits, window_size=5, decay_weight=0.5)
+    v1_hit = next(h for h in smoothed if h.video_id == "v1")
+    v2_hit = next(h for h in smoothed if h.video_id == "v2")
+    # Neither should receive a boost since they belong to different videos
+    assert v1_hit.score == 1.0
+    assert v2_hit.score == 0.5
+
+
+def test_smooth_hits_kernel_weights_differ() -> None:
+    """Verify that different kernels produce distinct score boosts for delta > 0."""
+    hits = [
+        StorageHit(video_id="v1", frame_id=10, score=1.0),
+        StorageHit(video_id="v1", frame_id=12, score=1.0),
+    ]
+    g_res = TemporalReranker.smooth_hits(hits, kernel="gaussian", sigma=2.0, decay_weight=0.5)
+    t_res = TemporalReranker.smooth_hits(hits, kernel="triangular", sigma=2.0, decay_weight=0.5)
+    b_res = TemporalReranker.smooth_hits(hits, kernel="box", sigma=2.0, decay_weight=0.5)
+
+    # All three boost the score > 1.0, but by different amounts
+    assert g_res[0].score > 1.0
+    assert t_res[0].score > 1.0
+    assert b_res[0].score > 1.0
+    assert g_res[0].score != t_res[0].score or t_res[0].score != b_res[0].score
+

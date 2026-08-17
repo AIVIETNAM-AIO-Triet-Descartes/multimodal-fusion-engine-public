@@ -21,7 +21,8 @@ def test_profiler_benchmark_callable_success() -> None:
     assert res.failed_queries == 0
     assert res.p50_ms > 0.0
     assert res.qps > 0.0
-    assert res.min_ms <= res.p50_ms <= res.max_ms
+    assert res.min_ms <= res.p50_ms <= res.p90_ms <= res.p95_ms <= res.p99_ms <= res.max_ms
+    assert res.min_ms <= res.mean_ms <= res.max_ms
 
 
 def test_profiler_benchmark_callable_failure_handling() -> None:
@@ -38,3 +39,4 @@ def test_profiler_benchmark_callable_failure_handling() -> None:
 def test_profiler_invalid_iterations() -> None:
     with pytest.raises(ValueError, match="iterations must be positive"):
         StorageProfiler.benchmark_callable("test", lambda: None, iterations=0)
+

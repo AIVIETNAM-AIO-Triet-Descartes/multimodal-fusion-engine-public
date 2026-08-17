@@ -86,3 +86,40 @@ def test_search_multi_vector_aggregation_weighted_sum() -> None:
     )
     assert len(results) == 1
     assert pytest.approx(results[0].score, 0.001) == 1.8
+
+
+def test_search_multi_vector_aggregation_mean() -> None:
+    config = MilvusConfig(uri="http://localhost:19530", collection="test_col", dimension=512)
+    store = MilvusVectorStore(config, client=MagicMock())
+
+    vec1 = [0.1] * 512
+    vec2 = [0.2] * 512
+
+    hit1 = StorageHit(video_id="v1", frame_id=10, score=0.6)
+    hit2 = StorageHit(video_id="v1", frame_id=10, score=0.8)
+
+    def mock_search(vec, top_k, video_id=None):
+        if vec[0] == 0.1:
+            return [hit1]
+        return [hit2]
+
+    store.search = MagicMock(side_effect=mock_search)
+
+    results = store.search_multi_vector(
+        [vec1, vec2], aggregation="mean", top_k=5
+    )
+    assert len(results) == 1
+    assert pytest.approx(results[0].score, 0.001) == 0.7
+
+
+def test_search_multi_vector_aggregation_invalid() -> None:
+    config = MilvusConfig(uri="http://localhost:19530", collection="test_col", dimension=512)
+    store = MilvusVectorStore(config, client=MagicMock())
+
+    vec1 = [0.1] * 512
+    hit1 = StorageHit(video_id="v1", frame_id=10, score=0.6)
+    store.search = MagicMock(return_value=[hit1])
+
+    with pytest.raises(ValueError, match="unknown aggregation"):
+        store.search_multi_vector([vec1], aggregation="invalid_mode")
+

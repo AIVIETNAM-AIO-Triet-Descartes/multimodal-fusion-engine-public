@@ -50,3 +50,21 @@ def test_expand_query_pure_ascii() -> None:
     assert res["original_nfc"] == "car accident road"
     assert res["unaccented"] is None
     assert res["has_accents"] is False
+
+
+def test_extract_compounds_sorting_and_whitespace() -> None:
+    # Multiple compounds with redundant whitespace and uppercase
+    query = "  XE MÁY   chạy qua   vạch kẻ đường  "
+    compounds = VietnameseQueryExpander.extract_compounds(query)
+    assert "vạch kẻ đường" in compounds
+    assert "xe máy" in compounds
+    # Longer compounds appear first in sorted list
+    assert compounds.index("vạch kẻ đường") < compounds.index("xe máy")
+
+
+def test_expand_query_disabled_unaccented() -> None:
+    res = VietnameseQueryExpander.expand_query("áo dài đỏ", include_unaccented=False)
+    assert res["original_nfc"] == "áo dài đỏ"
+    assert res["unaccented"] is None
+    assert res["has_accents"] is True
+
