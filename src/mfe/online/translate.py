@@ -9,7 +9,7 @@ at rank 16.7 on the untranslated Vietnamese. Until now the English came from a
 hand-filled `text_en` on each query, which does not scale to 115 queries × 5
 people. This module is what replaces the hand.
 
-Three constraints, none of them negotiable (docs/handoff.md §5.1):
+Three constraints, none of them negotiable (docs/triet/handoff.md §5.1):
 
 **1. Hand-written wins.** A `text_en` on the query short-circuits every tier.
 The test set has to stay reproducible, and whoever reads a bad translation must

@@ -151,7 +151,7 @@ class TranslationConfig(_Section):
 
     * **A "keep the Vietnamese" tier.** There is no such value, so no config can
       ask an English-only tower to read Vietnamese. Out of translations means the
-      arm sits out (docs/handoff.md §5.1).
+      arm sits out (docs/triet/handoff.md §5.1).
     * **Skipping the hand-written form.** `text_en` on a query always wins; it is
       not a tier and cannot be turned off.
 
