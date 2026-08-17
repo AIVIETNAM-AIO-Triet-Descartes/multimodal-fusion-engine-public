@@ -19,10 +19,11 @@ from mfe.offline.provided import ProvidedDataset
 PILOT_VIDEOS = ["L21_V001", "L21_V002", "L21_V003"]
 _DATASET_ROOT = Path("data/sample_2026")
 _MAP_DIR = _DATASET_ROOT / "map-keyframes"
+_HAS_PILOT_MAPS = all((_MAP_DIR / f"{video_id}.csv").is_file() for video_id in PILOT_VIDEOS)
 
 pytestmark = pytest.mark.skipif(
-    not _MAP_DIR.is_dir(),
-    reason="needs data/sample_2026/ — see docs/task/huongdan-upload-download-hf.md",
+    not _HAS_PILOT_MAPS,
+    reason="needs the L21_V001..V003 pilot CSVs — see docs/task/huongdan-upload-download-hf.md",
 )
 
 

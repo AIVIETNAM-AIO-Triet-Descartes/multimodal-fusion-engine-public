@@ -68,6 +68,31 @@ def test_a_clean_set_merges(workspace):
     assert (tmp_path / "queryset_heldout.jsonl").exists()
 
 
+def test_repository_pilot_fixture_is_not_treated_as_a_member_submission(workspace, capsys):
+    """The checked-in pilot belongs to the smoke benchmark, not the five-person merge."""
+    tmp_path, dev, _, _ = workspace
+    (dev / "dat.jsonl").write_text(_kis("dat_kis_01", "dat", "dev"), encoding="utf-8")
+    (dev / "pilot.jsonl").write_text(
+        _kis("pilot_kis_01", "triet", "dev"), encoding="utf-8"
+    )
+
+    assert mq.run() == 0
+    assert "pilot_kis_01" not in capsys.readouterr().out
+    merged = (tmp_path / "queryset_dev.jsonl").read_text(encoding="utf-8")
+    assert "pilot_kis_01" not in merged
+
+
+def test_unknown_non_member_file_is_still_reported(workspace, capsys):
+    """Only the named pilot fixture is special; typos must not disappear silently."""
+    _, dev, _, _ = workspace
+    (dev / "qunag.jsonl").write_text(
+        _kis("qunag_kis_01", "qunag", "dev", "L21_V003"), encoding="utf-8"
+    )
+
+    assert mq.run() == 1
+    assert "no manifest" in capsys.readouterr().out
+
+
 def test_query_on_another_members_video_is_refused(workspace, capsys):
     """The failure this whole script exists for.
 

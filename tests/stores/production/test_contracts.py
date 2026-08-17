@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import unicodedata
+
 import numpy as np
 import pytest
 from pydantic import ValidationError
@@ -21,6 +23,15 @@ def test_float16_embedding_is_upcast_and_validated() -> None:
     record = StorageRecord.from_values(video_id="L01_V001", frame_id=7, embedding=vector())
     assert len(record.embedding or ()) == 512
     assert isinstance(record.embedding[0], float)  # type: ignore[index]
+
+
+def test_text_is_normalized_to_nfc_before_ingestion() -> None:
+    nfd = unicodedata.normalize("NFD", "Thành phố")
+    record = StorageRecord.from_values(
+        video_id="L01_V001", frame_id=7, text=nfd, source="ocr"
+    )
+    assert record.text == "Thành phố"
+    assert unicodedata.is_normalized("NFC", record.text)
 
 
 @pytest.mark.parametrize(

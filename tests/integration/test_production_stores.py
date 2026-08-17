@@ -97,19 +97,10 @@ def test_real_insert_query_filter_duplicate_and_cross_backend(
         assert analyze("THÀNH PHỐ") == analyze("thanh pho") == ["thanh", "pho"]
         assert "2026" in analyze("TP.HCM 2026!")
 
-        # The analyzer alone does NOT handle decomposed input, and this asserts
-        # that rather than wishing otherwise: `asciifolding` folds precomposed
-        # characters only, so NFD "Thành phố" survives as ["thành", "phố"].
-        # Fixing it inside Elasticsearch would need the analysis-icu plugin and
-        # a custom image; instead both application boundaries normalize to NFC
-        # (StorageRecord.validate_text on write, ElasticsearchTextStore.search
-        # on read). This test pins the analyzer's real behaviour so that the
-        # day someone installs ICU, it fails and gets revisited deliberately.
+        # Analyzer v2 removes decomposed combining marks before tokenization;
+        # application boundaries also normalize NFC as defence in depth.
         nfd_tokens = analyze(unicodedata.normalize("NFD", "Thành phố"))
-        assert nfd_tokens != ["thanh", "pho"], "diacritics were folded after all"
-        # The tokens come back decomposed too, so compare in the same form —
-        # `"thành" == "thành"` is False, which is the whole problem.
-        assert nfd_tokens == [unicodedata.normalize("NFD", t) for t in ("thành", "phố")]
+        assert nfd_tokens == ["thanh", "pho"]
 
         # ...and this is the guarantee that actually matters: a decomposed query
         # must still find a document that was written in precomposed form.

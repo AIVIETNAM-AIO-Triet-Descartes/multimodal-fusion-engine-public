@@ -10,7 +10,8 @@ from .config import ElasticsearchConfig
 from .contracts import HealthStatus, IngestError, IngestReport, StorageHit, StorageRecord
 from .ids import elasticsearch_document_id
 
-DEV_ANALYZER = "aic_vi_dev_fallback_v1"
+DEV_ANALYZER = "aic_vi_dev_fallback_v2"
+DEV_CHAR_FILTER = "aic_vi_strip_combining_marks_v1"
 
 
 def build_elasticsearch_client(config: ElasticsearchConfig) -> Any:
@@ -47,9 +48,17 @@ class ElasticsearchTextStore:
         analysis: dict[str, Any] = {}
         if self.config.analyzer_mode == "dev_fallback":
             analysis = {
+                "char_filter": {
+                    DEV_CHAR_FILTER: {
+                        "type": "pattern_replace",
+                        "pattern": r"\p{M}+",
+                        "replacement": "",
+                    }
+                },
                 "analyzer": {
                     DEV_ANALYZER: {
                         "type": "custom",
+                        "char_filter": [DEV_CHAR_FILTER],
                         "tokenizer": "standard",
                         "filter": ["lowercase", "asciifolding"],
                     }
@@ -191,15 +200,12 @@ class ElasticsearchTextStore:
         source: str | None = None,
         phrase: bool = False,
     ) -> list[StorageHit]:
+        # Match the normalization `StorageRecord.validate_text` applied on write.
+        text = unicodedata.normalize("NFC", text)
         if not text.strip():
             raise ValueError("query text must be non-empty")
         if not 1 <= top_k <= 500:
             raise ValueError("top_k must be between 1 and 500")
-        # Match the normalization `StorageRecord.validate_text` applied on write.
-        # Skipping this makes a decomposed query silently return nothing against
-        # a precomposed index — verified on the live service: the same Vietnamese
-        # query returned 5 hits as NFC and 0 as NFD.
-        text = unicodedata.normalize("NFC", text)
         filters: list[dict[str, Any]] = []
         if video_id is not None:
             filters.append({"term": {"video_id": video_id}})

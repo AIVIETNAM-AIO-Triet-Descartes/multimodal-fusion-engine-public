@@ -37,6 +37,12 @@ MANIFEST_DIR = Path("eval/manifests")
 DEV_OUT = Path("eval/queryset_dev.jsonl")
 HELDOUT_OUT = Path("eval/queryset_heldout.jsonl")
 
+# Repository-level smoke fixtures are not member submissions. Keep this list
+# explicit: silently ignoring every file without a manifest would also hide a
+# misspelled member filename, which is exactly the kind of error this tool must
+# surface.
+NON_MEMBER_QUERYSET_STEMS = frozenset({"pilot"})
+
 
 class MergeError(Exception):
     """One or more problems that must be fixed by a person, not by this script."""
@@ -199,6 +205,8 @@ def collect(
     problems: list[str] = []
     warnings: list[str] = []
     for path in sorted(directory.glob("*.jsonl")):
+        if path.stem in NON_MEMBER_QUERYSET_STEMS:
+            continue
         member = path.stem
         try:
             lines = load_official_queryset(path)
