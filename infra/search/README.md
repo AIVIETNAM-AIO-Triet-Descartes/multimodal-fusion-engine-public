@@ -8,9 +8,11 @@ indexes. Inspect Docker Desktop resources before downloading. This compose file 
 single-machine development environment: Elasticsearch security is disabled here, never in a
 shared or production deployment.
 
-The default text analyzer is deliberately named `aic_vi_dev_fallback_v1`. It uses the
-standard tokenizer, lowercase, and ASCII folding. It is useful for development, but it is
-not presented as a compatible Vietnamese linguistic plugin. Set
+Milvus and Elasticsearch bind to `127.0.0.1` only. The default text analyzer is deliberately
+named `aic_vi_dev_fallback_v2`. It removes decomposed Unicode combining marks before the
+standard tokenizer, lowercase, and ASCII folding steps; application input is also normalized
+to NFC. It is useful for development, but it is not presented as a compatible Vietnamese
+linguistic plugin. Set
 `MFE_ELASTICSEARCH_ANALYZER_MODE=plugin_required` only after the team installs and verifies
 a plugin compatible with the pinned Elasticsearch server.
 
@@ -22,6 +24,11 @@ python -m pip install -e ".[production-stores,dev]"
 mfe-production-store ensure-schema
 mfe-production-store health
 ```
+
+The v1 Elasticsearch index is retained as rollback data. New local ingestion uses
+`aic_keyframe_text_v2`; do not delete v1 until the team explicitly accepts the migration.
+See `docs/quang-storage-local-test.md` for the complete sample build, ingest, query, and
+persistence workflow.
 
 Khi chưa có Docker nhưng muốn test vector local, cài `.[production-lite,dev]` và chạy
 `scripts/ingest_btc_vectors.py`. Đây là Milvus Lite embedded cho local validation, không phải

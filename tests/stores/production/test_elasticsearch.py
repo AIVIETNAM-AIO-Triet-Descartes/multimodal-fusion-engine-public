@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import unicodedata
 from typing import Any
 
 import pytest
 
 from mfe.stores.production.config import ElasticsearchConfig
 from mfe.stores.production.contracts import StorageRecord
-from mfe.stores.production.elasticsearch import DEV_ANALYZER, ElasticsearchTextStore
+from mfe.stores.production.elasticsearch import (
+    DEV_ANALYZER,
+    DEV_CHAR_FILTER,
+    ElasticsearchTextStore,
+)
 
 
 def record(video: str = "x", frame: int = 1, source: str = "ocr") -> StorageRecord:
@@ -75,6 +80,9 @@ def test_dev_fallback_is_explicit_and_schema_is_strict() -> None:
     assert definition is not None
     assert definition["mappings"]["dynamic"] == "strict"
     assert definition["mappings"]["properties"]["text"]["analyzer"] == DEV_ANALYZER
+    analysis = definition["settings"]["analysis"]
+    assert analysis["analyzer"][DEV_ANALYZER]["char_filter"] == [DEV_CHAR_FILTER]
+    assert analysis["char_filter"][DEV_CHAR_FILTER]["pattern"] == r"\p{M}+"
 
 
 def test_plugin_mode_does_not_claim_or_define_fallback() -> None:
@@ -119,3 +127,11 @@ def test_search_filters_and_stable_tie_break() -> None:
     bool_query = client.search_kwargs["query"]["bool"]
     assert "match_phrase" in bool_query["must"][0]
     assert bool_query["filter"] == [{"term": {"video_id": "x"}}, {"term": {"source": "ocr"}}]
+
+
+def test_search_normalizes_decomposed_unicode_to_nfc() -> None:
+    client = FakeElasticsearch()
+    store = ElasticsearchTextStore(ElasticsearchConfig(), client=client)
+    store.search(unicodedata.normalize("NFD", "Thành phố"))
+    match = client.search_kwargs["query"]["bool"]["must"][0]["match"]
+    assert match["text"] == "Thành phố"

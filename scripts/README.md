@@ -19,3 +19,4 @@ Script không có test và không ai review kỹ. Đừng để đường đi t�
 | `reset_stores.py` | Xoá `stores/*` để ingest lại sạch |
 | `make_fixture_video.py` | Cắt vài giây từ video thật → `tests/fixtures/` |
 | `inspect_index.py` | Dump n dòng đầu Faiss sidecar để mắt thường soi |
+| `build_sample_2026_records.py` | Sinh JSONL + manifest/checksum cho production-store smoke test |

@@ -51,11 +51,11 @@ class ElasticsearchConfig(BaseModel):
     api_key: SecretStr | None = None
     username: str | None = None
     password: SecretStr | None = None
-    index: str = "aic_keyframe_text_v1"
+    index: str = "aic_keyframe_text_v2"
     analyzer_mode: Literal["dev_fallback", "plugin_required"] = "dev_fallback"
     plugin_analyzer: str = "vi_analyzer"
     schema_version: Literal["1"] = "1"
-    text_pipeline_fingerprint: str = "aic-vi-dev-fallback-v1"
+    text_pipeline_fingerprint: str = "aic-vi-dev-fallback-v2-nfc"
     request_timeout_seconds: float = Field(default=20.0, gt=0)
 
     @classmethod

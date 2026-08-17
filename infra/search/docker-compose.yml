@@ -48,8 +48,8 @@ services:
       MINIO_ACCESS_KEY_ID: ${MFE_MINIO_USER:?set MFE_MINIO_USER in infra/search/.env}
       MINIO_SECRET_ACCESS_KEY: ${MFE_MINIO_PASSWORD:?set MFE_MINIO_PASSWORD in infra/search/.env}
     ports:
-      - "19530:19530"
-      - "9091:9091"
+      - "127.0.0.1:19530:19530"
+      - "127.0.0.1:9091:9091"
     volumes:
       - milvus-data:/var/lib/milvus
     healthcheck:
@@ -66,7 +66,7 @@ services:
       xpack.security.enabled: "false"
       ES_JAVA_OPTS: ${ES_JAVA_OPTS:--Xms1g -Xmx1g}
     ports:
-      - "9200:9200"
+      - "127.0.0.1:9200:9200"
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
     healthcheck:
