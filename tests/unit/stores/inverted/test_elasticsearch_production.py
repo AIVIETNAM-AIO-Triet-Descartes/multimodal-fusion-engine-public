@@ -12,20 +12,17 @@ Tests verify:
 
 from __future__ import annotations
 
-from collections.abc import Generator
-from contextlib import contextmanager
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-from mfe.stores.production.contracts import IngestReport, StorageHit, StorageRecord
+from mfe.stores.production.contracts import IngestReport, StorageRecord
 from mfe.stores.production.elasticsearch import (
     SOURCE_SCORE_WEIGHTS,
     ElasticsearchTextStore,
 )
 from mfe.stores.production.ingestion import DualIngestReport, DualStoreIngestor
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -240,7 +237,10 @@ class TestDualStoreIngestorProgress:
         records = [self._make_record("V1", i) for i in range(5)]
         calls: list[tuple[int, DualIngestReport]] = []
 
-        ingestor.ingest_batches(records, batch_size=2, progress_callback=lambda n, r: calls.append((n, r)))
+        def on_prog(n: int, r: DualIngestReport) -> None:
+            calls.append((n, r))
+
+        ingestor.ingest_batches(records, batch_size=2, progress_callback=on_prog)
 
         # 5 records, batch_size=2 → 3 flushes (2+2+1)
         assert len(calls) == 3
