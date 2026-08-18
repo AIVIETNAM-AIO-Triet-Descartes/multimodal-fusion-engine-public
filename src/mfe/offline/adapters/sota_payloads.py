@@ -14,6 +14,15 @@ into one string. Measured on the pilot export, they are not the same quality:
 Concatenating lets the noisy source dilute the useful one, and destroys any way to
 measure which is carrying the weight. They ship as `ocr` and `ocr_sviptr`; the
 fusion weights decide what each is worth (ke-hoach-merge-sota.md §3.4b).
+
+**Two key grammars, both accepted** (ke-hoach-offline-ingest.md §1.2, §9). Bảo's
+bundles key on the keyframe *ordinal*; the bundles our own notebooks produce key
+on `keyframe_id`, because an ordinal is a property of the extraction run and not
+of the video. Both are read here, told apart by structure rather than by guess —
+`validate_video_id` forbids `#`, so a `#` can only be ours. See
+`SotaIdMap.resolve_key`. Nothing about the ordinal path changed: it is a second
+branch, not a rewrite, and `tests/unit/offline/test_sota_payloads.py` is what
+holds that still.
 """
 
 from __future__ import annotations
@@ -23,6 +32,7 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from mfe.contracts.errors import ContractError, ErrorCode
 from mfe.contracts.ids import parse_keyframe_id
 from mfe.offline.adapters.sota_ids import SotaIdMap
 from mfe.stores.production.contracts import StorageRecord
@@ -56,13 +66,29 @@ class LoadReport:
     records: int = 0
     unknown_ids: list[str] = field(default_factory=list)
     empty_texts: int = 0
+    #: Keys that parse as neither grammar. Kept apart from `unknown_ids` because
+    #: the two mean opposite things about who is at fault. An unknown id is
+    #: **expected** — an export may cover videos we did not ingest. A malformed id
+    #: is a **broken producer**: some notebook wrote a key no reader can resolve.
+    #: With five members writing payloads, conflating them would hide the second
+    #: behind the first, which is the one we learned to tolerate.
+    malformed_ids: list[str] = field(default_factory=list)
+    #: `"keyframe_id"`, `"ordinal"`, `"mixed"` or `""` when nothing was read.
+    #: `"mixed"` means one file carries both grammars — which no correct producer
+    #: does, so it means a run changed convention half way and the caller should
+    #: refuse rather than pick a winner.
+    key_format: str = ""
 
     def summary(self) -> str:
         if not self.present:
             return f"{self.source}: file not found ({self.path})"
         parts = [f"{self.source}: {self.records}/{self.keys_read} records"]
+        if self.key_format:
+            parts.append(f"khoa={self.key_format}")
         if self.unknown_ids:
             parts.append(f"{len(self.unknown_ids)} unknown id(s)")
+        if self.malformed_ids:
+            parts.append(f"{len(self.malformed_ids)} MALFORMED id(s)")
         if self.empty_texts:
             parts.append(f"{self.empty_texts} empty")
         return ", ".join(parts)
@@ -86,16 +112,22 @@ def load_payload(path: str | Path, source: str, id_map: SotaIdMap) -> tuple[
     report.keys_read = len(payload)
 
     records: list[StorageRecord] = []
-    for sota_id, text in payload.items():
+    grammars: set[str] = set()
+    for key, text in payload.items():
+        grammars.add("keyframe_id" if "#" in key else "ordinal")
         if not isinstance(text, str) or not text.strip():
             # An empty string is not a document. Elasticsearch would reject it
             # anyway (StorageRecord.validate_text), so drop it here and count it.
             report.empty_texts += 1
             continue
         try:
-            keyframe_id = id_map.to_keyframe_id(sota_id)
-        except Exception:  # noqa: BLE001 — an id we did not ingest is expected
-            report.unknown_ids.append(sota_id)
+            keyframe_id = id_map.resolve_key(key)
+        except ContractError as err:
+            # Two outcomes, deliberately reported apart — see LoadReport.
+            if err.code is ErrorCode.KEYFRAME_NOT_FOUND:
+                report.unknown_ids.append(key)
+            else:
+                report.malformed_ids.append(key)
             continue
         video_id, frame_id = parse_keyframe_id(keyframe_id)
         records.append(
@@ -105,6 +137,10 @@ def load_payload(path: str | Path, source: str, id_map: SotaIdMap) -> tuple[
         )
 
     report.records = len(records)
+    if len(grammars) > 1:
+        report.key_format = "mixed"
+    elif grammars:
+        report.key_format = next(iter(grammars))
     return records, report
 
 

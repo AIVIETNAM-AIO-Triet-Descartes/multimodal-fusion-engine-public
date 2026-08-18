@@ -101,6 +101,55 @@ class SotaIdMap:
             )
         return build_keyframe_id(video_id, frame_idx)
 
+    def has_keyframe_id(self, keyframe_id: str) -> bool:
+        """Is this `keyframe_id` a real row of the bundle's own `map-keyframes`?
+
+        This is the check that pays back what dropping the ordinal lookup costs.
+        Bảo's ordinal keys had to go through `to_keyframe_id`, and that lookup was
+        quietly doing a **second** job: filtering. Keys for videos we never
+        ingested failed the lookup and landed in `unknown_ids`
+        (`translate_mapping`). Keying payloads by `keyframe_id` removes the
+        lookup, hence removes the filter — and the failure mode it leaves behind
+        is worse than the one it replaces: a stray key sails into Elasticsearch
+        and Milvus (neither consults the Relational Map), then `eval` raises on a
+        `candidate_frame_id` the Relational Map has never heard of, mid-scoring.
+
+        So the filter comes back, explicit: same report, different mechanism, and
+        stricter — it checks every row instead of every bundle.
+        """
+        try:
+            video_id, frame_idx = parse_keyframe_id(keyframe_id)
+        except ContractError:
+            return False
+        return (video_id, frame_idx) in self._frame_to_ordinal
+
+    def resolve_key(self, key: str) -> str:
+        """Accept **either** payload grammar and return our `keyframe_id`.
+
+        Two formats coexist and are told apart **by structure, never by guess**:
+        `validate_video_id` forbids `#`, so a `#` means our key and no `#` means
+        Bảo's ordinal. Two disjoint grammars, one correct handler each.
+
+            L21_V001#031124  ->  L21_V001#031124   (validated against the bundle)
+            L21_V001_250     ->  L21_V001#031124   (CSV lookup, never a string edit)
+
+        Raises `ContractError` for a key that is malformed or names a keyframe
+        this bundle does not contain — the caller decides which of those two is
+        an expected state (see `LoadReport`).
+        """
+        if "#" not in key:
+            return self.to_keyframe_id(key)
+        video_id, frame_idx = parse_keyframe_id(key)
+        if (video_id, frame_idx) not in self._frame_to_ordinal:
+            raise ContractError(
+                ErrorCode.KEYFRAME_NOT_FOUND,
+                f"{key}: map-keyframes/{video_id}.csv has no row with "
+                f"frame_idx={frame_idx}. The payload names a keyframe this bundle "
+                "does not contain; letting it through would put a key in the "
+                "stores that the Relational Map cannot resolve at scoring time.",
+            )
+        return build_keyframe_id(video_id, frame_idx)
+
     def to_sota_id(self, keyframe_id: str) -> str:
         """``L21_V001#000000`` -> ``L21_V001_001``. Only for calling back into Bảo's code."""
         video_id, frame_idx = parse_keyframe_id(keyframe_id)

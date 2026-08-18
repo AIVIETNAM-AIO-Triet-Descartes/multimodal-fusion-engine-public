@@ -1,0 +1,35 @@
+# CHỈ TRÍCH KEYFRAME BẰNG DAKE — batch 1 (873 video), chia 5 người theo ZIP
+# docs/triet/ke-hoach-offline-ingest.md §3, §5.6, §10.2
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# QUYẾT ĐỊNH CỦA LEAD (18-08-2026): dùng keyframe DAKE và **tự chạy detector**
+# trên chính bộ keyframe đó. KHÔNG dùng lại `objects/` của BTC — nó đánh địa
+# chỉ theo keyframe BTC nên không nói gì về keyframe của ta (§1.2).
+#
+# Bộ keyframe BTC vẫn có thể được nạp **về sau, vào một Modal Volume KHÁC**, để
+# so hiệu năng với DAKE (§3.7). Đó là việc riêng, không phải việc bây giờ, và
+# nó phải nằm ở volume/bundle khác — một bundle chỉ chứa một bộ keyframe.
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# NGUỒN DỮ LIỆU: tải trực tiếp từ `aic-data.ledo.io.vn`, **ẩn danh, không cần
+# xác thực** (dataset_report.md §A.1). Không Google Drive, không rclone, không
+# token nào. Đo được: 14 file `Videos_*.zip`, tổng 77,29 GB, đúng 873 video.
+#
+# VÌ SAO CHIA THEO ZIP chứ không theo video: BTC gom video thành 14 gói. Chia
+# theo video thì video của mỗi người rải khắp 14 gói, và **ai cũng phải tải gần
+# hết 77 GB** — đúng thứ mà chia việc sinh ra để tránh.
+
+bundle: aic_dake_r002_b1_v1
+keyframe_set: dake
+calibration_video: L21_V001
+
+assign: zips
+zip_inventory: config/zips_batch1.yaml
+
+# Một tầng. Thêm tầng vào đây là quay lại bài toán quota GPU ở §10.1 — N1 là
+# tầng DUY NHẤT không cần GPU.
+#
+# Bước kế tiếp đã chốt là `n4_objects` chạy trên chính bộ keyframe này, nhưng nó
+# cần TensorFlow + GPU nên đi bằng notebook khác (`00-master`), sau khi N1 xong.
+stages:
+  - n1_keyframes

@@ -6,6 +6,29 @@ chuỗi phụ thuộc.
 
 Kế hoạch dựng lại bộ notebook này cho 16 video: [ke-hoach-offline-ingest.md](../docs/triet/ke-hoach-offline-ingest.md).
 
+## Notebook của ta
+
+| Notebook | Dùng khi | Gói cần | Accelerator |
+|---|---|---|---|
+| `01-keyframes-dake-kaggle-modal.ipynb` | **N1/DAKE trên batch 1 — đang dùng** | 5 gói, không model | GPU T4; giải mã qua ffmpeg/NVDEC, có đường lùi CPU |
+| `00-master-ingest-kaggle-modal.ipynb` | 9 tầng — **chưa chuyển sang đường tải trực tiếp**, ô fetch đang chặn | cả stack (torch, TF, transformers…) | có tiêu |
+
+Notebook 01 tồn tại riêng vì N1 không nạp model nào — 5 gói thay vì cả stack.
+**Bật Accelerator = GPU không tự làm nó nhanh hơn**: `opencv-python` không có CUDA, nên GPU
+chỉ giúp nếu ffmpeg có NVDEC. Marker ghi `decode_backend` để biết đường nào đã chạy —
+xem [§10.4](../docs/triet/ke-hoach-offline-ingest.md).
+
+**Nguồn dữ liệu (18-08): tải thẳng từ `aic-data.ledo.io.vn`, ẩn danh — không Drive, không
+rclone, không token.** Đo bằng HTTP Range: 14 gói `Videos_*.zip`, 77,29 GB, đúng 873 video.
+Mọi mp4 đều STORED nên notebook lấy **từng video** bằng Range, không tải gói nào — đĩa cao
+nhất ~160 MB thay vì 24 GB.
+Kiểm kê ở `config/zips_batch1.yaml`, sinh lại bằng `scripts/make_zip_inventory.py`. §5.6
+ghi lại nguyên cái hiểu nhầm Drive/rclone để không ai đi lại đường đó.
+
+---
+
+## Notebook Bảo gửi
+
 | # | Notebook | Sinh ra | Model |
 |---|---|---|---|
 | 01 | `01-triet-dake-keyframes` | `keyframes/`, `manifest.csv`, `schema.sql`, `meta.json` → HF private | DAKE (không model) |
