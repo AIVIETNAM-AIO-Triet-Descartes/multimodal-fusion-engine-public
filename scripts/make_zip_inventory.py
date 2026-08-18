@@ -131,24 +131,44 @@ def main() -> None:
     for stem in names:
         url = f"{HOST}/{stem}.zip"
         infos, size = list_remote_zip(url)
-        mp4s = [i for i in infos if i.filename.lower().endswith(".mp4")]
-        stored = {i.compress_type for i in mp4s}
-        if stored - {0}:
-            # Every mp4 measured so far is STORED (ratio 1.0000), which is what
-            # makes per-video Range fetching possible at all. A compressed entry
-            # would need the whole archive again, so it must not pass silently.
-            raise SystemExit(
-                f"{stem}: co entry bi NEN (compress_type={stored}). "
-                "mfe.offline.source chi lay duoc entry STORED."
-            )
-        entries = {
-            PurePosixPath(i.filename).stem: (i.header_offset, i.file_size)
-            for i in sorted(mp4s, key=lambda i: i.filename)
-        }
-        inventory[f"{stem}.zip"] = {
-            "bytes": size, "videos": sorted(entries), "entries": entries,
-        }
-        print(f"{stem:<22} {size / 2**30:6.2f} GB  {len(entries):>4} video  STORED")
+        files = [i for i in infos if not i.is_dir()]
+        if args.kind == "Videos":
+            # One mp4 per video, STORED, so record where each one starts: that is
+            # what lets `mfe.offline.source` pull a single video by Range instead
+            # of downloading a 12 GB archive.
+            members_of = {
+                PurePosixPath(i.filename).stem: (i.header_offset, i.file_size)
+                for i in sorted(files, key=lambda i: i.filename)
+                if i.filename.lower().endswith(".mp4")
+            }
+            stored = {
+                i.compress_type for i in files if i.filename.lower().endswith(".mp4")
+            }
+            if stored - {0}:
+                raise SystemExit(
+                    f"{stem}: co entry bi NEN (compress_type={stored}). "
+                    "mfe.offline.source chi lay duoc entry STORED."
+                )
+            inventory[f"{stem}.zip"] = {
+                "bytes": size, "videos": sorted(members_of), "entries": members_of,
+            }
+            print(f"{stem:<22} {size / 2**30:6.2f} GB  {len(members_of):>4} video  STORED")
+        else:
+            # Keyframes and the metadata bundles hold thousands of small files per
+            # video (`keyframes/{video_id}/{n:03d}.jpg`), so per-file offsets are
+            # useless — 177.321 Range requests is not a transfer plan. Record only
+            # which videos each archive covers; the archive gets downloaded whole.
+            per_video: dict[str, int] = {}
+            for info in files:
+                parts = PurePosixPath(info.filename).parts
+                if len(parts) < 2:
+                    continue
+                per_video[parts[-2]] = per_video.get(parts[-2], 0) + 1
+            inventory[f"{stem}.zip"] = {
+                "bytes": size, "videos": sorted(per_video), "counts": per_video,
+            }
+            print(f"{stem:<22} {size / 2**30:6.2f} GB  {len(per_video):>4} video  "
+                  f"{len(files):>7,} file")
 
     total_videos = sum(len(b["videos"]) for b in inventory.values())
     total_bytes = sum(b["bytes"] for b in inventory.values())
@@ -177,9 +197,14 @@ def main() -> None:
         lines.append(f"  {name}:")
         lines.append(f"    bytes: {body['bytes']}")
         lines.append(f"    videos: [{', '.join(body['videos'])}]")
-        lines.append("    entries:   # video_id: [header_offset, bytes]")
-        for video_id, (offset, nbytes) in body["entries"].items():
-            lines.append(f"      {video_id}: [{offset}, {nbytes}]")
+        if "entries" in body:
+            lines.append("    entries:   # video_id: [header_offset, bytes]")
+            for video_id, (offset, nbytes) in body["entries"].items():
+                lines.append(f"      {video_id}: [{offset}, {nbytes}]")
+        if "counts" in body:
+            lines.append("    counts:   # video_id: so file")
+            for video_id, count in sorted(body["counts"].items()):
+                lines.append(f"      {video_id}: {count}")
     lines += ["", "# Can theo DUNG LUONG (xem balance_by_bytes).", "assignment:"]
     for member in members:
         lines.append(f"  {member}: [{', '.join(shares[member])}]")

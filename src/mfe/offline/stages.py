@@ -238,6 +238,82 @@ def stage_n1_keyframes(ctx: StageContext) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# N0 — import BTC's own keyframes and objects
+# ---------------------------------------------------------------------------
+
+
+def stage_n0_import_btc(ctx: StageContext) -> dict:
+    """Copy one video's shipped keyframes, objects and mapping onto the Volume.
+
+    No model, no decode — a transfer. It exists because BTC publishes its own
+    keyframe set alongside the videos, so the comparison bundle for §3.7 costs
+    only bandwidth. Building it was going to be the expensive half of "is DAKE
+    worth it"; it turns out to be the cheap half.
+
+    Reuses the marker protocol rather than being a one-off script, so this gets
+    the same resume behaviour, the same author check and the same
+    `verify_bundle.py` as every extraction stage. A transfer that dies half way
+    through 873 videos needs restart just as much as a decode does.
+
+    `ctx.params` must carry the three local directories a caller has already
+    unpacked from the archives:
+
+        keyframes_dir  keyframes/{video_id}/{n:03d}.jpg
+        objects_dir    objects/{video_id}/{n:03d}.json
+        map_csv        map-keyframes/{video_id}.csv
+    """
+    keyframes_dir = Path(ctx.params["keyframes_dir"])
+    objects_dir = Path(ctx.params.get("objects_dir", "")) if ctx.params.get("objects_dir") else None
+    map_csv = Path(ctx.params["map_csv"])
+
+    with Stopwatch() as timer:
+        # The mapping is BTC's, so the floor(pts*fps) check here is a real check
+        # against their numbers rather than a tautology — it is the one that
+        # catches an fps read off the wrong video (see `read_keyframes`).
+        keyframes = read_keyframes(map_csv, keyframes_dir)
+
+        missing = [kf.n for kf in keyframes if not kf.image.is_file()]
+        if missing:
+            raise RuntimeError(
+                f"{ctx.video_id}: thieu {len(missing)} anh keyframe "
+                f"(vd n={missing[:5]}). Giai nen chua xong — khong cam moc."
+            )
+
+        ctx.writer.write_file(map_csv, ctx.layout.map_keyframes(ctx.video_id))
+        images, image_bytes = ctx.writer.write_directory(
+            keyframes_dir, ctx.layout.keyframes_dir(ctx.video_id)
+        )
+
+        objects = 0
+        if objects_dir is not None and objects_dir.is_dir():
+            objects, _ = ctx.writer.write_directory(
+                objects_dir, ctx.layout.objects_dir(ctx.video_id)
+            )
+            if objects != images:
+                # `read_object_labels` addresses by the same ordinal as the image,
+                # so a count mismatch means some keyframe silently has no labels —
+                # and BM25 is sensitive to term counts, which would skew the very
+                # A/B this bundle exists to enable.
+                raise RuntimeError(
+                    f"{ctx.video_id}: {images} anh nhung {objects} file objects. "
+                    "Hai thu nay danh dia chi theo cung mot so thu tu `n`."
+                )
+
+    return ctx.writer.mark_done(
+        "n0_import_btc",
+        ctx.video_id,
+        keyframes=len(keyframes),
+        images=images,
+        objects=objects,
+        bytes=image_bytes,
+        fps=keyframes[0].fps if keyframes else None,
+        model="BTC cap san (khong trich)",
+        params={"source": "aic-data.ledo.io.vn"},
+        elapsed_s=timer.seconds,
+    )
+
+
+# ---------------------------------------------------------------------------
 # N2 — subtitles
 # ---------------------------------------------------------------------------
 
@@ -763,6 +839,7 @@ def stage_n6_bge_m3(ctx: StageContext) -> dict:
 
 
 STAGES = {
+    "n0_import_btc": stage_n0_import_btc,
     "n1_keyframes": stage_n1_keyframes,
     "n2_subtitles": stage_n2_subtitles,
     "n3_audio": stage_n3_audio,

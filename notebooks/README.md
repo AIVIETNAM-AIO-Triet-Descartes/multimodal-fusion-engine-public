@@ -10,7 +10,8 @@ Kế hoạch dựng lại bộ notebook này cho 16 video: [ke-hoach-offline-ing
 
 | Notebook | Dùng khi | Gói cần | Accelerator |
 |---|---|---|---|
-| `01-keyframes-dake-kaggle-modal.ipynb` | **N1/DAKE trên batch 1 — đang dùng** | 5 gói, không model | GPU T4; giải mã qua ffmpeg/NVDEC, có đường lùi CPU |
+| `02-keyframes-btc-import.ipynb` | **nhập keyframe+objects của BTC — đang dùng** | 5 gói, không model | bất kỳ — chuyển dữ liệu thuần |
+| `01-keyframes-dake-kaggle-modal.ipynb` | N1/DAKE trên batch 1 — chờ chốt ρ | 5 gói, không model | GPU T4; giải mã qua ffmpeg/NVDEC, có đường lùi CPU |
 | `00-master-ingest-kaggle-modal.ipynb` | 9 tầng — **chưa chuyển sang đường tải trực tiếp**, ô fetch đang chặn | cả stack (torch, TF, transformers…) | có tiêu |
 
 Notebook 01 tồn tại riêng vì N1 không nạp model nào — 5 gói thay vì cả stack.

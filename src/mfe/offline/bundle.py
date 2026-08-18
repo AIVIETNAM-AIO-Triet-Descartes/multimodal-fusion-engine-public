@@ -84,7 +84,7 @@ ARTIFACTS: dict[str, Artifact] = {
 }
 
 #: Stages that produce per-video directories rather than a `parts/` payload.
-DIRECTORY_STAGES = ("n1_keyframes",)
+DIRECTORY_STAGES = ("n1_keyframes", "n0_import_btc")
 
 #: Packages whose version changes the numbers. `merge_bundle.py` refuses a bundle
 #: whose shards disagree here; everything else only warns. Five people running
