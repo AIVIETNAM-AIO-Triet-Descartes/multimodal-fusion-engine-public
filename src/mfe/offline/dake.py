@@ -33,8 +33,18 @@ from mfe.contracts.errors import ContractError, ErrorCode
 
 logger = logging.getLogger(__name__)
 
-#: Fraction of source frames to keep. Paper value.
-RHO = 0.02
+#: Fraction of source frames to keep. **Paper says 0.02; we use 0.015.**
+#:
+#: Departure decided by the Lead on 18-08-2026 after the first real run: at the
+#: paper's settings batch 1 lands near 648.000 keyframes, ~6,9x what BTC ships,
+#: and that multiplies into every later stage — the detector, SigLIP, both OCR
+#: passes and ReCap all run once per keyframe.
+#:
+#: Measured on four cached size curves from four programmes, `rho=0.015` with
+#: `MAX_GAP_SECONDS=3.0` gives **71%** of the paper's output (per video: 70, 70,
+#: 72, 64%) — inside the half-to-three-quarters band the Lead asked for.
+RHO_PAPER = 0.02
+RHO = 0.015
 
 #: How many frames ahead `S(i, j)` averages over. Paper value.
 LOOKAHEAD = 3
@@ -50,11 +60,24 @@ MIN_GAP = 5
 MIN_K = 1
 
 #: The density guarantee: at least one keyframe in every window this many
-#: **seconds** wide. Paper states it as `2 x fps` frames. This is the constraint
-#: that turns DAKE from "2% of frames somewhere" into the promise the plan is
-#: actually built on — a bounded worst-case gap (§3.1: max 2.0s against BTC's
-#: measured median 3.36s and worst case 8.4s).
-MAX_GAP_SECONDS = 2.0
+#: **seconds** wide. **Paper says 2.0s; we use 3.0s.**
+#:
+#: The paper's wording, §5.1 page 10: it adopts rho=0.02 and additionally
+#: enforces at least one keyframe within every `2 x fps`-frame window, "for a
+#: near-perfect recall" — where recall means agreement with AutoShot, measured on
+#: **one** video. See §3.3.
+#:
+#: This knob is the one that was cut hardest, and deliberately. It is the
+#: *content-blind* half of the algorithm: it inserts frames purely to bound the
+#: gap, which is uniform sampling wearing DAKE's name, and measured on the first
+#: real run it contributed more than half the output. Cutting it removes mostly
+#: the part that is not DAKE; cutting `rho` would remove the part that is.
+#:
+#: 3.0s is the largest value that still beats BTC's **median** keyframe gap of
+#: 3.36s (worst case 8.4s). Going to 3.5s or 4.0s also lands in the target band
+#: but gives up the comparison that motivated DAKE in the first place (§3.1).
+MAX_GAP_SECONDS_PAPER = 2.0
+MAX_GAP_SECONDS = 3.0
 
 #: How the top-k is ranked. `"signed"` is the paper: `S(i, j)` keeps the sign of
 #: the size change, so frames whose size *rises* sharply rank high and frames

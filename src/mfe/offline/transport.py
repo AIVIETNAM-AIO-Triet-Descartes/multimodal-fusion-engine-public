@@ -195,14 +195,30 @@ class ModalVolumeTransport:
         volume_name: str,
         *,
         create_if_missing: bool = False,
+        version: int | None = None,
         dotenv_path: str | Path = ".env",
     ) -> None:
+        """`version=2` applies **only when the volume is created**.
+
+        Modal fixes the version at creation and offers no in-place upgrade — the
+        docs say plainly that there is no automated tool for it. So passing 2 at a
+        name that already exists as v1 changes nothing; switching means a new
+        volume and moving the data.
+
+        Which version matters here for one measured reason: v1 has a hard limit of
+        500,000 inodes, and the DAKE keyframe set for batch 1 lands near 648,000
+        (§10.3). v2 removes the total-file limit and caps only per-directory at
+        262,144 — our biggest directory is one video's keyframes, ~1,400 files.
+        """
         self.credential_source = ensure_modal_credentials(dotenv_path)
         import modal  # noqa: PLC0415 - heavy, and only needed on the real path
 
         self._modal = modal
         self.volume_name = volume_name
-        self.volume = modal.Volume.from_name(volume_name, create_if_missing=create_if_missing)
+        kwargs = {"create_if_missing": create_if_missing}
+        if version is not None:
+            kwargs["version"] = version
+        self.volume = modal.Volume.from_name(volume_name, **kwargs)
         logger.info(
             "Modal volume %r, token tu %s", volume_name, self.credential_source
         )
@@ -268,11 +284,15 @@ class ModalVolumeTransport:
 
 
 def build_transport(
-    kind: str, *, volume: str = "aic2026", local_root: str = "bundle_local"
+    kind: str,
+    *,
+    volume: str = "aic2026",
+    local_root: str = "bundle_local",
+    version: int | None = None,
 ) -> Transport:
     """`kind` is `"modal"` or `"local"`. The notebook takes this from one variable."""
     if kind == "modal":
-        return ModalVolumeTransport(volume, create_if_missing=True)
+        return ModalVolumeTransport(volume, create_if_missing=True, version=version)
     if kind == "local":
         return LocalDirTransport(local_root)
     raise ValueError(f"transport khong biet: {kind!r}; dung 'modal' hoac 'local'")

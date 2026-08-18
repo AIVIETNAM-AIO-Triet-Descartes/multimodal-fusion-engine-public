@@ -105,7 +105,7 @@ def ctx(tmp_path):
     writer = BundleWriter(transport, layout, "triet", tmp_path / "work")
     return StageContext(
         VIDEO, tmp_path / f"{VIDEO}.mp4", [], writer, layout, tmp_path / "work",
-        params={"rho": 0.02},
+        params={"rho": 0.015},
     )
 
 
@@ -144,9 +144,11 @@ class TestStageN1:
         assert stats["retrieve"] < stats["grab"] / 10
 
     def test_honours_rho_and_the_gap_bound(self, fake_cv2, ctx):
+        from mfe.offline.dake import MAX_GAP_SECONDS
+
         marker = stage_n1_keyframes(ctx)
-        assert marker["ratio"] >= 0.02
-        assert marker["max_gap_s"] <= 2.001
+        assert marker["ratio"] >= ctx.params["rho"]
+        assert marker["max_gap_s"] <= MAX_GAP_SECONDS + 0.001
         assert marker["source_frames"] == 3000
 
     def test_writes_one_image_per_selected_frame(self, fake_cv2, ctx):

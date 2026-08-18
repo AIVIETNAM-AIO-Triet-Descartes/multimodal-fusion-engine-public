@@ -19,7 +19,7 @@
 # theo video thì video của mỗi người rải khắp 14 gói, và **ai cũng phải tải gần
 # hết 77 GB** — đúng thứ mà chia việc sinh ra để tránh.
 
-bundle: aic_dake_r002_b1_v1
+bundle: aic_dake_r0015_b1_v1
 keyframe_set: dake
 calibration_video: L21_V001
 
@@ -33,3 +33,21 @@ zip_inventory: config/zips_batch1.yaml
 # cần TensorFlow + GPU nên đi bằng notebook khác (`00-master`), sau khi N1 xong.
 stages:
   - n1_keyframes
+
+# Tham số DAKE — CHỆCH KHỎI PAPER CÓ CHỦ Ý (paper: rho 0.02, gap 2.0s).
+#
+# Đo 18-08 trên 4 đường cong từ 4 chương trình: cặp này cho **71%** số keyframe
+# so với giá trị paper (từng video: 70 · 70 · 72 · 64%), nằm trong khoảng 1/2–3/4
+# Lead yêu cầu. Bản chạy đầu ra ~1.405 kf/video; giờ ~1.000.
+#
+# Vì sao cắt `max_gap_seconds` mạnh hơn `rho`: luật mật độ là phần **mù nội dung**
+# — nó chèn frame chỉ để chặn khoảng cách, tức lấy mẫu đều đội lốt DAKE, và đo
+# được là nó đóng góp quá nửa đầu ra. Cắt nó thì bỏ phần không phải DAKE; cắt
+# `rho` thì bỏ đúng phần là DAKE.
+#
+# Vì sao dừng ở 3,0s chứ không 3,5 hay 4,0s (cũng nằm trong khoảng): 3,0s là giá
+# trị lớn nhất còn **chặt hơn khoảng cách trung vị 3,36s của bộ BTC** — mà đó
+# chính là lý do chọn DAKE ngay từ đầu (§3.1).
+params:
+  rho: 0.015
+  max_gap_seconds: 3.0

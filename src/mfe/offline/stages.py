@@ -132,6 +132,8 @@ def stage_n1_keyframes(ctx: StageContext) -> dict:
     import cv2  # noqa: PLC0415
 
     from mfe.offline.dake import (
+        MAX_GAP_SECONDS,
+        RHO,
         cuda_decode_available,
         decode_frames,
         decode_selected,
@@ -141,7 +143,8 @@ def stage_n1_keyframes(ctx: StageContext) -> dict:
         video_fps,
     )
 
-    rho = ctx.params.get("rho", 0.02)
+    rho = ctx.params.get("rho", RHO)
+    max_gap = ctx.params.get("max_gap_seconds", MAX_GAP_SECONDS)
     rank_by = ctx.params.get("rank_by", "signed")
     backend = ctx.params.get("decode_backend", "auto")
     if backend == "auto":
@@ -167,7 +170,9 @@ def stage_n1_keyframes(ctx: StageContext) -> dict:
                 jpeg_sizes(decode_frames(str(ctx.video_path), backend=backend))
             )
             np.save(cache, np.asarray(sizes, dtype=np.int64))
-        picked = select_keyframes(sizes, fps=fps, rho=rho, rank_by=rank_by)
+        picked = select_keyframes(
+            sizes, fps=fps, rho=rho, max_gap_seconds=max_gap, rank_by=rank_by
+        )
 
         out_dir = ctx.workdir / "keyframes" / ctx.video_id
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -225,7 +230,7 @@ def stage_n1_keyframes(ctx: StageContext) -> dict:
             "rho": rho,
             "lookahead": 3,
             "min_gap": 5,
-            "max_gap_seconds": 2.0,
+            "max_gap_seconds": max_gap,
             "rank_by": rank_by,
         },
         elapsed_s=timer.seconds,

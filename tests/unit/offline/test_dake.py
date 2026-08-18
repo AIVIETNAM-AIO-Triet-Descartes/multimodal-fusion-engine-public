@@ -13,7 +13,13 @@ import math
 import pytest
 
 from mfe.contracts.errors import ContractError
-from mfe.offline.dake import pts_for_frame, select_keyframes, steepness
+from mfe.offline.dake import (
+    MAX_GAP_SECONDS,
+    RHO,
+    pts_for_frame,
+    select_keyframes,
+    steepness,
+)
 
 
 class TestSteepness:
@@ -88,24 +94,34 @@ class TestSelectKeyframes:
         assert len(picked) > 12
 
     @pytest.mark.parametrize("fps", [25.0, 30.0, 29.97, 26.44])
-    def test_the_two_second_bound_holds_in_seconds_not_frames(self, fps):
-        """Regression: the window was `round(2.0 * fps)`, which overshoots.
+    @pytest.mark.parametrize("bound", [2.0, 3.0])
+    def test_the_bound_holds_in_seconds_not_frames(self, fps, bound):
+        """Regression: the window was `round(bound * fps)`, which overshoots.
 
         60 frames at 29.97fps is 2.002s and 53 at 26.44 is 2.005s — and both of
         those rates are in batch 1. Small, but this bound is the entire reason
         DAKE was chosen over BTC's own keyframes (median 3.36s, worst 8.4s), so a
         bound the code itself exceeds is the wrong kind of small.
+
+        Parametrised over both the paper's 2.0s and our configured 3.0s, because
+        the defect was in the rounding, not in any particular value.
         """
-        picked = select_keyframes([100.0 + (i % 5) * 20 for i in range(2000)], fps=fps)
+        picked = select_keyframes(
+            [100.0 + (i % 5) * 20 for i in range(2000)], fps=fps, max_gap_seconds=bound
+        )
         gaps = [(b - a) / fps for a, b in zip(picked, picked[1:], strict=False)]
-        assert max(gaps) <= 2.0
+        assert max(gaps) <= bound
 
     def test_honours_the_max_gap_guarantee(self):
-        """The promise the whole plan rests on: worst-case gap 2.0s, against
-        BTC's measured median 3.36s and worst case 8.4s (§3.1)."""
+        """The promise the whole plan rests on, at whatever bound is configured.
+
+        Reads `MAX_GAP_SECONDS` rather than hardcoding it, so tuning the value
+        does not turn this into a test of last month's setting.
+        """
         sizes = [100.0 + (i % 3) * 10 for i in range(1000)]
-        fps, window = 25.0, 50
-        picked = select_keyframes(sizes, fps=fps, rho=0.02)
+        fps = 25.0
+        window = int(MAX_GAP_SECONDS * fps)
+        picked = select_keyframes(sizes, fps=fps, rho=RHO)
         assert picked[0] <= window - 1
         assert picked[-1] >= len(sizes) - window
         assert all(b - a <= window for a, b in zip(picked, picked[1:], strict=False))
@@ -121,9 +137,12 @@ class TestSelectKeyframes:
         have blown the keyframe budget by ~10x and dragged every downstream model
         along with it.
 
-        40 flat frames at 5fps: budget 4, window 10.
+        40 flat frames at 5fps with a 2s bound: budget 4, window 10. The bound is
+        passed explicitly — the defect was in the tie-breaking, not the value.
         """
-        picked = select_keyframes([100.0] * 40, fps=5.0, rho=0.1, min_gap=1)
+        picked = select_keyframes(
+            [100.0] * 40, fps=5.0, rho=0.1, min_gap=1, max_gap_seconds=2.0
+        )
         assert picked == [0, 1, 2, 3, 13, 23, 33]
 
     def test_honours_min_gap_within_the_budget(self):
@@ -155,6 +174,17 @@ class TestSelectKeyframes:
         common = {"fps": 1000.0, "rho": 0.02, "min_gap": 1}
         assert select_keyframes(sizes, rank_by="signed", **common) == [29]
         assert select_keyframes(sizes, rank_by="absolute", **common) == [59]
+
+    def test_the_configured_defaults_are_the_ones_the_lead_chose(self):
+        """Locks the departure from the paper, so it cannot drift back silently.
+
+        Paper: rho 0.02, bound 2.0s. Ours: 0.015 and 3.0s — measured at 71% of the
+        paper's keyframe count across four programmes, inside the half-to-three-
+        quarters band the Lead asked for, and still tighter than BTC's median gap
+        of 3.36s. Changing either number changes every downstream stage's cost, so
+        it should require editing a test that says why.
+        """
+        assert (RHO, MAX_GAP_SECONDS) == (0.015, 3.0)
 
     def test_is_deterministic(self):
         """Two runs on one video must give one keyframe set, or the bundle is not
