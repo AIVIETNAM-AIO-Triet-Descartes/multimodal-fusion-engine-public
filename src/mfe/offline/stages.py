@@ -33,6 +33,48 @@ from mfe.offline.bundle import BundleLayout, BundleWriter, Stopwatch
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# Model cache — nap mot lan, dung cho nhieu video
+# ---------------------------------------------------------------------------
+
+#: Loaded models, keyed by checkpoint. **Empty by default and never filled
+#: implicitly** — a stage only reaches in here, and only the caller decides when
+#: to let go (`unload_models`).
+#:
+#: Why this exists. The signature is `(ctx) -> marker`, one video per call, and
+#: loading inside the call was correct while the loop was video-major over nine
+#: stages: §4.2 blames "everything resident in one process" for the VRAM leaks,
+#: and freeing between stages is the fix. But on the BTC bundle the loop is
+#: **stage-major** — one model, every video — and there re-loading per video is
+#: measured at 5-16 hours per member of pure loading, doing nothing.
+#:
+#: So both shapes are needed, and which one applies is the notebook's business,
+#: not the stage's. A video-major notebook calls `unload_models()` between
+#: stages and gets exactly the old behaviour; a stage-major one calls it between
+#: *stages* and keeps the model across videos.
+_MODELS: dict[str, object] = {}
+
+
+def cached_model(key: str, build):
+    """The model for `key`, built once. `build` is only called on a miss."""
+    if key not in _MODELS:
+        logger.info("nap model %s", key)
+        _MODELS[key] = build()
+    return _MODELS[key]
+
+
+def unload_models() -> None:
+    """Drop every cached model and free the VRAM.
+
+    Call this when the *stage* changes, never merely when the video changes —
+    that distinction is the whole point of the cache.
+    """
+    if _MODELS:
+        logger.info("tha %d model", len(_MODELS))
+    _MODELS.clear()
+    free_gpu()
+
+
 @dataclass(frozen=True)
 class Keyframe:
     """One row of `map-keyframes`, plus where its image sits locally."""
@@ -337,7 +379,10 @@ def stage_n2_subtitles(ctx: StageContext) -> dict:
     window = ctx.params.get("window", "next_keyframe")
 
     with Stopwatch() as timer:
-        model = WhisperModel("large-v3", device="cuda", compute_type="float16")
+        model = cached_model(
+            "faster-whisper large-v3",
+            lambda: WhisperModel("large-v3", device="cuda", compute_type="float16"),
+        )
         segments, info = model.transcribe(
             str(ctx.audio_path()),
             language="vi",
@@ -413,8 +458,13 @@ def stage_n3_audio(ctx: StageContext) -> dict:
 
     with Stopwatch() as timer:
         audio, _ = librosa.load(str(ctx.audio_path()), sr=sample_rate, mono=True)
-        processor = ClapProcessor.from_pretrained(checkpoint)
-        model = ClapModel.from_pretrained(checkpoint).eval().cuda()
+        processor, model = cached_model(
+            checkpoint,
+            lambda: (
+                ClapProcessor.from_pretrained(checkpoint),
+                ClapModel.from_pretrained(checkpoint).eval().cuda(),
+            ),
+        )
 
         vectors: list[np.ndarray] = []
         for keyframe in ctx.keyframes:
@@ -464,7 +514,7 @@ def stage_n4_objects(ctx: StageContext) -> dict:
     threshold = ctx.params.get("score_min", 0.3)
 
     with Stopwatch() as timer:
-        detector = hub.load(handle).signatures["default"]
+        detector = cached_model(handle, lambda: hub.load(handle).signatures["default"])
         out_dir = ctx.workdir / "objects" / ctx.video_id
         out_dir.mkdir(parents=True, exist_ok=True)
         mapping: dict[str, str] = {}
@@ -524,8 +574,13 @@ def stage_n4_siglip(ctx: StageContext) -> dict:
     batch_size = ctx.params.get("batch_size", 16)
 
     with Stopwatch() as timer:
-        processor = AutoProcessor.from_pretrained(checkpoint)
-        model = AutoModel.from_pretrained(checkpoint).eval().cuda()
+        processor, model = cached_model(
+            checkpoint,
+            lambda: (
+                AutoProcessor.from_pretrained(checkpoint),
+                AutoModel.from_pretrained(checkpoint).eval().cuda(),
+            ),
+        )
         vectors: list[np.ndarray] = []
         images = ctx.images()
         for start in range(0, len(images), batch_size):
@@ -555,7 +610,7 @@ def stage_n5_ocr_easyocr(ctx: StageContext) -> dict:
     import easyocr  # noqa: PLC0415
 
     with Stopwatch() as timer:
-        reader = easyocr.Reader(["vi", "en"], gpu=True)
+        reader = cached_model("easyocr vi+en", lambda: easyocr.Reader(["vi", "en"], gpu=True))
         mapping: dict[str, str] = {}
         for keyframe in ctx.keyframes:
             text = " ".join(reader.readtext(str(keyframe.image), detail=0))
@@ -600,12 +655,17 @@ def stage_n5_ocr_qwen(ctx: StageContext) -> dict:
 
     checkpoint = "Qwen/Qwen2-VL-7B-Instruct"
     with Stopwatch() as timer:
-        processor = AutoProcessor.from_pretrained(checkpoint)
-        model = Qwen2VL.from_pretrained(
+        processor, model = cached_model(
             checkpoint,
-            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
-            device_map="auto",
-        ).eval()
+            lambda: (
+                AutoProcessor.from_pretrained(checkpoint),
+                Qwen2VL.from_pretrained(
+                    checkpoint,
+                    quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+                    device_map="auto",
+                ).eval(),
+            ),
+        )
 
         mapping: dict[str, str] = {}
         none_count = 0
@@ -695,22 +755,61 @@ def group_shots(
     return shots
 
 
-def stage_n6_recap(ctx: StageContext) -> dict:
-    """Recurrence captioning with a carried memory string, checkpointed per shot.
+def build_qwen_generate(checkpoint: str = "Qwen/Qwen2-VL-7B-Instruct", **kwargs):
+    """A `generate(prompts) -> list[str]` backed by a local Qwen2-VL.
 
-        (C_t, M_t) = LVLM(S_t, M_{t-1})
+    Loaded once and reused across every batch — the model is 5 GB in 4-bit and
+    reloading it per video would dwarf the work. Batch size is set by the caller
+    because it is VRAM-bound, not compute-bound: 7B weights plus KV cache for N
+    sequences of ~5k tokens against a 15 GB T4 is tight, and the working value has
+    to be measured rather than assumed.
+    """
+    import torch  # noqa: PLC0415
+    from PIL import Image  # noqa: PLC0415
+    from transformers import AutoProcessor, BitsAndBytesConfig  # noqa: PLC0415
+    from transformers import Qwen2VLForConditionalGeneration as Qwen2VL  # noqa: PLC0415
 
-    Checkpointing is finer here than anywhere else for two reasons that do not
-    apply to the other stages: the calls cost money, and the stage is **not
-    reproducible** — `M_t` differs between runs, so redoing a video from the start
-    yields different captions for the same shot, and the bundle stops being one
-    measurement (§5.3).
+    processor = AutoProcessor.from_pretrained(checkpoint)
+    processor.tokenizer.padding_side = "left"   # bat buoc khi generate theo lo
+    model = Qwen2VL.from_pretrained(
+        checkpoint,
+        quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+        device_map="auto",
+        **kwargs,
+    ).eval()
+
+    def generate(prompts):
+        texts, images = [], []
+        for prompt in prompts:
+            content = [{"type": "image"} for _ in prompt.images]
+            content.append({"type": "text", "text": prompt.text})
+            texts.append(
+                processor.apply_chat_template(
+                    [{"role": "user", "content": content}], add_generation_prompt=True
+                )
+            )
+            images.append([Image.open(path).convert("RGB") for path in prompt.images])
+
+        inputs = processor(
+            text=texts, images=images, padding=True, return_tensors="pt"
+        ).to(model.device)
+        with torch.no_grad():
+            generated = model.generate(**inputs, max_new_tokens=400, do_sample=False)
+        return processor.batch_decode(
+            generated[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True
+        )
+
+    return generate
+
+
+def build_gemini_generate(model_name: str = "gemini-2.5-flash"):
+    """A `generate(prompts) -> list[str]` backed by the Gemini API, one call each.
+
+    Kept alongside the local backend so the two can be compared on the same data,
+    the same prompt and the same failure counting — otherwise "which is better"
+    turns into comparing two runs that differ in more than the model.
     """
     from google import genai  # noqa: PLC0415
-
-    model_name = ctx.params.get("gemini_model", "gemini-2.5-flash")
-    language = ctx.params.get("caption_language", "vi")
-    gap = ctx.params.get("shot_gap_seconds", 2.0)
 
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
@@ -719,12 +818,100 @@ def stage_n6_recap(ctx: StageContext) -> dict:
         )
     client = genai.Client(api_key=api_key)
 
+    def generate(prompts):
+        answers = []
+        for prompt in prompts:
+            parts = [
+                genai.types.Part.from_bytes(data=path.read_bytes(), mime_type="image/jpeg")
+                for path in prompt.images
+            ]
+            response = client.models.generate_content(
+                model=model_name, contents=[*parts, prompt.text]
+            )
+            answers.append(response.text or "")
+        return answers
+
+    return generate
+
+
+def stage_n6_recap(ctx: StageContext) -> dict:
+    """Recurrence captioning for ONE video. See `mfe.offline.recap` for batching.
+
+        (C_t, M_t) = LVLM(S_t, M_{t-1})
+
+    This entry point exists for the per-video path (a handful of videos, or a
+    Gemini run where the rate limit makes batching pointless). At batch-1 scale
+    the local model has to run `recap.run_recap` over many videos at once — the
+    recurrence serialises one video, and one video at a time leaves the GPU idle
+    between short decodes (§4.6b).
+
+    Checkpointed **per shot**: this stage is not reproducible, so a lost round is
+    not re-doable work, it is different data.
+    """
+    from mfe.offline.recap import (  # noqa: PLC0415
+        VideoState,
+        run_recap,
+        summarise,
+    )
+
+    backend = ctx.params.get("recap_backend", "qwen")
+    language = ctx.params.get("caption_language", "vi")
+    gap = ctx.params.get("shot_gap_seconds", 2.0)
+
+    shots = build_shots(ctx, gap)
     checkpoint_path = ctx.workdir / f"recap_{ctx.video_id}.json"
-    state = (
+    saved = (
         json.loads(checkpoint_path.read_text(encoding="utf-8"))
         if checkpoint_path.is_file()
-        else {"shot_index": -1, "memory": "", "captions": {}}
+        else None
     )
+    state = VideoState.resume(ctx.video_id, shots, saved)
+
+    generate = ctx.params.get("generate")
+    if generate is None:
+        generate = (
+            build_qwen_generate(ctx.params.get("qwen_checkpoint", "Qwen/Qwen2-VL-7B-Instruct"))
+            if backend == "qwen"
+            else build_gemini_generate(ctx.params.get("gemini_model", "gemini-2.5-flash"))
+        )
+
+    def save(current: VideoState) -> None:
+        checkpoint_path.write_text(
+            json.dumps(current.to_checkpoint(), ensure_ascii=False), encoding="utf-8"
+        )
+
+    with Stopwatch() as timer:
+        run_recap([state], generate, language=language, batch_videos=1, on_shot=save)
+
+    ctx.writer.write_file(checkpoint_path, ctx.layout.recap_memory(ctx.video_id))
+    report = summarise([state])
+    return ctx.writer.write_text_part(
+        "dense_captions",
+        ctx.video_id,
+        state.captions,
+        model=(
+            ctx.params.get("qwen_checkpoint", "Qwen/Qwen2-VL-7B-Instruct")
+            if backend == "qwen"
+            else ctx.params.get("gemini_model", "gemini-2.5-flash")
+        ),
+        params={
+            "backend": backend,
+            "language": language,
+            "shots": report["shots"],
+            "shot_segmentation": f"keyframe gap <= {gap}s (xap xi AutoShot)",
+            "context_images_per_shot": 4,
+            # The number that says whether a 7B model can hold this together.
+            "parse_failures": report["parse_failures"],
+            "parse_failure_rate": report["parse_failure_rate"],
+            "empty_captions": report["empty_captions"],
+        },
+        elapsed_s=timer.seconds,
+    )
+
+
+def build_shots(ctx: StageContext, gap_seconds: float = 2.0) -> list:
+    """Group this video's keyframes into shots and attach the speech they cover."""
+    from mfe.offline.recap import Shot  # noqa: PLC0415
 
     segments_path = ctx.workdir / f"segments_{ctx.video_id}.json"
     spans = (
@@ -732,78 +919,26 @@ def stage_n6_recap(ctx: StageContext) -> dict:
         if segments_path.is_file()
         else []
     )
-
-    shots = group_shots(ctx.keyframes, gap)
-    tongue = "tiếng Việt" if language == "vi" else "English"
-    with Stopwatch() as timer:
-        for shot_index, members in enumerate(shots):
-            if shot_index <= state["shot_index"]:
-                continue
-            start = ctx.keyframes[members[0]].pts_time
-            end = ctx.keyframes[members[-1]].pts_time
-            speech = " ".join(
-                s["text"] for s in spans if s["end"] > start and s["start"] <= end + gap
+    shots = []
+    for index, members in enumerate(group_shots(ctx.keyframes, gap_seconds)):
+        start = ctx.keyframes[members[0]].pts_time
+        end = ctx.keyframes[members[-1]].pts_time
+        shots.append(
+            Shot(
+                index=index,
+                keyframe_ids=[
+                    build_keyframe_id(ctx.video_id, ctx.keyframes[i].frame_idx)
+                    for i in members
+                ],
+                image_paths=[ctx.keyframes[i].image for i in members],
+                speech=" ".join(
+                    s["text"] for s in spans if s["end"] > start and s["start"] <= end + gap_seconds
+                ),
+                start=start,
+                end=end,
             )
-            prompt = (
-                f"Bạn đang mô tả các cảnh liên tiếp của một video.\n"
-                f"TRÍ NHỚ (bối cảnh đã tích luỹ): {state['memory'] or '(chưa có)'}\n"
-                f"LỜI THOẠI trong đoạn này: {speech or '(không có)'}\n\n"
-                f"Viết mô tả bằng {tongue} cho cảnh này: thực thể, thuộc tính, tương tác. "
-                f"Dùng trí nhớ để HIỂU cảnh, nhưng KHÔNG nhắc tới nó trong mô tả.\n"
-                f"Sau đó cập nhật trí nhớ: giữ cái còn liên quan, bỏ cái đã cũ.\n"
-                f'Trả về JSON: {{"caption": "...", "memory": "..."}}'
-            )
-            images = [
-                genai.types.Part.from_bytes(
-                    data=ctx.keyframes[i].image.read_bytes(), mime_type="image/jpeg"
-                )
-                for i in members[:4]
-            ]
-            response = client.models.generate_content(
-                model=model_name, contents=[*images, prompt]
-            )
-            body = _parse_json_answer(response.text)
-            caption = body.get("caption", "").strip()
-            state["memory"] = body.get("memory", state["memory"])
-            state["shot_index"] = shot_index
-            for i in members:
-                if caption:
-                    state["captions"][
-                        build_keyframe_id(ctx.video_id, ctx.keyframes[i].frame_idx)
-                    ] = caption
-            checkpoint_path.write_text(
-                json.dumps(state, ensure_ascii=False), encoding="utf-8"
-            )
-
-    ctx.writer.write_file(checkpoint_path, ctx.layout.recap_memory(ctx.video_id))
-    return ctx.writer.write_text_part(
-        "dense_captions",
-        ctx.video_id,
-        state["captions"],
-        model=model_name,
-        params={
-            "language": language,
-            "shots": len(shots),
-            "shot_segmentation": f"keyframe gap <= {gap}s (xap xi AutoShot)",
-            "context_images_per_shot": 4,
-        },
-        elapsed_s=timer.seconds,
-    )
-
-
-def _parse_json_answer(text: str) -> dict:
-    """Pull the JSON object out of an LLM answer, tolerating fences.
-
-    Returns `{}` rather than raising: one unparseable shot must not lose the
-    whole video's memory chain, and the caller records an empty caption, which
-    shows up as a count in the manifest.
-    """
-    cleaned = (text or "").strip().removeprefix("```json").removeprefix("```").removesuffix("```")
-    try:
-        return json.loads(cleaned)
-    except json.JSONDecodeError:
-        logger.warning("ReCap tra ve khong phai JSON: %s", cleaned[:120])
-        return {}
+        )
+    return shots
 
 
 def stage_n6_bge_m3(ctx: StageContext) -> dict:

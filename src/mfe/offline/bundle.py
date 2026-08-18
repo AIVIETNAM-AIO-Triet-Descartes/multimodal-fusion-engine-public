@@ -238,6 +238,12 @@ class ShardPlan:
     #: every one of the five the whole group.
     zip_videos: dict[str, list[str]] = field(default_factory=dict)
 
+    #: Exact size of each archive, measured by `make_zip_inventory.py`. The only
+    #: thing that tells a finished download from a plausible-looking one: `wget
+    #: -c` resuming against a server that ignores `Range` appends a second copy
+    #: of the body instead of continuing, and the file then looks complete.
+    zip_bytes: dict[str, int] = field(default_factory=dict)
+
     def zips_for(self, member: str) -> list[tuple[str, str]]:
         """`[(zip name, url), …]` this member must download. Empty if not zip-split."""
         return [(name, self.zip_urls[name]) for name in self.zips.get(member, [])]
@@ -342,6 +348,7 @@ def load_shard_plan(
             "zips": zips,
             "zip_urls": {name: f"{host}/{name}" for name in book["zips"]},
             "zip_videos": {name: list(body["videos"]) for name, body in book["zips"].items()},
+            "zip_bytes": {name: int(body["bytes"]) for name, body in book["zips"].items()},
         }
     elif mode == "round_robin":
         names = list(raw["members"])
@@ -685,18 +692,50 @@ class BundleWriter:
 
     # -- manifest ----------------------------------------------------------
 
-    def write_part_manifest(self, video_id: str, markers: list[dict], keyframes: int) -> dict:
+    def write_part_manifest(
+        self, video_id: str, markers: list[dict], keyframes: int, *, merge: bool = False
+    ) -> dict:
+        """The per-video manifest. `merge=True` keeps artifacts already recorded.
+
+        Needed as soon as **one bundle is filled by more than one pass**, which
+        is exactly the shape of the BTC bundle: `02` imports the keyframes, `03`
+        adds SigLIP and the two OCR sources, `04` adds subtitles and CLAP. All
+        three write `part-manifest/{video}.json`, and without merging each pass
+        *erases* the artifacts of the ones before it.
+
+        That erasure is unrecoverable in practice. The markers stay on the
+        Volume, so `StageStatus` correctly reports the work as done and no
+        re-run will ever regenerate the manifest entry — the bundle ends up
+        holding data its own manifest does not mention.
+
+        Off by default because a single-pass bundle writes every artifact in one
+        call, and there the read-back is a wasted round trip per video.
+        """
+        artifacts: dict[str, dict] = {}
+        if merge:
+            local = self.workdir / f"prev_manifest_{video_id}.json"
+            try:
+                self.transport.get(self.layout.part_manifest(video_id), local)
+                artifacts = json.loads(local.read_text(encoding="utf-8")).get("artifacts", {})
+            except Exception:  # noqa: BLE001 - chua co manifest la truong hop binh thuong
+                artifacts = {}
+            finally:
+                local.unlink(missing_ok=True)
+
+        artifacts.update(
+            {
+                m["artifact"]: {k: v for k, v in m.items() if k not in ("video_id", "stage")}
+                for m in markers
+                if "artifact" in m
+            }
+        )
         manifest = {
             "video_id": video_id,
             "author": self.member,
             "bundle": self.layout.bundle,
             "key_format": "keyframe_id",
             "counts": {"keyframes": keyframes},
-            "artifacts": {
-                m["artifact"]: {k: v for k, v in m.items() if k not in ("video_id", "stage")}
-                for m in markers
-                if "artifact" in m
-            },
+            "artifacts": artifacts,
             "env": freeze_environment(),
             "generated_at": utc_now(),
         }

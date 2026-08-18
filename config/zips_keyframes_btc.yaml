@@ -938,9 +938,18 @@ zips:
       L30_V096: 84
 
 # Can theo DUNG LUONG (xem balance_by_bytes).
+# HAI NGUOI, khong phai nam — Lead giao viec bundle BTC cho trong + quang
+# (19-08-2026). Xem notebooks/btc/giao-viec-trong-quang.md.
+#
+# Vi sao khong de nguyen 5 nguoi roi bao 2 nguoi lam phan cua ho: mot video co
+# dung MOT `author` trong `part-manifest`, va `merge.check_ownership` tu choi
+# shard co author khac nguoi duoc giao. Bang phan cong PHAI khop voi ai that su
+# ghi, neu khong buoc gop tu choi ca bundle.
+#
+# CAN CA HAI TRUC, do duoc:
+#   N4/N5 chay theo TUNG ANH   -> trong 88.664 anh  | quang 88.657 anh
+#   N2/N3 chay theo THOI LUONG -> trong 38,94 GB    | quang 38,34 GB video goc
+# Chia theo dung luong zip keyframe mot minh se lech o truc thu hai.
 assignment:
-  triet: [Keyframes_L25.zip]
-  trong: [Keyframes_L22.zip, Keyframes_L23.zip, Keyframes_L24.zip, Keyframes_L29.zip]
-  quang: [Keyframes_L21.zip, Keyframes_L26_c.zip, Keyframes_L28.zip]
-  bao: [Keyframes_L26_a.zip, Keyframes_L26_d.zip, Keyframes_L30.zip]
-  dat: [Keyframes_L26_b.zip, Keyframes_L26_e.zip, Keyframes_L27.zip]
+  trong: [Keyframes_L21.zip, Keyframes_L23.zip, Keyframes_L24.zip, Keyframes_L25.zip, Keyframes_L26_b.zip, Keyframes_L29.zip, Keyframes_L30.zip]
+  quang: [Keyframes_L22.zip, Keyframes_L26_a.zip, Keyframes_L26_c.zip, Keyframes_L26_d.zip, Keyframes_L26_e.zip, Keyframes_L27.zip, Keyframes_L28.zip]

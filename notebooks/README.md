@@ -1,20 +1,86 @@
 # Notebook trích xuất — cái nào sinh ra cái gì
 
-Đọc ngày 17-08-2026. Bốn notebook `bao-*` do Nhật Bảo gửi; `01-triet-dake-*` do nhóm ta tự
-viết. Tên file cũ là tên Kaggle tự đặt (`notebook53b1574439`…), đã đổi theo thứ hạng trong
-chuỗi phụ thuộc.
+Kế hoạch: [ke-hoach-offline-ingest.md](../docs/triet/ke-hoach-offline-ingest.md) — §7.1 nói riêng
+về việc chia thư mục dưới đây.
 
-Kế hoạch dựng lại bộ notebook này cho 16 video: [ke-hoach-offline-ingest.md](../docs/triet/ke-hoach-offline-ingest.md).
+## Bố cục — chia theo PHƯƠNG ÁN, không theo số thứ tự
 
-## Notebook của ta
+Hai phương án keyframe, **hai Modal Volume riêng**, và không bao giờ dùng chung bundle: ảnh và
+`objects/` đều đánh địa chỉ theo số thứ tự trích `n`, nên trộn hai bộ là bundle không còn khớp
+`map-keyframes` của chính nó (§1.2). Thư mục phản ánh đúng ranh giới đó.
 
-| Notebook | Dùng khi | Gói cần | Accelerator |
+```
+notebooks/
+├── btc/         ĐANG CHẠY — dùng lại bộ keyframe của BTC   -> volume keyframes-btc
+├── dake/        chờ chốt ρ  — tự trích bằng DAKE            -> volume aic2026
+├── reference/   CHỈ ĐỂ ĐỌC — bản gốc Bảo gửi, có lỗi đã ghi
+└── requirements-kaggle*.txt        (dùng chung, KHÔNG nằm trong btc/ hay dake/)
+```
+
+**Vì sao requirements ở gốc.** `requirements-kaggle-nomodel.txt` được **cả hai** phương án dùng
+(`dake/01` và `btc/02` đều không nạp model nào), nên nó không thuộc phương án nào — tên cũ của nó
+là `-keyframes` và cái tên đó nói sai. Bản `.lock` của §2.5 cũng nằm ở đây: một môi trường cho
+cả năm người, không phải một môi trường mỗi thư mục.
+
+| File | Dùng bởi |
+|---|---|
+| `requirements-kaggle-nomodel.txt` | `dake/01`, `btc/02` — không model |
+| `requirements-kaggle-btc-images.txt` | `btc/03` — torch + transformers + easyocr |
+| `requirements-kaggle-btc-video.txt` | `btc/04` — faster-whisper + CLAP |
+| `requirements-kaggle.txt` | `dake/00` — cả stack; là nguồn của `requirements-kaggle.lock.txt` |
+
+> Số đầu tên file **không** phải thứ tự toàn cục nữa, chỉ là thứ tự trong thư mục của nó. Trong
+> `dake/` thì `01` chạy TRƯỚC `00` (00 là notebook 9 tầng, dùng sau khi ρ chốt).
+
+---
+
+## `btc/` — dùng lại bộ keyframe của BTC, ba lượt theo thứ tự này
+
+Volume `keyframes-btc` (v2), bundle `aic_btc_b1_v1`. **Cả ba dùng chung một cách chia người**;
+đổi `MEMBER` ở ô đầu là ra đúng phần việc quen thuộc ở mọi lượt.
+
+| # | Notebook | Sinh ra | Gói cần | Đầu vào lấy ở đâu |
+|---|---|---|---|---|
+| 1 | `btc/02-keyframes-btc-import.ipynb` | ảnh keyframe, `objects/`, `map-keyframes` | `-nomodel` | `Keyframes_*.zip` + `objects-*.zip` |
+| 2 | `btc/03-btc-siglip-ocr.ipynb` | `siglip_vectors`, `ocr_text`, `sviptr_ocr` | `-btc-images` | tải lại `Keyframes_*.zip` |
+| 3 | `btc/04-btc-subtitles-audio.ipynb` | `subtitle_segments`, `subtitles`, `audio_features` | `-btc-video` | **từng video** qua HTTP Range |
+
+`n4_objects` không có ở lượt nào: BTC phát hành sẵn nhãn, lượt 1 nạp chúng. Chạy detector của ta
+lên chính bộ keyframe này là phép đo khác (§3.6). `n6_recap`/`n6_bge_m3` do Lead hoãn.
+
+**Lượt 2 và 3 không đọc ảnh từ Volume.** Ở đường BTC, Volume là ghi-một-chiều: kéo ảnh về là
+~177.000 lần `read_file`, còn tải lại gói là 1,4–5,7 GB có resume.
+
+> ⚠️ **Lượt 3 chia người theo gói KEYFRAME dù nó ăn video.** Không phải nhầm: nó lấy từng video
+> bằng Range nên gói không còn ảnh hưởng băng thông, còn `part-manifest` chỉ ghi **một**
+> `author` và `check_ownership` từ chối nếu author khác người được giao. Chia lại theo gói
+> video (`zips_batch1.yaml`) lệch tới mức `bao` trùng **0** video — làm thế là hỏng cả bundle.
+> Khoá bằng `tests/unit/offline/test_multipass_bundle.py`.
+
+---
+
+## `dake/` — tự trích keyframe bằng DAKE
+
+Volume `aic2026` (v2), bundle `aic_dake_r0015_b1_v1`. **Cách chia người khác `btc/`** (theo gói
+`Videos_*.zip` thay vì `Keyframes_*.zip`) — hai bundle khác nhau nên không sao, nhưng đừng trộn
+hai bảng phân công vào cùng một bundle (§7.1).
+
+| Thứ tự | Notebook | Dùng khi | Gói cần |
 |---|---|---|---|
-| `02-keyframes-btc-import.ipynb` | **nhập keyframe+objects của BTC — đang dùng** | 5 gói, không model | bất kỳ — chuyển dữ liệu thuần |
-| `01-keyframes-dake-kaggle-modal.ipynb` | N1/DAKE trên batch 1 — chờ chốt ρ | 5 gói, không model | GPU T4; giải mã qua ffmpeg/NVDEC, có đường lùi CPU |
-| `00-master-ingest-kaggle-modal.ipynb` | 9 tầng — **chưa chuyển sang đường tải trực tiếp**, ô fetch đang chặn | cả stack (torch, TF, transformers…) | có tiêu |
+| 1 | `dake/01-keyframes-dake-kaggle-modal.ipynb` | N1/DAKE trên batch 1 — **chờ chốt ρ** | `-nomodel`; GPU T4 qua ffmpeg/NVDEC, có đường lùi CPU |
+| 2 | `dake/00-master-ingest-kaggle-modal.ipynb` | 9 tầng trong một vòng — ⛔ **ô fetch đang `raise`** | `requirements-kaggle.txt`, cả stack |
 
-Notebook 01 tồn tại riêng vì N1 không nạp model nào — 5 gói thay vì cả stack.
+`00` chưa chuyển sang đường tải trực tiếp nên chưa chạy được. Nó vẫn ở đây vì nó là chỗ duy nhất
+chạy cả 9 tầng theo một vòng-theo-video, và đó là hình dạng cần cho các tầng model của bộ DAKE.
+
+**Model nạp một lần cho cả phiên — nhưng chỉ ở `btc/`.** `stages.py` có cache theo checkpoint.
+`btc/03` và `btc/04` đổi **video** mỗi bước nên giữ model qua các video, chỉ `unload_models()` khi
+hết phiên; nạp lại theo từng video tốn **5–16 giờ mỗi người chỉ để nạp** (đo trên số video thật).
+`dake/00` đổi **tầng** mỗi bước nên gọi `unload_models()` sau mỗi tầng — ở đó TF và torch nằm
+chung process, đúng trường hợp §4.2 mô tả. Dùng `free_gpu()` ở vòng lặp theo tầng là **sai**: nó
+không thả cache, và 9 model sẽ tích lại.
+
+Notebook `dake/01` tồn tại riêng vì N1 không nạp model nào — 5 gói thay vì cả stack.
 **Bật Accelerator = GPU không tự làm nó nhanh hơn**: `opencv-python` không có CUDA, nên GPU
 chỉ giúp nếu ffmpeg có NVDEC. Marker ghi `decode_backend` để biết đường nào đã chạy —
 xem [§10.4](../docs/triet/ke-hoach-offline-ingest.md).
@@ -28,7 +94,19 @@ ghi lại nguyên cái hiểu nhầm Drive/rclone để không ai đi lại đư
 
 ---
 
-## Notebook Bảo gửi
+## `reference/` — bản gốc, CHỈ ĐỂ ĐỌC
+
+Đọc ngày 17-08-2026. Bốn notebook `bao-*` do Nhật Bảo gửi; `01-triet-dake-keyframes` do Claude web
+viết cho nhóm ta. Tên file cũ là tên Kaggle tự đặt (`notebook53b1574439`…), đã đổi theo thứ hạng
+trong chuỗi phụ thuộc.
+
+> **Cả năm cái đều KHÔNG chạy được như đang có**, và đó là lý do chúng nằm riêng một thư mục thay
+> vì lẫn vào `btc/` hoặc `dake/`. Lỗi của từng cái ghi bên dưới: notebook 03 chưa từng chạy thành
+> công (3/3 video lỗi mà vẫn in "HOÀN TẤT!"), notebook 04 ghi file pickle, `01-triet-dake` lệch
+> hợp đồng ở 5 chỗ kể cả công thức DAKE. Chúng là **bằng chứng và tài liệu tham khảo**, không phải
+> đường chạy.
+>
+> `01-triet-dake-keyframes` bị thay bởi `dake/01-keyframes-dake-kaggle-modal.ipynb`.
 
 | # | Notebook | Sinh ra | Model |
 |---|---|---|---|

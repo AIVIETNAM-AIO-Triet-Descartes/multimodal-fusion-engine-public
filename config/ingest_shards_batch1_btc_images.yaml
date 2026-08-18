@@ -1,0 +1,43 @@
+# BUNDLE BTC — CÁC TẦNG ĂN ẢNH KEYFRAME (SigLIP + hai nguồn OCR)
+# docs/triet/ke-hoach-offline-ingest.md §2.1, §7
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# CÙNG bundle, CÙNG volume, CÙNG cách chia người như `ingest_shards_batch1_btc`.
+# Đây là lượt thứ hai trên chính bộ keyframe vừa nạp, không phải bộ khác.
+#
+# Bộ keyframe của BTC là CỐ ĐỊNH: nó không phụ thuộc ρ, không phụ thuộc ngưỡng
+# mật độ, không phụ thuộc bất cứ tham số DAKE nào còn đang hiệu chỉnh. Nên mọi
+# thứ trích ở đây là kết quả cuối, không phải bản nháp chờ chốt tham số.
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# `n4_objects` KHÔNG có trong danh sách: BTC phát hành sẵn nhãn object và lượt
+# `n0_import_btc` đã nạp chúng. Chạy detector của ta lên chính bộ keyframe này
+# là một phép đo KHÁC (§3.6 — tách "khác detector" khỏi "khác keyframe"), nó
+# ghi ra artifact khác, và nó không phải việc của lượt này.
+#
+# ẢNH LẤY TỪ ĐÂU: tải lại `Keyframes_*.zip` — KHÔNG kéo về từ Modal Volume.
+# Volume ở đường BTC là ghi-một-chiều: kéo về là ~177.000 lần `read_file`, còn
+# tải lại gói là 1,4–6 GB mỗi người, có resume, và BTC vẫn đang phát hành.
+
+bundle: aic_btc_b1_v1
+keyframe_set: btc
+calibration_video: L21_V001
+
+assign: zips
+zip_inventory: config/zips_keyframes_btc.yaml
+
+# THỨ TỰ NÀY CÓ Ý NGHĨA — vòng lặp chạy theo TẦNG, không theo video (mỗi tầng
+# quét hết video của một gói rồi mới sang tầng sau). Nạp lại model cho từng
+# video tốn 5–16 giờ mỗi người CHỈ để nạp; theo tầng thì mỗi model nạp một lần.
+# Rẻ trước, đắt sau: hỏng phiên ở tầng cuối thì hai tầng đầu vẫn còn.
+stages:
+  - n4_siglip          # ~1 ảnh/40ms, model 1,1 GB
+  - n5_ocr_easyocr     # nhanh, CPU-GPU hỗn hợp
+  - n5_ocr_qwen        # CHẬM NHẤT — 7B 4-bit, sinh token cho từng ảnh
+
+extras:
+  map_keyframes: https://aic-data.ledo.io.vn/map-keyframes-aic25-b1.zip
+
+params:
+  n4_siglip:
+    batch_size: 32
