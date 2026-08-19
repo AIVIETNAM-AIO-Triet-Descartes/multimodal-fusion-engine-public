@@ -41,3 +41,12 @@ extras:
 params:
   n4_siglip:
     batch_size: 32
+  n5_ocr_qwen:
+    # Đo được 19-08: một ảnh một lần `generate()` cho 10,8 giây/ảnh trên T4, tức
+    # ~532 giờ GPU cho 177.321 keyframe của batch 1. Tầng giờ gộp lô.
+    #
+    # Con số này BỊ CHẶN BỞI VRAM, không bởi tính toán, nên nó phải được ĐO chứ
+    # không suy ra. Tầng tự hạ nửa lô khi OOM rồi thử lại chính lô đó, và ghi giá
+    # trị CUỐI + số lần hạ vào marker (`batch_size`, `oom_retries`) — nên một lần
+    # chạy bị hạ lô không trông giống một lần chạy sạch.
+    batch_size: 8

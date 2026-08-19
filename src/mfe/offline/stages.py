@@ -647,10 +647,78 @@ def stage_n5_ocr_easyocr(ctx: StageContext) -> dict:
     )
 
 
-_QWEN_PROMPT = (
-    "Transcribe ALL visible text in this image exactly as written, keeping "
-    "Vietnamese diacritics. If there is no text, answer exactly: None"
-)
+#: Hai buoc, va buoc 1 la ly do buoc 2 hoat dong.
+#:
+#: Ban dau prompt hoi thang "chep chu, khong co thi tra loi None". Do duoc tren
+#: `L21_V001`: model tra "None" cho **305/307** anh, trong khi easyocr tim thay
+#: chu tren **ca 307** anh cua chinh bo do. Cung anh, mot model thay chu khap
+#: noi, model kia khong thay gi — nen loi nam o prompt, khong o anh.
+#:
+#: Hai thay doi, moi cai chua mot nguyen nhan:
+#:
+#: 1. **Bo duong thoat "None".** Cho san mot token de bo cuoc thi mot model 7B
+#:    luong tu 4-bit se dung no. Khong co chu thi de trong sau `CHU:`, va cho
+#:    tang nay dem so dong trong — im lang tu nhien, khong phai mot tu ma phep
+#:    hau xu ly phai doan.
+#: 2. **Buoc dinh vi truoc buoc chep.** Prompt cua Bao chay duoc tren dung bo
+#:    anh nay (41 khoa co chu that, 153 khoa watermark) vi no bat model MO TA
+#:    anh truoc. Ta khong muon caption o day (§2.2 — caption va ocr_sviptr phai
+#:    la hai lan sinh doc lap), nen buoc 1 chi hoi CHU NAM O DAU. Duoc phan chu
+#:    y vao anh ma khong sinh ra caption.
+_QWEN_PROMPT = """Ảnh này là một khung hình từ bản tin truyền hình Việt Nam.
+BƯỚC 1 — liệt kê các vùng có chữ: logo kênh, đồng hồ, thanh tin chạy, tiêu đề, \
+phụ đề, biển hiệu, chữ trên vật thể. Nếu không có vùng nào, ghi: khong
+BƯỚC 2 — chép lại CHÍNH XÁC toàn bộ chữ đã thấy, giữ nguyên dấu tiếng Việt. \
+Không dịch, không giải thích, không mô tả hình ảnh.
+Trả về đúng hai dòng:
+VUNG: <các vùng>
+CHU: <toàn bộ chữ>"""
+
+#: Tu ma model dung khi bo cuoc, du prompt khong con moi no. Bat de DEM, khong
+#: de tin: `"BARBER SHOP\nNone"` la cau tra loi CO chu bi dan them mot tu rac —
+#: phep loc cu chi so sanh voi CA chuoi nen no di thang vao index BM25.
+_BAIL_WORDS = {"none", "khong", "không", "no text", "n/a", "-", "empty"}
+
+#: Anh moi lan `generate()`. Do duoc: mot anh mot lan la **10,8 giay/anh** tren
+#: T4, tuc ~532 gio GPU cho 177.321 keyframe cua batch 1. Chan boi VRAM chu khong
+#: boi tinh toan, nen gia tri lam viec phai DO — tang tu dong ha lo khi OOM va
+#: ghi gia tri cuoi vao marker.
+OCR_BATCH = 8
+
+
+def parse_qwen_ocr(text: str) -> tuple[str, bool]:
+    """`(chu doc duoc, co bo cuoc)` tu cau tra loi tho cua Qwen2-VL.
+
+    Doc phan sau `CHU:` khi co, con khong thi lay ca cau tra loi — model khong
+    luon giu dinh dang, va mot cau tra loi khong dinh dang van co the chua chu
+    that. Sau do go cac tu bo cuoc **o tung dong**, vi cho ma phep loc cu that
+    bai la khi model tra ca chu that VA tu bo cuoc trong cung cau tra loi.
+    """
+    cleaned = (text or "").strip()
+    for marker in ("CHU:", "CHỮ:", "TEXT:"):
+        if marker in cleaned:
+            cleaned = cleaned.split(marker, 1)[1]
+            break
+    else:
+        # Khong co nhan: bo dong VUNG neu no lot vao, giu phan con lai.
+        cleaned = "\n".join(
+            line
+            for line in cleaned.splitlines()
+            if not line.strip().upper().startswith(("VUNG:", "VÙNG:", "REGION:"))
+        )
+
+    kept: list[str] = []
+    bailed = False
+    for raw in cleaned.splitlines():
+        line = raw.strip().strip("*").strip()
+        if not line:
+            continue
+        if line.lower().strip(" .:\"'") in _BAIL_WORDS:
+            bailed = True
+            continue
+        kept.append(line)
+    out = "\n".join(kept).strip()
+    return out, bailed or not out
 
 
 def stage_n5_ocr_qwen(ctx: StageContext) -> dict:
@@ -667,6 +735,11 @@ def stage_n5_ocr_qwen(ctx: StageContext) -> dict:
     That makes them two genuinely separate signals — but they are still the same
     *model*, so it is not yet the independent second OCR source §2.2 asks the Lead
     to decide on.
+
+    Chay theo LO, va do la mot sua loi hieu nang chu khong phai doi model. Do
+    duoc tren `L21_V001`: mot anh mot lan `generate()` cho **10,8 giay/anh**, tuc
+    **~532 gio GPU cho batch 1**. Trong cung repo nay `build_qwen_generate()` da
+    gop lo cho ReCap; tang nay thi khong, khong vi ly do nao.
     """
     import torch  # noqa: PLC0415
     from PIL import Image  # noqa: PLC0415
@@ -674,51 +747,97 @@ def stage_n5_ocr_qwen(ctx: StageContext) -> dict:
     from transformers import Qwen2VLForConditionalGeneration as Qwen2VL  # noqa: PLC0415
 
     checkpoint = "Qwen/Qwen2-VL-7B-Instruct"
-    with Stopwatch() as timer:
-        processor, model = cached_model(
-            checkpoint,
-            lambda: (
-                AutoProcessor.from_pretrained(checkpoint),
-                Qwen2VL.from_pretrained(
-                    checkpoint,
-                    quantization_config=BitsAndBytesConfig(load_in_4bit=True),
-                    device_map="auto",
-                ).eval(),
-            ),
-        )
+    batch_size = int(ctx.params.get("batch_size", OCR_BATCH))
+    max_new = int(ctx.params.get("max_new_tokens", 256))
 
-        mapping: dict[str, str] = {}
-        none_count = 0
-        for keyframe in ctx.keyframes:
+    def load():
+        processor = AutoProcessor.from_pretrained(checkpoint)
+        # Sinh theo lo thi PHAI dem trai. Dem phai day token dem vao GIUA prompt
+        # va cho model viet tiep, nen no sinh tu sau mot chuoi dem — output rac
+        # ma khong ném loi. `build_qwen_generate()` cung dat dong nay.
+        processor.tokenizer.padding_side = "left"
+        model = Qwen2VL.from_pretrained(
+            checkpoint,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+            device_map="auto",
+        ).eval()
+        return processor, model
+
+    with Stopwatch() as timer:
+        processor, model = cached_model(checkpoint, load)
+
+        def ask(keyframes: list[Keyframe]) -> list[str]:
+            """Mot lan `generate()` cho ca lo. Tra ve dung `len(keyframes)` cau."""
             messages = [
-                {
-                    "role": "user",
-                    "content": [{"type": "image"}, {"type": "text", "text": _QWEN_PROMPT}],
-                }
+                {"role": "user",
+                 "content": [{"type": "image"}, {"type": "text", "text": _QWEN_PROMPT}]}
             ]
-            prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
+            one = processor.apply_chat_template(messages, add_generation_prompt=True)
+            images = [Image.open(kf.image).convert("RGB") for kf in keyframes]
             inputs = processor(
-                text=[prompt],
-                images=[Image.open(keyframe.image).convert("RGB")],
-                return_tensors="pt",
+                text=[one] * len(keyframes), images=images,
+                padding=True, return_tensors="pt",
             ).to(model.device)
             with torch.no_grad():
-                generated = model.generate(**inputs, max_new_tokens=256, do_sample=False)
-            answer = processor.batch_decode(
-                generated[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True
-            )[0].strip()
-            if answer.lower().strip(" .") == "none" or not answer:
-                none_count += 1
+                generated = model.generate(**inputs, max_new_tokens=max_new, do_sample=False)
+            return [
+                answer.strip()
+                for answer in processor.batch_decode(
+                    generated[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True
+                )
+            ]
+
+        mapping: dict[str, str] = {}
+        bail_words = 0   # model phat ra tu bo cuoc, DU no co tim thay chu hay khong
+        no_text = 0      # sau khi go, khong con chu nao
+        oom_retries = 0
+        width = batch_size
+
+        index = 0
+        while index < len(ctx.keyframes):
+            batch = ctx.keyframes[index : index + width]
+            try:
+                answers = ask(batch)
+            except torch.cuda.OutOfMemoryError:
+                # Duong lui, va no phai o day chu khong o tay nguoi chay: lo rong
+                # bao nhieu la chuyen VRAM, khong doan duoc tu truoc. Ha mot nua
+                # roi thu lai CHINH lo do — khong bo qua anh nao.
+                oom_retries += 1
+                torch.cuda.empty_cache()
+                if width == 1:
+                    raise
+                width = max(1, width // 2)
+                logger.warning("OOM, ha lo xuong %d roi thu lai", width)
                 continue
-            mapping[build_keyframe_id(ctx.video_id, keyframe.frame_idx)] = answer
+            for keyframe, answer in zip(batch, answers, strict=True):
+                text, bailed = parse_qwen_ocr(answer)
+                if bailed:
+                    bail_words += 1
+                if text:
+                    mapping[build_keyframe_id(ctx.video_id, keyframe.frame_idx)] = text
+                else:
+                    no_text += 1
+            index += len(batch)
 
     return ctx.writer.write_text_part(
         "sviptr_ocr",
         ctx.video_id,
         mapping,
         model=checkpoint,
-        params={"quantization": "4bit", "max_new_tokens": 256, "do_sample": False,
-                "answered_none": none_count},
+        # HAI con so, va phai tach ra. Ban truoc chi ghi `answered_none` roi dem
+        # ca hai truong hop vao do, nen `"BARBER SHOP\nNone"` — mot lan model
+        # THANH CONG — vao cung o voi mot lan bo cuoc that.
+        #
+        # `no_text` la so do can theo doi: 305/307 tren `L21_V001` la cach prompt
+        # cu tu bao, trong khi easyocr tim thay chu tren ca 307 anh do.
+        #
+        # `batch_size` ghi lai GIA TRI CUOI, khong phai gia tri khai: neu OOM da
+        # ha lo giua duong thi day la con so that, va `oom_retries` noi da ha may
+        # lan. Ghi gia tri khai se lam mot lan chay bi ha lo trong nhu binh thuong.
+        params={"quantization": "4bit", "max_new_tokens": max_new, "do_sample": False,
+                "no_text": no_text, "bail_words": bail_words, "prompt": "vung+chu v2",
+                "batch_size": width, "batch_size_asked": batch_size,
+                "oom_retries": oom_retries},
         elapsed_s=timer.seconds,
     )
 
