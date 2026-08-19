@@ -320,6 +320,9 @@ def probe_stubs(monkeypatch):
     pil = types.ModuleType("PIL")
     image_mod = types.ModuleType("PIL.Image")
     image_mod.open = lambda path: FakeImage()  # noqa: ARG005
+    # Giong Pillow >= 10: co LANCZOS, KHONG co ANTIALIAS. Do la moi truong that
+    # tren Kaggle, va la thu lam tang nay chet truoc khi co shim.
+    image_mod.LANCZOS = 1
     pil.Image = image_mod
     for name, module in (("PIL", pil), ("PIL.Image", image_mod)):
         monkeypatch.setitem(sys.modules, name, module)
@@ -643,6 +646,29 @@ class TestVietOcrStage:
         stage_n5_ocr_vietocr(make_ctx(tmp_path, 3, crop_pad=0))
 
         assert events == ["detect", "detect", "detect", "recognize", "recognize", "recognize"]
+
+    def test_it_restores_the_antialias_constant_pillow_10_removed(
+        self, tmp_path, probe_stubs
+    ):
+        """vietocr 0.3.x goi `Image.ANTIALIAS`, thu Pillow 10 da XOA.
+
+        Do duoc 19-08-2026: tang nay chay Paddle xong 486 giay roi moi ngã bang
+        `module 'PIL.Image' has no attribute 'ANTIALIAS'`.
+
+        Gan lai la khoi phuc CHINH XAC chu khong phai thay the gan dung: o Pillow
+        <= 9 hai ten do la cung mot hang so. Duong con lai — ha Pillow xuong < 10 —
+        doi mot loi cua vietocr lay mot loi cua torchvision/SigLIP.
+        """
+        import sys as _sys
+
+        probe_stubs(self._paddle(), FakeVietOCR())
+        image_mod = _sys.modules["PIL.Image"]
+        assert not hasattr(image_mod, "ANTIALIAS")   # tinh trang truoc khi chay
+
+        marker = stage_n5_ocr_vietocr(make_ctx(tmp_path, 1, crop_pad=0))
+
+        assert image_mod.ANTIALIAS == image_mod.LANCZOS
+        assert marker["params"]["pillow_antialias_shim"] is True
 
     def test_the_two_phases_are_timed_apart(self, tmp_path, probe_stubs):
         probe_stubs(self._paddle(), FakeVietOCR())

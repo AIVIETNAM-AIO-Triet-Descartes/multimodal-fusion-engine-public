@@ -1319,6 +1319,19 @@ def stage_n5_ocr_vietocr(ctx: StageContext) -> dict:
     keyframes = probe_keyframes(ctx)
 
     def load_vietocr():
+        # `Image.ANTIALIAS` bi Pillow 10 XOA (da bo tu 9.1). vietocr 0.3.x goi no
+        # trong buoc resize dong chu, nen tren moi moi truong Pillow >= 10 tang
+        # nay chet bang `module 'PIL.Image' has no attribute 'ANTIALIAS'` — do
+        # duoc 19-08-2026, sau 486 giay chay Paddle xong roi moi ngã.
+        #
+        # Gan lai la KHOI PHUC CHINH XAC, khong phai thay the gan dung: o Pillow
+        # <= 9, `ANTIALIAS` va `LANCZOS` la cung mot hang so (ca hai = 1). Cach
+        # con lai la ha Pillow xuong < 10, ma Pillow la thu torchvision va
+        # transformers cung dung — doi mot loi cua vietocr lay mot loi cua SigLIP.
+        if not hasattr(Image, "ANTIALIAS"):
+            Image.ANTIALIAS = Image.LANCZOS
+            logger.info("da gan lai PIL.Image.ANTIALIAS = LANCZOS cho vietocr")
+
         from vietocr.tool.config import Cfg  # noqa: PLC0415
         from vietocr.tool.predictor import Predictor  # noqa: PLC0415
 
@@ -1411,6 +1424,10 @@ def stage_n5_ocr_vietocr(ctx: StageContext) -> dict:
             "crop_pad": pad,
             "min_crop_side": min_side,
             "order": "group_text_lines",
+            # Ghi lai vi no la mot thay doi hanh vi cua thu vien ben duoi, va
+            # hai lan chay tren hai ban Pillow khac nhau chi so sanh duoc khi
+            # biet ban nao da phai va lai.
+            "pillow_antialias_shim": True,
         },
         facts={
             "images": images,
