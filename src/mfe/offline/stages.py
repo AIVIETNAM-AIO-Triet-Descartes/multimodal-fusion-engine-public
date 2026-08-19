@@ -24,6 +24,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -73,6 +74,25 @@ def unload_models() -> None:
         logger.info("tha %d model", len(_MODELS))
     _MODELS.clear()
     free_gpu()
+
+
+def _siglip_feature_tensor(output: Any) -> Any:
+    """Return the pooled SigLIP image tensor across Transformers versions.
+
+    Older Transformers releases returned the tensor directly from
+    ``get_image_features``. Newer releases return ``BaseModelOutputWithPooling``
+    and put the projected image embedding in ``pooler_output``. Keeping this
+    compatibility at the stage boundary prevents dependency drift from turning
+    every video into the same per-video failure.
+    """
+    pooled = getattr(output, "pooler_output", None)
+    features = pooled if pooled is not None else output
+    if not callable(getattr(features, "float", None)):
+        raise TypeError(
+            "SigLIP get_image_features() returned neither a tensor nor a "
+            "non-empty pooler_output"
+        )
+    return features
 
 
 @dataclass(frozen=True)
@@ -587,7 +607,7 @@ def stage_n4_siglip(ctx: StageContext) -> dict:
             batch = [Image.open(p).convert("RGB") for p in images[start : start + batch_size]]
             inputs = processor(images=batch, return_tensors="pt").to("cuda")
             with torch.no_grad():
-                features = model.get_image_features(**inputs)
+                features = _siglip_feature_tensor(model.get_image_features(**inputs))
             vectors.append(features.float().cpu().numpy())
 
     return ctx.writer.write_vector_part(
