@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import unicodedata
+from unittest import mock
 
 import numpy as np
 import pytest
@@ -49,8 +50,35 @@ class TestRegistry:
         from mfe.offline.adapters.sota_payloads import SOURCE_FILES
 
         for artifact in ARTIFACTS.values():
-            if artifact.kind == "text":
+            if artifact.kind == "text" and artifact.source is not None:
                 assert SOURCE_FILES[artifact.source] == artifact.flat_name
+
+    def test_a_text_artifact_no_arm_reads_yet_needs_no_source(self):
+        """`source=None` means "written, but nothing ingests it".
+
+        The probe OCR sources are generated to be compared against `ocr_text` and
+        `sviptr_ocr`; giving them a `source` before that comparison is decided
+        would claim an ingest path that does not exist, and `load_all` would then
+        report a missing file for every run.
+        """
+        from mfe.offline.adapters.sota_payloads import SOURCE_FILES
+
+        probes = [ARTIFACTS["paddle_ocr"], ARTIFACTS["viet_ocr"]]
+        for artifact in probes:
+            assert artifact.kind == "text"
+            assert artifact.source is None
+            assert artifact.flat_name not in SOURCE_FILES.values()
+
+    def test_a_source_that_disagrees_with_its_filename_still_raises(self):
+        """Skipping source-less artifacts must not have opened a hole."""
+        import dataclasses
+
+        from mfe.offline.bundle import _assert_registries_agree
+
+        broken = dataclasses.replace(ARTIFACTS["ocr_text"], flat_name="ocr.json")
+        with mock.patch.dict(ARTIFACTS, {"ocr_text": broken}):
+            with pytest.raises(AssertionError, match="ocr_text"):
+                _assert_registries_agree()
 
     def test_vector_dims_are_the_three_the_stores_accept(self):
         from mfe.stores.production.contracts import SUPPORTED_EMBEDDING_DIMS

@@ -48,6 +48,28 @@ Volume `keyframes-btc` (v2), bundle `aic_btc_b1_v1`. **Cả ba dùng chung một
 `n4_objects` không có ở lượt nào: BTC phát hành sẵn nhãn, lượt 1 nạp chúng. Chạy detector của ta
 lên chính bộ keyframe này là phép đo khác (§3.6). `n6_recap`/`n6_bge_m3` do Lead hoãn.
 
+### `btc/05-btc-ocr-probe.ipynb` — **không phải một lượt**, là một phép đo
+
+Nằm ngoài ba lượt trên và không chia người. Chạy PaddleOCR (`paddle_ocr`) và VietOCR
+(`viet_ocr`) trên **một** video để so với `ocr_text` và `sviptr_ocr` đã có — lý do là
+`n5_ocr_qwen` đo được 10,8 giây/ảnh, tức ~532 giờ GPU cho batch 1.
+
+Ba điều làm nó vô hại với ba lượt đang chạy, và cả ba đều cố ý:
+
+* **Hai tầng của nó không có trong `config/ingest_shards_batch1_btc_images.yaml`.** Thêm vào
+  là `merge_bundle.py` đòi đủ mảnh cho cả 873 video rồi từ chối bundle.
+* **Marker đi vào `/_status/probe/`**, không vào thư mục của ai. `verify_bundle.py` chỉ duyệt
+  thành viên có trong phân công nên nó không thấy, và bảng đếm của Trọng/Quang không đổi.
+* **Không ghi `part-manifest`.** Hai artifact này chưa thuộc hợp đồng đầu ra.
+
+Gói riêng (`requirements-kaggle-btc-ocr-probe.txt`) cũng là có chủ ý: `paddlepaddle` là một
+stack khác PyTorch và cài hỏng trên Kaggle là chuyện thường; gộp vào gói chung nghĩa là một
+lần cài hỏng ở đây làm chết phiên của bốn người kia.
+
+Cả hai artifact đăng ký `source=None` — chưa arm nào đọc chúng. Cắm vào tầng online là quyết
+định của Lead sau khi nhìn số, và cần sửa ba chỗ: `source` trong `ARTIFACTS`, khoá trong
+`sota_payloads.SOURCE_FILES`, rồi khai arm. Assertion trong `bundle.py` bắt nếu thiếu chỗ nào.
+
 **Lượt 2 và 3 không đọc ảnh từ Volume.** Ở đường BTC, Volume là ghi-một-chiều: kéo ảnh về là
 ~177.000 lần `read_file`, còn tải lại gói là 1,4–5,7 GB có resume.
 

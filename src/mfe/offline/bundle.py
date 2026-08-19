@@ -57,12 +57,17 @@ class Artifact:
 
     name: str
     kind: ArtifactKind
-    #: Filename once flattened. For text artifacts this **must** equal the entry
-    #: in `sota_payloads.SOURCE_FILES` — the assertion below keeps the two
-    #: registries from drifting, which would otherwise show up as an
-    #: Elasticsearch tier that is quietly missing.
+    #: Filename once flattened. For a text artifact that **has** a `source` this
+    #: must equal the entry in `sota_payloads.SOURCE_FILES` — the assertion below
+    #: keeps the two registries from drifting, which would otherwise show up as
+    #: an Elasticsearch tier that is quietly missing.
     flat_name: str
-    #: Elasticsearch `source` tag; `None` for vectors.
+    #: Elasticsearch `source` tag. `None` for vectors, and also `None` for a text
+    #: artifact **no arm reads yet**: the probe OCR sources are generated to be
+    #: compared against `ocr_text` and `sviptr_ocr`, and giving them a `source`
+    #: before that comparison is decided would claim an ingest path that does not
+    #: exist. Setting one later is what wires them in, and the assertion below
+    #: starts guarding them the moment it is set.
     source: str | None
     #: Vector width; `None` for text.
     dim: int | None
@@ -75,6 +80,11 @@ ARTIFACTS: dict[str, Artifact] = {
         Artifact("subtitles", "text", "subtitles.json", "subtitle", None, "n2_subtitles"),
         Artifact("ocr_text", "text", "ocr_text.json", "ocr", None, "n5_ocr_easyocr"),
         Artifact("sviptr_ocr", "text", "sviptr_ocr.json", "ocr_sviptr", None, "n5_ocr_qwen"),
+        # Hai nguon OCR de DO, chua de dung — `source=None`, xem `Artifact.source`.
+        # Chung ton tai vi Qwen2-VL do duoc 10,8 giay/anh (~532 gio GPU cho batch
+        # 1) va cau hoi la co bo doc nao vua nhanh vua khong te hon khong.
+        Artifact("paddle_ocr", "text", "paddle_ocr.json", None, None, "n5_ocr_paddle"),
+        Artifact("viet_ocr", "text", "viet_ocr.json", None, None, "n5_ocr_vietocr"),
         Artifact("objects_text", "text", "objects_text.json", "object", None, "n4_objects"),
         Artifact("dense_captions", "text", "dense_captions.json", "caption", None, "n6_recap"),
         Artifact("siglip_vectors", "vector", "siglip_vectors.npz", None, 1152, "n4_siglip"),
@@ -111,9 +121,12 @@ def _assert_registries_agree() -> None:
     from mfe.offline.adapters.sota_payloads import SOURCE_FILES
 
     for artifact in ARTIFACTS.values():
-        if artifact.kind != "text":
+        if artifact.kind != "text" or artifact.source is None:
+            # No `source` means no arm reads this file, so there is no pair to
+            # keep in step. Skipping is not a hole in the guard: the moment a
+            # `source` is set, the check below starts applying to it.
             continue
-        expected = SOURCE_FILES.get(artifact.source or "")
+        expected = SOURCE_FILES.get(artifact.source)
         if expected != artifact.flat_name:
             raise AssertionError(
                 f"ARTIFACTS['{artifact.name}'] writes {artifact.flat_name} but "
@@ -591,8 +604,18 @@ class BundleWriter:
         *,
         model: str,
         params: dict | None = None,
+        facts: dict | None = None,
         elapsed_s: float | None = None,
     ) -> dict:
+        """Write one video's `{keyframe_id: text}` part, then mark it done.
+
+        `params` and `facts` are both recorded, and the split is not cosmetic:
+        `check_fingerprints` refuses a bundle whose shards disagree on `params`,
+        so anything that legitimately **varies per video** — how many keyframes
+        carried text, how long it took — belongs in `facts`. Put a per-video
+        count in `params` and every video disagrees with every other, which
+        turns the merge's most useful check into a guaranteed refusal.
+        """
         spec = ARTIFACTS[artifact]
         cleaned = check_text_payload(mapping, video_id)
         local = self.workdir / f"{artifact}_{video_id}.json"
@@ -612,6 +635,7 @@ class BundleWriter:
             model=model,
             params=params or {},
             elapsed_s=elapsed_s,
+            **(facts or {}),
         )
         local.unlink(missing_ok=True)
         return marker

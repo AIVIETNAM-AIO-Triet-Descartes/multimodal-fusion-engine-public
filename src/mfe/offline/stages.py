@@ -843,6 +843,395 @@ def stage_n5_ocr_qwen(ctx: StageContext) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# N5b — hai nguon OCR chuyen dung, sinh ra de DO chu chua de dung
+# ---------------------------------------------------------------------------
+#
+# Ly do ton tai, do duoc tren `L21_V001` (307 keyframe): Qwen2-VL 4-bit mat
+# **10,8 giay/anh** khi goi tung anh, tuc hon 2 gio cho MOT video va ~532 gio GPU
+# cho 177.321 keyframe cua batch 1. Gop lo ha duoc con so do nhung khong doi bac
+# do lon. Cau hoi la co bo doc nao re hon ma khong te hon khong.
+#
+# Hai tang duoi day KHONG thay the `n5_ocr_easyocr` hay `n5_ocr_qwen` va khong
+# nam trong `config/ingest_shards_batch1_btc_images.yaml`. Chung ghi ra artifact
+# rieng de ba nguon dat canh nhau tren cung mot video — dung phep so ma §8.2 cua
+# handoff ghi lai la da lam sai mot lan: ket luan "easyocr te" duoc rut ra tu viec
+# so easyocr CUA TA voi Qwen CUA BAO, hai thu khac nhau o ca hai truc.
+#
+# Vi the ca hai tang deu sap xep hop chu bang CUNG mot ham `group_text_lines`, va
+# ca hai deu lay vung chu tu CUNG mot bo phat hien cua PaddleOCR. Con lai giua
+# `paddle_ocr` va `viet_ocr` dung mot khac biet: **bo nhan dang**.
+
+
+def _quad_to_box(quad: Any) -> tuple[int, int, int, int]:
+    """Da giac 4 diem (hoac 8 so phang) -> `(x0, y0, x1, y1)` bao ngoai.
+
+    Lam tron RA NGOAI chu khong `int()` ca hai dau: `int()` cat ve 0, nen canh
+    phai/duoi bi thu vao gan mot pixel va chu cao 12px mat mot phan net.
+    """
+    import math  # noqa: PLC0415
+
+    points = list(quad)
+    if points and not hasattr(points[0], "__len__"):
+        points = [points[i : i + 2] for i in range(0, len(points), 2)]
+    xs = [float(point[0]) for point in points]
+    ys = [float(point[1]) for point in points]
+    return (
+        int(math.floor(min(xs))),
+        int(math.floor(min(ys))),
+        int(math.ceil(max(xs))),
+        int(math.ceil(max(ys))),
+    )
+
+
+def group_text_lines(
+    boxes: list[tuple[int, int, int, int]], tolerance_ratio: float = 0.6
+) -> list[list[int]]:
+    """Chi so cua `boxes`, gom thanh dong doc duoc: tren xuong, trai sang phai.
+
+    Vi sao khong dung thu tu cua bo phat hien: moi engine tra ve mot thu tu khac
+    nhau, nen hai nguon OCR se cho ra hai chuoi khac nhau **du doc y het nhau**.
+    Chuoi do la thu di thang vao BM25, va mot phep so bi nhieu boi thu tu la mot
+    phep so khong doc duoc. Ca hai tang duoi day goi ham nay.
+
+    Nguong tinh theo **trung vi chieu cao hop**, khong theo so pixel co dinh:
+    batch 1 khong chi co mot do phan giai, va mot dai co dinh se gop hai dong tren
+    khung nho trong khi cat doi mot dong tren khung lon.
+    """
+    if not boxes:
+        return []
+    heights = sorted(y1 - y0 for _x0, y0, _x1, y1 in boxes)
+    tolerance = max(1.0, tolerance_ratio * (heights[len(heights) // 2] or 1))
+
+    def centre_of(index: int) -> float:
+        return (boxes[index][1] + boxes[index][3]) / 2
+
+    lines: list[list[int]] = []
+    anchors: list[float] = []
+    for index in sorted(range(len(boxes)), key=lambda i: (centre_of(i), boxes[i][0])):
+        centre = centre_of(index)
+        # So voi hop DAU TIEN cua dong, khong voi hop vua them: so voi hop vua
+        # them thi mot chuoi hop lech dan moi cai vai pixel se troi khong gioi han
+        # va nuot ca dong duoi.
+        if lines and abs(centre - anchors[-1]) <= tolerance:
+            lines[-1].append(index)
+        else:
+            lines.append([index])
+            anchors.append(centre)
+    for line in lines:
+        line.sort(key=lambda i: boxes[i][0])
+    return lines
+
+
+def join_text_lines(
+    boxes: list[tuple[int, int, int, int]], texts: list[str]
+) -> str:
+    """Ghep chu theo thu tu doc: trong dong cach nhau dau cach, giua dong xuong dong."""
+    lines = group_text_lines(boxes)
+    out: list[str] = []
+    for line in lines:
+        joined = " ".join(texts[i].strip() for i in line if texts[i].strip())
+        if joined:
+            out.append(joined)
+    return "\n".join(out)
+
+
+def _paddle_field(page: Any, key: str) -> Any:
+    """Doc mot truong cua ket qua PaddleOCR, du no la mapping hay object."""
+    from collections.abc import Mapping  # noqa: PLC0415
+
+    if isinstance(page, Mapping):
+        return page.get(key)
+    return getattr(page, key, None)
+
+
+def normalize_paddle_result(raw: Any) -> list[tuple[tuple[int, int, int, int], str, float]]:
+    """`[(hop, chu, do tin cay)]` tu ket qua PaddleOCR, ca hai the he API.
+
+    PaddleOCR 3.x tra ve mot mapping (`rec_texts`, `rec_scores`, `rec_polys`);
+    2.x tra ve `[[da_giac, (chu, diem)], …]`. Doi phien ban giua nam nguoi la
+    chuyen binh thuong, va mot bo doc tra ve dung shape cua phien ban kia se cho
+    ra **file rong** chu khong ném loi — nen ca hai duoc doc o day, va tang ghi
+    lai `api` da dung vao marker.
+    """
+    page = raw
+    # Ca hai the he tra ve mot phan tu cho moi anh; ta luon gui dung mot anh.
+    if isinstance(page, (list, tuple)):
+        page = page[0] if page else None
+    if page is None:
+        return []
+    # 3.x doi khi boc them mot lop `{"res": {...}}`.
+    if _paddle_field(page, "rec_texts") is None and _paddle_field(page, "res") is not None:
+        page = _paddle_field(page, "res")
+
+    texts = _paddle_field(page, "rec_texts")
+    if texts is not None:
+        polys = _paddle_field(page, "rec_polys")
+        if polys is None:
+            polys = _paddle_field(page, "dt_polys") or []
+        scores = _paddle_field(page, "rec_scores")
+        out = []
+        for index, text in enumerate(texts):
+            if index >= len(polys):
+                continue
+            score = float(scores[index]) if scores is not None and index < len(scores) else 1.0
+            out.append((_quad_to_box(polys[index]), str(text), score))
+        return out
+
+    out = []
+    for entry in page or []:
+        quad, payload = entry[0], entry[1]
+        if isinstance(payload, (list, tuple)):
+            text, score = payload[0], float(payload[1])
+        else:
+            text, score = payload, 1.0
+        out.append((_quad_to_box(quad), str(text), score))
+    return out
+
+
+def _unexpected_kwarg(message: str) -> str | None:
+    """Ten tham so bi tu choi trong mot `TypeError` cua Python, neu doc duoc."""
+    import re  # noqa: PLC0415
+
+    found = re.search(r"unexpected keyword argument '([^']+)'", message)
+    return found.group(1) if found else None
+
+
+def build_paddle_ocr(**kwargs: Any) -> Any:
+    """Mot `PaddleOCR`, bo di nhung tham so ban dang cai KHONG nhan.
+
+    PaddleOCR doi ten tham so giua 2.x va 3.x (`use_gpu` -> `device`,
+    `use_angle_cls` -> `use_textline_orientation`, `show_log` bien mat). Pin cung
+    mot bo tham so thi notebook chet ngay o o khoi tao tren nua so phien ban; nen
+    ta thu, doc ten tham so bi tu choi tu chinh `TypeError`, bo no ra roi thu lai.
+    Chi bo tham so **ta da truyen vao** — mot `TypeError` khac van noi len.
+    """
+    from paddleocr import PaddleOCR  # noqa: PLC0415
+
+    remaining = {key: value for key, value in kwargs.items() if value is not None}
+    while True:
+        try:
+            return PaddleOCR(**remaining)
+        except TypeError as err:
+            name = _unexpected_kwarg(str(err))
+            if name is None or name not in remaining:
+                raise
+            logger.info("paddleocr khong nhan %s, bo ra", name)
+            remaining.pop(name)
+
+
+def _paddle_read(ocr: Any, image: Path) -> list[tuple[tuple[int, int, int, int], str, float]]:
+    """Chay pipeline PaddleOCR tren mot anh. `predict` la ten cua 3.x, `ocr` cua 2.x."""
+    run = getattr(ocr, "predict", None) or ocr.ocr
+    return normalize_paddle_result(run(str(image)))
+
+
+def _paddle_params(ctx: StageContext) -> dict:
+    lang = ctx.params.get("lang", "vi")
+    device = ctx.params.get("device", "gpu")
+    kwargs = {
+        "lang": lang,
+        "device": device,
+        "use_gpu": device != "cpu",
+        "show_log": False,
+        "use_angle_cls": False,
+        "use_textline_orientation": False,
+        "use_doc_orientation_classify": False,
+        "use_doc_unwarping": False,
+    }
+    kwargs.update(ctx.params.get("paddle_kwargs", {}))
+    return kwargs
+
+
+def _paddle_instance(ctx: StageContext) -> Any:
+    kwargs = _paddle_params(ctx)
+    key = f"paddleocr lang={kwargs.get('lang')} device={kwargs.get('device')}"
+    return cached_model(key, lambda: build_paddle_ocr(**kwargs))
+
+
+def _package_version(name: str) -> str:
+    from importlib.metadata import PackageNotFoundError, version  # noqa: PLC0415
+
+    try:
+        return version(name)
+    except PackageNotFoundError:  # pragma: no cover - only when not installed
+        return "?"
+
+
+def stage_n5_ocr_paddle(ctx: StageContext) -> dict:
+    """PaddleOCR tieng Viet, ca phat hien lan nhan dang. Nguon OCR thu ba.
+
+    Doc thang tu anh, khong sinh token — nen no khong the roi vao kieu hong cua
+    `n5_ocr_qwen`, noi mot prompt sai lam model tra "None" cho 305/307 anh ma
+    khong ném gi. Doi lai, no khong hieu ngu canh: chu bi che mot phan thi no
+    doan theo hinh chu chu khong theo nghia.
+    """
+    lang = _paddle_params(ctx)["lang"]
+    score_min = float(ctx.params.get("rec_score_min", 0.0))
+
+    with Stopwatch() as timer:
+        ocr = _paddle_instance(ctx)
+        mapping: dict[str, str] = {}
+        boxes_total = 0
+        dropped_low_score = 0
+        silent_images = 0
+
+        for keyframe in ctx.keyframes:
+            found = _paddle_read(ocr, keyframe.image)
+            boxes_total += len(found)
+            kept = [(box, text) for box, text, score in found if score >= score_min]
+            dropped_low_score += len(found) - len(kept)
+            text = join_text_lines([b for b, _ in kept], [t for _, t in kept])
+            if text:
+                mapping[build_keyframe_id(ctx.video_id, keyframe.frame_idx)] = text
+            else:
+                silent_images += 1
+
+    images = len(ctx.keyframes)
+    return ctx.writer.write_text_part(
+        "paddle_ocr",
+        ctx.video_id,
+        mapping,
+        model=f"paddleocr {_package_version('paddleocr')} lang={lang}",
+        params={
+            "lang": lang,
+            "rec_score_min": score_min,
+            "api": "predict" if hasattr(ocr, "predict") else "ocr",
+            "order": "group_text_lines",
+        },
+        # Do duoc, khac nhau tung video — xem `write_text_part`.
+        facts={
+            "images": images,
+            "boxes": boxes_total,
+            "silent_images": silent_images,
+            "dropped_low_score": dropped_low_score,
+            "seconds_per_image": round(timer.seconds / max(1, images), 3),
+        },
+        elapsed_s=timer.seconds,
+    )
+
+
+def _crop_for_recognition(image: Any, box: tuple[int, int, int, int], pad: int) -> Any:
+    """Cat hop bao ngoai, noi them `pad` pixel, kep trong khung anh."""
+    width, height = image.size
+    x0, y0, x1, y1 = box
+    return image.crop(
+        (
+            max(0, x0 - pad),
+            max(0, y0 - pad),
+            min(width, x1 + pad),
+            min(height, y1 + pad),
+        )
+    )
+
+
+def stage_n5_ocr_vietocr(ctx: StageContext) -> dict:
+    """Vung chu do PaddleOCR tim, chu do VietOCR doc.
+
+    **VietOCR khong co bo phat hien.** No nhan mot anh DONG chu da cat va tra ve
+    chuoi; dua ca khung hinh vao no se ra rac ma khong ném loi. Nen tang nay la
+    mot phep ghep, va bo phat hien la cua PaddleOCR — cung bo `n5_ocr_paddle`
+    dung, voi cung tham so.
+
+    Do la ca thiet ke cua phep do: `paddle_ocr` va `viet_ocr` chay tren cung nhung
+    vung chu, xep bang cung `group_text_lines`, nen chenh lech giua hai file la
+    chenh lech cua **bo nhan dang tieng Viet** chu khong phai cua bo phat hien.
+
+    Cai gia: PaddleOCR chay ca pipeline o day roi ta vut bo phan chu no doc duoc.
+    Doi lai la MOT duong ma, thay vi hai duong "chi phat hien" khac nhau giua 2.x
+    va 3.x — va phan bi vut bo la phan re, do bang `elapsed_s` cua hai tang.
+    """
+    from PIL import Image  # noqa: PLC0415
+
+    cfg_name = ctx.params.get("vietocr_config", "vgg_transformer")
+    device = ctx.params.get("vietocr_device", "cuda:0")
+    beamsearch = bool(ctx.params.get("beamsearch", False))
+    pad = int(ctx.params.get("crop_pad", 2))
+    min_side = int(ctx.params.get("min_crop_side", 3))
+
+    def load_vietocr():
+        from vietocr.tool.config import Cfg  # noqa: PLC0415
+        from vietocr.tool.predictor import Predictor  # noqa: PLC0415
+
+        config = Cfg.load_config_from_name(cfg_name)
+        config["device"] = device
+        # `predictor` co the vang trong vai ban config; dat co dieu kien.
+        if isinstance(config.get("predictor"), dict):
+            config["predictor"]["beamsearch"] = beamsearch
+        return Predictor(config)
+
+    with Stopwatch() as timer:
+        ocr = _paddle_instance(ctx)
+        reader = cached_model(f"vietocr {cfg_name}", load_vietocr)
+        batch_predict = getattr(reader, "predict_batch", None)
+
+        mapping: dict[str, str] = {}
+        boxes_total = 0
+        crops_skipped = 0
+        silent_images = 0
+        batched = batch_predict is not None
+
+        for keyframe in ctx.keyframes:
+            found = _paddle_read(ocr, keyframe.image)
+            boxes_total += len(found)
+            page = Image.open(keyframe.image).convert("RGB")
+
+            boxes: list[tuple[int, int, int, int]] = []
+            crops = []
+            for box, _text, _score in found:
+                x0, y0, x1, y1 = box
+                if x1 - x0 < min_side or y1 - y0 < min_side:
+                    # Mot hop mong hon vai pixel khong phai dong chu. VietOCR van
+                    # tra ve MOT chuoi cho no, va chuoi do di thang vao index.
+                    crops_skipped += 1
+                    continue
+                boxes.append(box)
+                crops.append(_crop_for_recognition(page, box, pad))
+
+            if crops:
+                if batched:
+                    texts = list(batch_predict(crops))
+                else:
+                    texts = [reader.predict(crop) for crop in crops]
+            else:
+                texts = []
+
+            text = join_text_lines(boxes, texts)
+            if text:
+                mapping[build_keyframe_id(ctx.video_id, keyframe.frame_idx)] = text
+            else:
+                silent_images += 1
+
+    images = len(ctx.keyframes)
+    return ctx.writer.write_text_part(
+        "viet_ocr",
+        ctx.video_id,
+        mapping,
+        model=(
+            f"vietocr {_package_version('vietocr')}/{cfg_name} "
+            f"+ paddleocr {_package_version('paddleocr')} (phat hien)"
+        ),
+        params={
+            "detector": "paddleocr",
+            "vietocr_config": cfg_name,
+            "beamsearch": beamsearch,
+            "crop": "bbox",
+            "crop_pad": pad,
+            "min_crop_side": min_side,
+            "order": "group_text_lines",
+        },
+        facts={
+            "images": images,
+            "boxes": boxes_total,
+            "crops_skipped": crops_skipped,
+            "silent_images": silent_images,
+            "batched": batched,
+            "seconds_per_image": round(timer.seconds / max(1, images), 3),
+        },
+        elapsed_s=timer.seconds,
+    )
+
+
+# ---------------------------------------------------------------------------
 # N6 — ReCap captions, then BGE-M3
 # ---------------------------------------------------------------------------
 
@@ -1121,6 +1510,8 @@ STAGES = {
     "n4_siglip": stage_n4_siglip,
     "n5_ocr_easyocr": stage_n5_ocr_easyocr,
     "n5_ocr_qwen": stage_n5_ocr_qwen,
+    "n5_ocr_paddle": stage_n5_ocr_paddle,
+    "n5_ocr_vietocr": stage_n5_ocr_vietocr,
     "n6_recap": stage_n6_recap,
     "n6_bge_m3": stage_n6_bge_m3,
 }

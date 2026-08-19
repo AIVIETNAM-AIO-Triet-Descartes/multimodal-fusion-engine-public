@@ -1,0 +1,26 @@
+# Môi trường cho notebook 05 — HAI nguồn OCR để ĐO (PaddleOCR, VietOCR)
+# docs/triet/ke-hoach-offline-ingest.md §2.2
+#
+# ⚠️ FILE NÀY TÁCH RA KHỎI `requirements-kaggle-btc-images.txt` LÀ CÓ CHỦ Ý.
+# Trọng & Quang đang chạy notebook 03 trên ~800 video bằng file kia. `paddlepaddle`
+# là một stack riêng (không phải PyTorch) và bánh xe GPU của nó gắn chặt với một
+# phiên bản CUDA cụ thể — cài hỏng là chuyện thường gặp trên Kaggle. Gộp vào file
+# chung nghĩa là một lần cài hỏng ở đây làm chết cả phiên của họ.
+#
+# ⚠️ CÀI FILE NÀY SAU file môi trường chính, và CÀI KÈM `-c` (constraints) sinh từ
+# torch/transformers đang chạy. Không có constraints thì `vietocr` được phép kéo
+# torch sang phiên bản khác, và tiền xử lý ảnh của SigLIP đổi theo — §2.5 nói rõ
+# năm người phải cùng phiên bản, và kiểu lệch này KHÔNG ném lỗi, nó chỉ làm vector
+# thành hỗn hợp hai phép đo. Ô Step 0c của notebook 05 dựng constraints đó.
+
+# --- PaddleOCR ------------------------------------------------------------
+# `paddlepaddle-gpu` KHÔNG có trên PyPI cho mọi tổ hợp CUDA; notebook cài nó
+# riêng bằng index của Paddle rồi mới đọc file này. Ở đây chỉ khai bản CPU làm
+# đường lui, để `import paddle` luôn chạy được kể cả khi bản GPU thất bại.
+paddlepaddle>=3.0
+paddleocr>=2.7
+
+# --- VietOCR --------------------------------------------------------------
+# Chỉ nhận dạng dòng chữ, KHÔNG phát hiện vùng chữ. Nó được ghép với bộ phát
+# hiện của PaddleOCR — xem `stage_n5_ocr_vietocr`.
+vietocr>=0.3.8
