@@ -53,21 +53,34 @@ class TestRegistry:
             if artifact.kind == "text" and artifact.source is not None:
                 assert SOURCE_FILES[artifact.source] == artifact.flat_name
 
-    def test_a_text_artifact_no_arm_reads_yet_needs_no_source(self):
-        """`source=None` means "written, but nothing ingests it".
+    def test_a_text_artifact_may_carry_no_source_at_all(self):
+        """`source=None` means "written, but nothing ingests it" — a legal state.
 
-        The probe OCR sources are generated to be compared against `ocr_text` and
-        `sviptr_ocr`; giving them a `source` before that comparison is decided
-        would claim an ingest path that does not exist, and `load_all` would then
-        report a missing file for every run.
+        It is how a payload gets generated for measurement before anyone decides
+        whether an arm should read it. `paddle_ocr` and `viet_ocr` lived here for
+        one day before lượt 4 wired them in, and the next probe will too, so the
+        registry must keep accepting it.
         """
-        from mfe.offline.adapters.sota_payloads import SOURCE_FILES
+        import dataclasses
 
-        probes = [ARTIFACTS["paddle_ocr"], ARTIFACTS["viet_ocr"]]
-        for artifact in probes:
-            assert artifact.kind == "text"
-            assert artifact.source is None
-            assert artifact.flat_name not in SOURCE_FILES.values()
+        from mfe.offline.bundle import _assert_registries_agree
+
+        probe = dataclasses.replace(
+            ARTIFACTS["ocr_text"], name="probe_ocr", flat_name="probe_ocr.json", source=None
+        )
+        with mock.patch.dict(ARTIFACTS, {"probe_ocr": probe}):
+            _assert_registries_agree()   # khong duoc ném gi
+
+    def test_every_shipped_text_artifact_is_now_wired_to_an_arm(self):
+        """Ngược lại: không artifact nào trong registry hiện đang treo lơ lửng.
+
+        Một artifact có producer nhưng không có `source` là dữ liệu được sinh ra
+        rồi không ai đọc — im lặng, và chỉ phát hiện được bằng cách đếm.
+        """
+        orphans = [
+            a.name for a in ARTIFACTS.values() if a.kind == "text" and a.source is None
+        ]
+        assert orphans == [], f"artifact text khong co arm nao doc: {orphans}"
 
     def test_a_source_that_disagrees_with_its_filename_still_raises(self):
         """Skipping source-less artifacts must not have opened a hole."""

@@ -1,4 +1,4 @@
-# Môi trường cho notebook 05 — HAI nguồn OCR để ĐO (PaddleOCR, VietOCR)
+# Môi trường cho PaddleOCR + VietOCR — notebook 05 (đo) và 06 (ingest batch 1)
 # docs/triet/ke-hoach-offline-ingest.md §2.2
 #
 # ⚠️ FILE NÀY TÁCH RA KHỎI `requirements-kaggle-btc-images.txt` LÀ CÓ CHỦ Ý.
@@ -14,10 +14,15 @@
 # thành hỗn hợp hai phép đo. Ô Step 0c của notebook 05 dựng constraints đó.
 
 # --- PaddleOCR ------------------------------------------------------------
-# `paddlepaddle-gpu` KHÔNG có trên PyPI cho mọi tổ hợp CUDA; notebook cài nó
-# riêng bằng index của Paddle rồi mới đọc file này. Ở đây chỉ khai bản CPU làm
-# đường lui, để `import paddle` luôn chạy được kể cả khi bản GPU thất bại.
-paddlepaddle>=3.0
+# ⚠️ `paddlepaddle` KHÔNG được khai ở đây, và đó là một sửa lỗi.
+#
+# Bản trước khai `paddlepaddle>=3.0` làm "đường lui" cho trường hợp bánh xe GPU
+# hỏng. Nhưng notebook cài GPU TRƯỚC rồi mới đọc file này, mà hai gói đó **cùng
+# cài ra một thư mục `paddle/`** — nên bản CPU ghi đè bản GPU, mọi lần chạy.
+#
+# Đo được hậu quả: PaddleOCR chạy 10,5 giây/ảnh thay vì dưới 0,5 trên T4, và
+# không có lỗi nào được ném. Notebook giờ cài đúng MỘT bản paddle, sau cùng, và
+# dừng hẳn nếu đếm được hai bản.
 paddleocr>=2.7
 
 # --- VietOCR --------------------------------------------------------------

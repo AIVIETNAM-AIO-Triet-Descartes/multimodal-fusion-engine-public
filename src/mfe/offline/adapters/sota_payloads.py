@@ -39,15 +39,35 @@ from mfe.stores.production.contracts import StorageRecord
 
 logger = logging.getLogger(__name__)
 
-#: `source` tag -> filename in SOTA_AIC's `data/vectors/`. The tag must satisfy
-#: `SOURCE_PATTERN` in stores/production/contracts.py: [a-z][a-z0-9_-]{0,31}.
+#: `source` tag -> flat filename under a bundle's `data/vectors/`. The tag must
+#: satisfy `SOURCE_PATTERN` in stores/production/contracts.py:
+#: `[a-z][a-z0-9_-]{0,31}`.
+#:
+#: This registry pairs with `bundle.ARTIFACTS`, and `_assert_registries_agree`
+#: refuses a mismatch: a bundle writing `subtitle.json` while the reader looks
+#: for `subtitles.json` produces an index short one arm and no error anywhere.
 SOURCE_FILES: dict[str, str] = {
     "subtitle": "subtitles.json",
     "ocr": "ocr_text.json",
     "ocr_sviptr": "sviptr_ocr.json",
     "object": "objects_text.json",
     "caption": "dense_captions.json",
+    "ocr_paddle": "paddle_ocr.json",
+    "ocr_vietocr": "viet_ocr.json",
 }
+
+#: The subset SOTA_AIC's own export ships. **Not the same set as `SOURCE_FILES`,
+#: and that gap is the point**: `ocr_paddle` and `ocr_vietocr` are produced by our
+#: own lượt 4 (`notebooks/btc/06-btc-paddle-vietocr.ipynb`) and Bảo's export has
+#: never contained them.
+#:
+#: It exists so a test can say "every source Bảo ships must load" without that
+#: claim silently becoming "no source may exist unless Bảo ships it" — which is
+#: what asserting over `SOURCE_FILES` meant, and what would have blocked adding
+#: any producer of our own.
+SOTA_SOURCES: frozenset[str] = frozenset(
+    {"subtitle", "ocr", "ocr_sviptr", "object", "caption"}
+)
 
 
 @dataclass

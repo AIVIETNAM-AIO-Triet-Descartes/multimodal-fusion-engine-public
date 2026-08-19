@@ -9,7 +9,12 @@ from pathlib import Path
 import pytest
 
 from mfe.offline.adapters.sota_ids import SotaIdMap
-from mfe.offline.adapters.sota_payloads import SOURCE_FILES, load_all, load_payload
+from mfe.offline.adapters.sota_payloads import (
+    SOTA_SOURCES,
+    SOURCE_FILES,
+    load_all,
+    load_payload,
+)
 from mfe.offline.provided import ProvidedDataset
 
 PILOT_VIDEOS = ["L21_V001", "L21_V002", "L21_V003"]
@@ -169,9 +174,16 @@ class TestAgainstBaosRealExport:
     )
 
     def test_every_source_loads_and_ids_resolve(self, id_map):
-        records, reports = load_all(_SOTA_VECTORS, id_map)
+        """Every source **Bảo ships** must load. Scoped to `SOTA_SOURCES`, not to
+        `SOURCE_FILES`, since lượt 4 added two sources only we produce.
+
+        Asserting over `SOURCE_FILES` conflated two different claims — "Bảo's
+        export is intact" and "no source may exist unless Bảo ships it" — and the
+        second one would block adding any producer of our own.
+        """
+        records, reports = load_all(_SOTA_VECTORS, id_map, sources=sorted(SOTA_SOURCES))
         by_source = {r.source: r for r in reports}
-        assert set(by_source) == set(SOURCE_FILES)
+        assert set(by_source) == SOTA_SOURCES
         for report in reports:
             assert report.present, report.summary()
             assert report.records > 0, report.summary()
@@ -179,9 +191,20 @@ class TestAgainstBaosRealExport:
             # fail to translate. A non-empty list here means the export drifted.
             assert report.unknown_ids == [], report.summary()
 
-        assert {r.source for r in records} == set(SOURCE_FILES)
+        assert {r.source for r in records} == SOTA_SOURCES
         # Every record accounted for: sum of per-source counts, no double count.
         assert len(records) == sum(r.records for r in reports)
+
+    def test_a_source_bao_never_shipped_is_reported_absent_not_raised(self, id_map):
+        """`ocr_paddle` / `ocr_vietocr` come from our own bundle. Pointed at Bảo's
+        directory they must be *reported* missing, because "absent" is a valid
+        state for a payload whose producer is a different pass entirely."""
+        ours = sorted(set(SOURCE_FILES) - SOTA_SOURCES)
+        assert ours == ["ocr_paddle", "ocr_vietocr"]
+        records, reports = load_all(_SOTA_VECTORS, id_map, sources=ours)
+        assert records == []
+        assert all(not r.present for r in reports)
+        assert all("not found" in r.summary() for r in reports)
 
     def test_the_two_ocr_sources_stay_separate(self, id_map):
         """The reason they are two sources and not one concatenated string.

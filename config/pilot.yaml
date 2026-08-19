@@ -107,6 +107,11 @@ retrieval:
     subtitle_partial: 1.0
     caption: 1.0
     ocr: 1.0
+    # Luot 4 — hai bo doc sai o hai cho khac nhau (§8.6). 1.0 la mac dinh
+    # TRUNG LAP, khong phai gia tri da tune: trong so dat bang leo doc tren
+    # dev roi cong bo tren heldout (§9.4).
+    ocr_paddle: 1.0
+    ocr_vietocr: 1.0
     object: 1.0
     subtitle_exact: 1.0
   rerank_budget_ms: 20000

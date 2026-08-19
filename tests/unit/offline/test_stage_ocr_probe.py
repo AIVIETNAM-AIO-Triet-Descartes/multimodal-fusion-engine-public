@@ -593,6 +593,28 @@ class TestVietOcrStage:
         stage_n5_ocr_paddle(make_ctx(tmp_path, 1, lang="en"))
         assert len(paddle.asked) == 2
 
+    def test_moving_to_another_video_drops_the_previous_ones_boxes(
+        self, tmp_path, probe_stubs
+    ):
+        """Cache giu MOT video mot luc — do la mot chan bo nho.
+
+        Vong lap that di qua ~400 video x ~300 keyframe. Giu lai video truoc
+        khong cuu duoc lan goi nao (hai tang luon chay lien tiep tren cung mot
+        video), no chi tich lai cho den khi phien Kaggle het RAM sau nhieu gio.
+        """
+        from mfe.offline.stages import _DETECTIONS
+
+        paddle = self._paddle()
+        probe_stubs(paddle, FakeVietOCR())
+        stage_n5_ocr_paddle(make_ctx(tmp_path, 1))
+        first = dict(_DETECTIONS)
+
+        other = make_ctx(tmp_path, 1)
+        other.video_id = "L21_V002"
+        stage_n5_ocr_paddle(other)
+
+        assert len(_DETECTIONS) == len(first)   # khong cong don
+
     def test_unloading_models_drops_the_detections_too(self, tmp_path, probe_stubs):
         """Hop gan voi doi tuong model da sinh ra chung."""
         paddle = self._paddle()

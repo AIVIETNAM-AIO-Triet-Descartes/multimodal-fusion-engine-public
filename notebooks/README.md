@@ -27,6 +27,7 @@ cả năm người, không phải một môi trường mỗi thư mục.
 | `requirements-kaggle-nomodel.txt` | `dake/01`, `btc/02` — không model |
 | `requirements-kaggle-btc-images.txt` | `btc/03` — torch + transformers + easyocr |
 | `requirements-kaggle-btc-video.txt` | `btc/04` — faster-whisper + CLAP |
+| `requirements-kaggle-btc-paddle-vietocr.txt` | `btc/05`, `btc/06` — paddlepaddle + paddleocr + vietocr |
 | `requirements-kaggle.txt` | `dake/00` — cả stack; là nguồn của `requirements-kaggle.lock.txt` |
 
 > Số đầu tên file **không** phải thứ tự toàn cục nữa, chỉ là thứ tự trong thư mục của nó. Trong
@@ -34,9 +35,9 @@ cả năm người, không phải một môi trường mỗi thư mục.
 
 ---
 
-## `btc/` — dùng lại bộ keyframe của BTC, ba lượt theo thứ tự này
+## `btc/` — dùng lại bộ keyframe của BTC, bốn lượt theo thứ tự này
 
-Volume `keyframes-btc` (v2), bundle `aic_btc_b1_v1`. **Cả ba dùng chung một cách chia người**;
+Volume `keyframes-btc` (v2), bundle `aic_btc_b1_v1`. **Cả bốn dùng chung một cách chia người**;
 đổi `MEMBER` ở ô đầu là ra đúng phần việc quen thuộc ở mọi lượt.
 
 | # | Notebook | Sinh ra | Gói cần | Đầu vào lấy ở đâu |
@@ -44,6 +45,20 @@ Volume `keyframes-btc` (v2), bundle `aic_btc_b1_v1`. **Cả ba dùng chung một
 | 1 | `btc/02-keyframes-btc-import.ipynb` | ảnh keyframe, `objects/`, `map-keyframes` | `-nomodel` | `Keyframes_*.zip` + `objects-*.zip` |
 | 2 | `btc/03-btc-siglip-ocr.ipynb` | `siglip_vectors`, `ocr_text`, `sviptr_ocr` | `-btc-images` | tải lại `Keyframes_*.zip` |
 | 3 | `btc/04-btc-subtitles-audio.ipynb` | `subtitle_segments`, `subtitles`, `audio_features` | `-btc-video` | **từng video** qua HTTP Range |
+| 4 | `btc/06-btc-paddle-vietocr.ipynb` | `paddle_ocr`, `viet_ocr` | `-btc-paddle-vietocr` | tải lại `Keyframes_*.zip` |
+
+**Lượt 4 chỉ Trọng & Quang**, config riêng `config/ingest_shards_batch1_btc_ocr2.yaml` — cùng
+bundle, cùng bảng phân công, nhưng **tách file** để `merge_bundle.py` không đòi đủ mảnh
+`paddle_ocr` cho cả 873 video trong khi lượt 2 còn đang chạy. Gộp độc lập bằng chính config đó.
+
+Hai điều làm lượt 4 khác hình dạng ba lượt trước, và cả hai là ràng buộc chứ không phải sở thích:
+
+* **Vòng lặp theo VIDEO, hai tầng liền nhau.** `n5_ocr_vietocr` dùng lại bộ phát hiện của
+  `n5_ocr_paddle` qua `paddle_scan`, và cache chỉ giữ một video một lúc. Đảo thành theo-tầng là
+  chạy PaddleOCR hai lượt.
+* **KHÔNG `unload_models()` giữa các video.** PaddleOCR 3.x khởi tạo PaddleX ở phạm vi tiến
+  trình; thả rồi dựng lại là `RuntimeError: PDX has already been initialized`, và nó giết mọi
+  video còn lại chứ không chỉ video đang chạy.
 
 `n4_objects` không có ở lượt nào: BTC phát hành sẵn nhãn, lượt 1 nạp chúng. Chạy detector của ta
 lên chính bộ keyframe này là phép đo khác (§3.6). `n6_recap`/`n6_bge_m3` do Lead hoãn.
@@ -62,13 +77,13 @@ Ba điều làm nó vô hại với ba lượt đang chạy, và cả ba đều 
   thành viên có trong phân công nên nó không thấy, và bảng đếm của Trọng/Quang không đổi.
 * **Không ghi `part-manifest`.** Hai artifact này chưa thuộc hợp đồng đầu ra.
 
-Gói riêng (`requirements-kaggle-btc-ocr-probe.txt`) cũng là có chủ ý: `paddlepaddle` là một
+Gói riêng (`requirements-kaggle-btc-paddle-vietocr.txt`) cũng là có chủ ý: `paddlepaddle` là một
 stack khác PyTorch và cài hỏng trên Kaggle là chuyện thường; gộp vào gói chung nghĩa là một
 lần cài hỏng ở đây làm chết phiên của bốn người kia.
 
-Cả hai artifact đăng ký `source=None` — chưa arm nào đọc chúng. Cắm vào tầng online là quyết
-định của Lead sau khi nhìn số, và cần sửa ba chỗ: `source` trong `ARTIFACTS`, khoá trong
-`sota_payloads.SOURCE_FILES`, rồi khai arm. Assertion trong `bundle.py` bắt nếu thiếu chỗ nào.
+Sau phép đo này Lead **chốt giữ cả hai** và chúng đã được cắm thành arm (`ocr_paddle`,
+`ocr_vietocr`) — xem lượt 4. Bản thân notebook 05 vẫn hữu ích: nó là chỗ chạy một video và
+nhìn bốn nguồn OCR cạnh nhau khi cần kiểm lại.
 
 **Lượt 2 và 3 không đọc ảnh từ Volume.** Ở đường BTC, Volume là ghi-một-chiều: kéo ảnh về là
 ~177.000 lần `read_file`, còn tải lại gói là 1,4–5,7 GB có resume.

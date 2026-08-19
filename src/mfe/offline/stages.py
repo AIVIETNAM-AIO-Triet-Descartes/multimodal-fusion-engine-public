@@ -65,9 +65,11 @@ _MODELS: dict[str, object] = {}
 #:
 #: Khoa gom ca khoa cache cua model, nen doi tham so Paddle la cache truot chu
 #: khong tra ve hop cu. Cung vong doi voi `_MODELS`: `unload_models()` xoa ca hai.
-_DETECTIONS: dict[
-    tuple[str, str, int], list[tuple[tuple[int, int, int, int], str, float]]
-] = {}
+_DETECTIONS: dict[int, list[tuple[tuple[int, int, int, int], str, float]]] = {}
+
+#: `(video_id, khoa cache Paddle)` ma `_DETECTIONS` dang giu. Doi mot trong hai
+#: la cache bi don sach — xem `paddle_scan`.
+_DETECTION_SCOPE: tuple[str, str] | None = None
 
 
 def cached_model(key: str, build):
@@ -90,6 +92,8 @@ def unload_models() -> None:
     # Ket qua phat hien gan voi doi tuong model da tao ra chung; giu lai sau khi
     # model bi tha la giu mot ket qua khong con gi trong phien nay sinh lai duoc.
     _DETECTIONS.clear()
+    global _DETECTION_SCOPE  # noqa: PLW0603
+    _DETECTION_SCOPE = None
     free_gpu()
 
 
@@ -1196,8 +1200,19 @@ def paddle_scan(
     Ca hai tang N5b goi ham nay, nen tang chay sau **khong tra lai** gia cua
     pipeline. Do la mot nua thoi gian cua ca phep do khi chay tren CPU.
     """
-    cache_key = _paddle_cache_key(ctx)
-    todo = [kf for kf in keyframes if (ctx.video_id, cache_key, kf.n) not in _DETECTIONS]
+    global _DETECTION_SCOPE  # noqa: PLW0603
+
+    scope = (ctx.video_id, _paddle_cache_key(ctx))
+    if _DETECTION_SCOPE != scope:
+        # MOT video mot luc, va do la mot chan bo nho chu khong phai toi uu.
+        # Hai tang luon chay lien tiep tren cung mot video, nen giu lai video
+        # truoc khong cuu duoc lan goi nao — no chi tich lai: 400 video x ~300
+        # keyframe x mot danh sach hop moi cai la mot phien Kaggle het RAM o
+        # giua chung, sau nhieu gio da chay.
+        _DETECTIONS.clear()
+        _DETECTION_SCOPE = scope
+
+    todo = [kf for kf in keyframes if kf.n not in _DETECTIONS]
     if todo:
         import time  # noqa: PLC0415
 
@@ -1205,13 +1220,11 @@ def paddle_scan(
         every = int(ctx.params.get("progress_every", 25))
         started = time.perf_counter()
         for done, keyframe in enumerate(todo, 1):
-            _DETECTIONS[(ctx.video_id, cache_key, keyframe.n)] = _paddle_read(
-                ocr, keyframe.image
-            )
+            _DETECTIONS[keyframe.n] = _paddle_read(ocr, keyframe.image)
             _progress(label, done, len(todo), started, every)
     elif keyframes:
         logger.info("%s: dung lai ket qua Paddle da co cho %d anh", label, len(keyframes))
-    return [_DETECTIONS[(ctx.video_id, cache_key, kf.n)] for kf in keyframes]
+    return [_DETECTIONS[kf.n] for kf in keyframes]
 
 
 def _package_version(name: str) -> str:
@@ -1231,7 +1244,8 @@ def stage_n5_ocr_paddle(ctx: StageContext) -> dict:
     khong ném gi. Doi lai, no khong hieu ngu canh: chu bi che mot phan thi no
     doan theo hinh chu chu khong theo nghia.
     """
-    lang = _paddle_params(ctx)["lang"]
+    settings = _paddle_params(ctx)
+    lang = settings["lang"]
     score_min = float(ctx.params.get("rec_score_min", 0.0))
     keyframes = probe_keyframes(ctx)
 
@@ -1270,6 +1284,11 @@ def stage_n5_ocr_paddle(ctx: StageContext) -> dict:
             # Mot lan chay bi `limit` cat phai KHONG trong giong mot lan chay du:
             # `rows` thap co the la "bo doc im lang" hoac "moi chay 40/307 anh".
             "keyframes_total": len(ctx.keyframes),
+            # Duong tinh toan, KHONG phai cau hinh cua phep do. O `facts` chu
+            # khong `params`: hai nguoi chay mot nguoi GPU mot nguoi CPU van gop
+            # duoc bundle, nhung phai NHIN THAY duoc khi doc lai con so thoi gian.
+            "device": settings["device"],
+            "enable_mkldnn": settings["enable_mkldnn"],
             "boxes": boxes_total,
             "silent_images": silent_images,
             "dropped_low_score": dropped_low_score,
@@ -1317,6 +1336,7 @@ def stage_n5_ocr_vietocr(ctx: StageContext) -> dict:
     pad = int(ctx.params.get("crop_pad", 2))
     min_side = int(ctx.params.get("min_crop_side", 3))
     keyframes = probe_keyframes(ctx)
+    settings = _paddle_params(ctx)
 
     def load_vietocr():
         # `Image.ANTIALIAS` bi Pillow 10 XOA (da bo tu 9.1). vietocr 0.3.x goi no
@@ -1433,6 +1453,9 @@ def stage_n5_ocr_vietocr(ctx: StageContext) -> dict:
             "images": images,
             "boxes": boxes_total,
             "keyframes_total": len(ctx.keyframes),
+            "device": settings["device"],
+            "enable_mkldnn": settings["enable_mkldnn"],
+            "vietocr_device": device,
             "crops_skipped": crops_skipped,
             "silent_images": silent_images,
             "batched": batched,

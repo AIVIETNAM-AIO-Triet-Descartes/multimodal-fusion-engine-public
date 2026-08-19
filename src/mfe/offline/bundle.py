@@ -80,11 +80,18 @@ ARTIFACTS: dict[str, Artifact] = {
         Artifact("subtitles", "text", "subtitles.json", "subtitle", None, "n2_subtitles"),
         Artifact("ocr_text", "text", "ocr_text.json", "ocr", None, "n5_ocr_easyocr"),
         Artifact("sviptr_ocr", "text", "sviptr_ocr.json", "ocr_sviptr", None, "n5_ocr_qwen"),
-        # Hai nguon OCR de DO, chua de dung — `source=None`, xem `Artifact.source`.
-        # Chung ton tai vi Qwen2-VL do duoc 10,8 giay/anh (~532 gio GPU cho batch
-        # 1) va cau hoi la co bo doc nao vua nhanh vua khong te hon khong.
-        Artifact("paddle_ocr", "text", "paddle_ocr.json", None, None, "n5_ocr_paddle"),
-        Artifact("viet_ocr", "text", "viet_ocr.json", None, None, "n5_ocr_vietocr"),
+        # Hai nguon OCR chuyen dung, GIU CA HAI — Lead chot 19-08-2026.
+        #
+        # Chung ra doi vi Qwen2-VL do duoc 10,8 giay/anh (~532 gio GPU cho batch
+        # 1). Do tren 40 keyframe chung cua `L21_V001`, CUNG bo phat hien, khac
+        # dung bo nhan dang: VietOCR giu 20,6% chu co dau va doc tieu de tieng
+        # Viet gan nhu hoan hao nhung bien logo dai thanh tu tieng Viet;
+        # PaddleOCR giu 10,7%, doc logo/dong ho sach nhung rung dau co he thong.
+        #
+        # Hai bo sai o HAI CHO KHAC NHAU, nen day la phep cong chu khong phai
+        # phep chon (§8.6 handoff) — mot arm moi cai.
+        Artifact("paddle_ocr", "text", "paddle_ocr.json", "ocr_paddle", None, "n5_ocr_paddle"),
+        Artifact("viet_ocr", "text", "viet_ocr.json", "ocr_vietocr", None, "n5_ocr_vietocr"),
         Artifact("objects_text", "text", "objects_text.json", "object", None, "n4_objects"),
         Artifact("dense_captions", "text", "dense_captions.json", "caption", None, "n6_recap"),
         Artifact("siglip_vectors", "vector", "siglip_vectors.npz", None, 1152, "n4_siglip"),
