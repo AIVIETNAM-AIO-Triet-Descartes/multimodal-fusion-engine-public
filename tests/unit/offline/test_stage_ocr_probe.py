@@ -159,42 +159,115 @@ class TestJoinTextLines:
 # ---------------------------------------------------------------------------
 
 
-class TestBuildPaddleOcr:
-    def _install(self, monkeypatch, accepted: set[str]):
-        seen: dict = {}
+SUPERSET = {
+    "lang": "vi",
+    "device": "gpu",
+    "use_gpu": True,
+    "show_log": False,
+    "use_angle_cls": False,
+    "use_textline_orientation": False,
+    "use_doc_orientation_classify": False,
+    "use_doc_unwarping": False,
+}
 
-        def factory(**kwargs):
-            bad = next((k for k in kwargs if k not in accepted), None)
-            if bad is not None:
-                raise TypeError(f"__init__() got an unexpected keyword argument '{bad}'")
-            seen.update(kwargs)
-            return types.SimpleNamespace(kwargs=dict(kwargs))
+
+class TestBuildPaddleOcr:
+    """Ten tham so phai duoc chon TRUOC khi khoi tao, va chi khoi tao MOT lan.
+
+    Do duoc tren Kaggle: PaddleOCR 3.x khoi tao PaddleX o pham vi tien trinh, nen
+    lan dung thu hai — du lan dau da ném loi — chet bang `RuntimeError: PDX has
+    already been initialized`. Ban dau tien cua ham nay thu roi bo tham so bi tu
+    choi rop thu lai; no bien mot loi doc duoc thanh mot loi che mat loi that.
+    """
+
+    def _install(self, monkeypatch, version: str, signature_names=None):
+        calls: list[dict] = []
+
+        if signature_names is None:
+            def factory(**kwargs):
+                calls.append(dict(kwargs))
+                return types.SimpleNamespace(kwargs=dict(kwargs))
+        else:
+            # Mot chu ky doc duoc — tuc KHONG co `**kwargs`, xem
+            # `test_a_var_keyword_signature_disables_the_second_filter`.
+            source = "def factory({}):\n    pass".format(
+                ", ".join(f"{name}=None" for name in signature_names)
+            )
+            namespace: dict = {}
+            exec(compile(source, "<fake>", "exec"), namespace)  # noqa: S102
+            template = namespace["factory"]
+
+            def factory(**kwargs):
+                calls.append(dict(kwargs))
+                return types.SimpleNamespace(kwargs=dict(kwargs))
+
+            factory.__signature__ = __import__("inspect").signature(template)
 
         module = types.ModuleType("paddleocr")
         module.PaddleOCR = factory
         monkeypatch.setitem(sys.modules, "paddleocr", module)
-        return seen
+        monkeypatch.setattr(
+            "mfe.offline.stages._package_version",
+            lambda name: version if name == "paddleocr" else "0",
+        )
+        return calls
 
-    def test_it_drops_kwargs_this_version_rejects(self, monkeypatch):
-        seen = self._install(monkeypatch, {"lang", "device"})
-        build_paddle_ocr(lang="vi", device="gpu", use_gpu=True, show_log=False)
-        assert seen == {"lang": "vi", "device": "gpu"}
+    def test_a_3x_install_gets_the_3x_names_only(self, monkeypatch):
+        calls = self._install(monkeypatch, "3.1.0")
+        build_paddle_ocr(**SUPERSET)
+        assert set(calls[0]) == {
+            "lang", "device", "use_textline_orientation",
+            "use_doc_orientation_classify", "use_doc_unwarping",
+        }
 
-    def test_it_keeps_the_kwargs_this_version_accepts(self, monkeypatch):
-        seen = self._install(monkeypatch, {"lang", "use_gpu", "show_log"})
-        build_paddle_ocr(lang="vi", use_gpu=True, show_log=False, device=None)
-        assert seen == {"lang": "vi", "use_gpu": True, "show_log": False}
+    def test_a_2x_install_gets_the_2x_names_only(self, monkeypatch):
+        calls = self._install(monkeypatch, "2.7.3")
+        build_paddle_ocr(**SUPERSET)
+        assert set(calls[0]) == {"lang", "use_gpu", "show_log", "use_angle_cls"}
 
-    def test_an_unrelated_type_error_is_not_swallowed(self, monkeypatch):
+    def test_it_constructs_exactly_once(self, monkeypatch):
+        """Lan dung thu hai la cai chet bang PDX-already-initialized."""
+        calls = self._install(monkeypatch, "3.1.0")
+        build_paddle_ocr(**SUPERSET)
+        assert len(calls) == 1
+
+    def test_an_unknown_version_is_treated_as_the_newest(self, monkeypatch):
+        calls = self._install(monkeypatch, "?")
+        build_paddle_ocr(**SUPERSET)
+        assert "device" in calls[0] and "use_gpu" not in calls[0]
+
+    def test_a_readable_signature_narrows_further(self, monkeypatch):
+        """Ban 3.x nao do bo mot tham so ma bang cua ta van khai."""
+        calls = self._install(monkeypatch, "3.1.0", signature_names=["lang", "device"])
+        build_paddle_ocr(**SUPERSET)
+        assert set(calls[0]) == {"lang", "device"}
+
+    def test_a_var_keyword_signature_disables_the_second_filter(self, monkeypatch):
+        """PaddleOCR 3.x nhan `**kwargs`, nen chu ky khong noi len duoc gi.
+
+        Loc theo mot chu ky `**kwargs` se cho ra tap RONG va bo het tham so —
+        nen khi doc duoc `**kwargs`, bang theo phien ban la thu duy nhat con lai.
+        """
+        calls = self._install(monkeypatch, "3.1.0")  # factory nhan **kwargs
+        build_paddle_ocr(**SUPERSET)
+        assert "lang" in calls[0] and "device" in calls[0]
+
+    def test_force_bypasses_both_filters(self, monkeypatch):
+        """Duong thoat cho mot ban co ten khac ca hai bang."""
+        calls = self._install(monkeypatch, "3.1.0", signature_names=["lang", "device"])
+        build_paddle_ocr(force={"ten_la": 1}, **SUPERSET)
+        assert calls[0]["ten_la"] == 1
+
+    def test_a_real_construction_error_is_not_hidden(self, monkeypatch):
         module = types.ModuleType("paddleocr")
 
         def factory(**kwargs):  # noqa: ARG001
-            raise TypeError("model file is corrupt")
+            raise RuntimeError("model file is corrupt")
 
         module.PaddleOCR = factory
         monkeypatch.setitem(sys.modules, "paddleocr", module)
-        with pytest.raises(TypeError, match="corrupt"):
-            build_paddle_ocr(lang="vi")
+        with pytest.raises(RuntimeError, match="corrupt"):
+            build_paddle_ocr(**SUPERSET)
 
 
 # ---------------------------------------------------------------------------

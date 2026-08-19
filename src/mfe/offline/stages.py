@@ -988,35 +988,73 @@ def normalize_paddle_result(raw: Any) -> list[tuple[tuple[int, int, int, int], s
     return out
 
 
-def _unexpected_kwarg(message: str) -> str | None:
-    """Ten tham so bi tu choi trong mot `TypeError` cua Python, neu doc duoc."""
-    import re  # noqa: PLC0415
+#: Ten tham so `PaddleOCR` chap nhan, theo the he. 3.x doi ten gan het.
+_PADDLE_KWARGS: dict[int, tuple[str, ...]] = {
+    2: ("lang", "use_gpu", "show_log", "use_angle_cls"),
+    3: (
+        "lang",
+        "device",
+        "use_textline_orientation",
+        "use_doc_orientation_classify",
+        "use_doc_unwarping",
+    ),
+}
 
-    found = re.search(r"unexpected keyword argument '([^']+)'", message)
-    return found.group(1) if found else None
+
+def _paddle_major(version_string: str) -> int:
+    """So chinh cua phien ban paddleocr; 3 khi khong doc duoc (ban moi hon)."""
+    head = version_string.split(".", 1)[0]
+    return int(head) if head.isdigit() else 3
 
 
-def build_paddle_ocr(**kwargs: Any) -> Any:
-    """Mot `PaddleOCR`, bo di nhung tham so ban dang cai KHONG nhan.
+def _signature_names(target: Any) -> set[str] | None:
+    """Ten tham so `target` nhan, hoac `None` khi no chi co `**kwargs`."""
+    import inspect  # noqa: PLC0415
+
+    try:
+        parameters = inspect.signature(target).parameters
+    except (TypeError, ValueError):  # pragma: no cover - built-in khong co chu ky
+        return None
+    if any(p.kind is p.VAR_KEYWORD for p in parameters.values()):
+        return None
+    return set(parameters)
+
+
+def build_paddle_ocr(force: dict | None = None, **kwargs: Any) -> Any:
+    """Mot `PaddleOCR`, dung **MOT** lan khoi tao.
 
     PaddleOCR doi ten tham so giua 2.x va 3.x (`use_gpu` -> `device`,
-    `use_angle_cls` -> `use_textline_orientation`, `show_log` bien mat). Pin cung
-    mot bo tham so thi notebook chet ngay o o khoi tao tren nua so phien ban; nen
-    ta thu, doc ten tham so bi tu choi tu chinh `TypeError`, bo no ra roi thu lai.
-    Chi bo tham so **ta da truyen vao** — mot `TypeError` khac van noi len.
+    `use_angle_cls` -> `use_textline_orientation`, `show_log` bien mat), nen
+    khong the pin cung mot bo ten.
+
+    **Vi sao khong "thu roi bo tham so bi tu choi rop thu lai".** Do la thiet ke
+    dau tien cua ham nay va no SAI, do duoc tren Kaggle: PaddleOCR 3.x khoi tao
+    PaddleX o pham vi tien trinh, nen lan dung thu hai — du lan dau da ném loi —
+    chet bang `RuntimeError: PDX has already been initialized. Reinitialization
+    is not supported.` Mot vong lap thu lai bien mot loi doc duoc thanh mot loi
+    khac che mat loi that. Cung ly do do: **mot lan khoi tao that bai la phai
+    khoi dong lai kernel**, khong phai chay lai o.
+
+    Nen ten tham so duoc chon TRUOC khi khoi tao, theo phien ban da cai, roi loc
+    them mot lan theo chu ky that neu doc duoc. `force` di thang, khong loc — no
+    la duong thoat cho mot ban co ten khac ca hai bang tren.
     """
     from paddleocr import PaddleOCR  # noqa: PLC0415
 
-    remaining = {key: value for key, value in kwargs.items() if value is not None}
-    while True:
-        try:
-            return PaddleOCR(**remaining)
-        except TypeError as err:
-            name = _unexpected_kwarg(str(err))
-            if name is None or name not in remaining:
-                raise
-            logger.info("paddleocr khong nhan %s, bo ra", name)
-            remaining.pop(name)
+    major = _paddle_major(_package_version("paddleocr"))
+    names = _PADDLE_KWARGS.get(major, _PADDLE_KWARGS[3])
+    chosen = {k: v for k, v in kwargs.items() if k in names and v is not None}
+
+    accepted = _signature_names(PaddleOCR)
+    if accepted is not None:
+        dropped = sorted(set(chosen) - accepted)
+        if dropped:
+            logger.info("paddleocr %s khong nhan %s", major, ", ".join(dropped))
+        chosen = {k: v for k, v in chosen.items() if k in accepted}
+
+    chosen.update(force or {})
+    logger.info("khoi tao PaddleOCR (%s) voi %s", major, sorted(chosen))
+    return PaddleOCR(**chosen)
 
 
 def _paddle_read(ocr: Any, image: Path) -> list[tuple[tuple[int, int, int, int], str, float]]:
@@ -1026,9 +1064,10 @@ def _paddle_read(ocr: Any, image: Path) -> list[tuple[tuple[int, int, int, int],
 
 
 def _paddle_params(ctx: StageContext) -> dict:
+    """Bo tham so **hop nhat ca hai the he**; `build_paddle_ocr` loc theo ban da cai."""
     lang = ctx.params.get("lang", "vi")
     device = ctx.params.get("device", "gpu")
-    kwargs = {
+    return {
         "lang": lang,
         "device": device,
         "use_gpu": device != "cpu",
@@ -1038,14 +1077,18 @@ def _paddle_params(ctx: StageContext) -> dict:
         "use_doc_orientation_classify": False,
         "use_doc_unwarping": False,
     }
-    kwargs.update(ctx.params.get("paddle_kwargs", {}))
-    return kwargs
 
 
 def _paddle_instance(ctx: StageContext) -> Any:
     kwargs = _paddle_params(ctx)
-    key = f"paddleocr lang={kwargs.get('lang')} device={kwargs.get('device')}"
-    return cached_model(key, lambda: build_paddle_ocr(**kwargs))
+    force = dict(ctx.params.get("paddle_kwargs", {}))
+    # `force` vao khoa cache: doi no ma dung lai doi tuong cu la chay mot cau
+    # hinh khac voi cai marker se ghi.
+    key = (
+        f"paddleocr lang={kwargs['lang']} device={kwargs['device']} "
+        f"force={sorted(force.items())}"
+    )
+    return cached_model(key, lambda: build_paddle_ocr(force=force, **kwargs))
 
 
 def _package_version(name: str) -> str:
