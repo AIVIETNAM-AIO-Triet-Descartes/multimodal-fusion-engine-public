@@ -2,6 +2,10 @@
 
 Volume Modal **`keyframes-btc`** (v2) · bundle `aic_btc_b1_v1` · `keyframe_set: btc`
 
+Nếu host BTC tải chậm hoặc liên tục đứt, notebook 02 và 03 có thể đọc trực tiếp ZIP nguyên bản từ
+private Kaggle Dataset đã attach. Xem [`kaggle-zip-cache.md`](kaggle-zip-cache.md) để tạo cache,
+kiểm tra kích thước và nhận biết notebook đang dùng cache hay fallback về website.
+
 > **Người làm: Trọng & Quang.** Tài liệu giao việc đầy đủ — phân công, model từng feature, hợp
 > đồng ID/schema, cách gộp sau khi xong: [`giao-viec-trong-quang.md`](giao-viec-trong-quang.md).
 > Không sinh caption ở lượt này.
