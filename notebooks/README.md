@@ -12,7 +12,7 @@ Hai phương án keyframe, **hai Modal Volume riêng**, và không bao giờ dù
 ```
 notebooks/
 ├── btc/         ĐANG CHẠY — dùng lại bộ keyframe của BTC   -> volume keyframes-btc
-├── dake/        chờ chốt ρ  — tự trích bằng DAKE            -> volume aic2026
+├── dake/        ρ ĐÃ CHỐT (P1) — tự trích bằng DAKE          -> volume aic2026
 ├── reference/   CHỈ ĐỂ ĐỌC — bản gốc Bảo gửi, có lỗi đã ghi
 └── requirements-kaggle*.txt        (dùng chung, KHÔNG nằm trong btc/ hay dake/)
 ```
@@ -30,7 +30,7 @@ cả năm người, không phải một môi trường mỗi thư mục.
 | `requirements-kaggle.txt` | `dake/00` — cả stack; là nguồn của `requirements-kaggle.lock.txt` |
 
 > Số đầu tên file **không** phải thứ tự toàn cục nữa, chỉ là thứ tự trong thư mục của nó. Trong
-> `dake/` thì `01` chạy TRƯỚC `00` (00 là notebook 9 tầng, dùng sau khi ρ chốt).
+> `dake/` thì `01` chạy TRƯỚC `00` (00 là notebook 9 tầng, cho các tầng model của bộ DAKE).
 
 ---
 
@@ -83,13 +83,13 @@ Cả hai artifact đăng ký `source=None` — chưa arm nào đọc chúng. C�
 
 ## `dake/` — tự trích keyframe bằng DAKE
 
-Volume `aic2026` (v2), bundle `aic_dake_r0015_b1_v1`. **Cách chia người khác `btc/`** (theo gói
+Volume `aic2026` (v2), bundle `aic_dake_p1_b1_v1`. **Cách chia người khác `btc/`** (theo gói
 `Videos_*.zip` thay vì `Keyframes_*.zip`) — hai bundle khác nhau nên không sao, nhưng đừng trộn
 hai bảng phân công vào cùng một bundle (§7.1).
 
 | Thứ tự | Notebook | Dùng khi | Gói cần |
 |---|---|---|---|
-| 1 | `dake/01-keyframes-dake-kaggle-modal.ipynb` | N1/DAKE trên batch 1 — **chờ chốt ρ** | `-nomodel`; GPU T4 qua ffmpeg/NVDEC, có đường lùi CPU |
+| 1 | `dake/01-keyframes-dake-kaggle-modal.ipynb` | N1/DAKE trên batch 1 — **ρ đã chốt (P1)** | `-nomodel`; GPU T4 qua ffmpeg/NVDEC, có đường lùi CPU |
 | 2 | `dake/00-master-ingest-kaggle-modal.ipynb` | 9 tầng trong một vòng — ⛔ **ô fetch đang `raise`** | `requirements-kaggle.txt`, cả stack |
 
 `00` chưa chuyển sang đường tải trực tiếp nên chưa chạy được. Nó vẫn ở đây vì nó là chỗ duy nhất

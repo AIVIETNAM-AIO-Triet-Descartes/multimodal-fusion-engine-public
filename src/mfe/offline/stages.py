@@ -55,6 +55,20 @@ logger = logging.getLogger(__name__)
 #: *stages* and keeps the model across videos.
 _MODELS: dict[str, object] = {}
 
+#: Ket qua phat hien+nhan dang cua PaddleOCR, giu lai trong PHIEN.
+#:
+#: Ly do: `n5_ocr_paddle` va `n5_ocr_vietocr` chay CUNG mot pipeline tren CUNG bo
+#: anh — tang thu hai chi can hop, nhung no phai goi lai ca pipeline de lay. Ban
+#: dau tang do duoc ghi la "phan bi vut la phan re". Do la mot GIA DINH, khong
+#: phai so do, va tren CPU no sai: pipeline chay hai lan la **gap doi** thoi gian
+#: cua ca phep do.
+#:
+#: Khoa gom ca khoa cache cua model, nen doi tham so Paddle la cache truot chu
+#: khong tra ve hop cu. Cung vong doi voi `_MODELS`: `unload_models()` xoa ca hai.
+_DETECTIONS: dict[
+    tuple[str, str, int], list[tuple[tuple[int, int, int, int], str, float]]
+] = {}
+
 
 def cached_model(key: str, build):
     """The model for `key`, built once. `build` is only called on a miss."""
@@ -73,6 +87,9 @@ def unload_models() -> None:
     if _MODELS:
         logger.info("tha %d model", len(_MODELS))
     _MODELS.clear()
+    # Ket qua phat hien gan voi doi tuong model da tao ra chung; giu lai sau khi
+    # model bi tha la giu mot ket qua khong con gi trong phien nay sinh lai duoc.
+    _DETECTIONS.clear()
     free_gpu()
 
 
@@ -194,7 +211,9 @@ def stage_n1_keyframes(ctx: StageContext) -> dict:
     import cv2  # noqa: PLC0415
 
     from mfe.offline.dake import (
+        LOOKAHEAD,
         MAX_GAP_SECONDS,
+        MIN_GAP_SECONDS,
         RHO,
         cuda_decode_available,
         decode_frames,
@@ -207,6 +226,7 @@ def stage_n1_keyframes(ctx: StageContext) -> dict:
 
     rho = ctx.params.get("rho", RHO)
     max_gap = ctx.params.get("max_gap_seconds", MAX_GAP_SECONDS)
+    min_gap = ctx.params.get("min_gap_seconds", MIN_GAP_SECONDS)
     rank_by = ctx.params.get("rank_by", "signed")
     backend = ctx.params.get("decode_backend", "auto")
     if backend == "auto":
@@ -233,7 +253,12 @@ def stage_n1_keyframes(ctx: StageContext) -> dict:
             )
             np.save(cache, np.asarray(sizes, dtype=np.int64))
         picked = select_keyframes(
-            sizes, fps=fps, rho=rho, max_gap_seconds=max_gap, rank_by=rank_by
+            sizes,
+            fps=fps,
+            rho=rho,
+            min_gap_seconds=min_gap,
+            max_gap_seconds=max_gap,
+            rank_by=rank_by,
         )
 
         out_dir = ctx.workdir / "keyframes" / ctx.video_id
@@ -288,13 +313,23 @@ def stage_n1_keyframes(ctx: StageContext) -> dict:
         images=files,
         bytes=total_bytes,
         model="DAKE (khong model)",
+        # Moi gia tri o day phai la gia tri DA DUNG, khong phai gia tri mac dinh.
+        # Ban truoc ghi cung `"min_gap": 5` trong khi tang khong he truyen tham so
+        # do vao `select_keyframes` — nen marker khang dinh mot con so ma khong lan
+        # chay nao doc den, va no van dung nhu the sau khi mac dinh doi.
         params={
             "rho": rho,
-            "lookahead": 3,
-            "min_gap": 5,
+            "lookahead": LOOKAHEAD,
+            "min_gap_seconds": min_gap,
             "max_gap_seconds": max_gap,
             "rank_by": rank_by,
         },
+        # Nguong theo FRAME cua chinh video nay. `params` phai giong nhau giua moi
+        # shard (`check_fingerprints`), nhung 1,0s la 25 frame o 25fps va 30 frame
+        # o 30fps — nen con so frame la mot phep DO cua tung video, khong phai cau
+        # hinh, va no thuoc ve day.
+        min_gap_frames=max(1, int(min_gap * fps)),
+        max_gap_frames=max(1, int(max_gap * fps)),
         elapsed_s=timer.seconds,
     )
 
@@ -1059,10 +1094,49 @@ def build_paddle_ocr(force: dict | None = None, **kwargs: Any) -> Any:
     return PaddleOCR(**chosen)
 
 
+#: Ten ham da THUC SU duoc goi o lan quet gan nhat: `predict` (3.x) hay `ocr`
+#: (2.x). Ghi vao marker. Doc tu day chu khong hoi lai doi tuong model, vi khi
+#: `paddle_scan` tra ve ket qua da cache thi model co the chua he duoc dung.
+_PADDLE_API = ""
+
+
 def _paddle_read(ocr: Any, image: Path) -> list[tuple[tuple[int, int, int, int], str, float]]:
     """Chay pipeline PaddleOCR tren mot anh. `predict` la ten cua 3.x, `ocr` cua 2.x."""
-    run = getattr(ocr, "predict", None) or ocr.ocr
-    return normalize_paddle_result(run(str(image)))
+    global _PADDLE_API  # noqa: PLW0603
+    run = getattr(ocr, "predict", None)
+    _PADDLE_API = "predict" if run is not None else "ocr"
+    return normalize_paddle_result((run or ocr.ocr)(str(image)))
+
+
+def probe_keyframes(ctx: StageContext) -> list[Keyframe]:
+    """Anh ma mot tang N5b se chay, sau khi ap `limit`.
+
+    `limit` la cong cu cua phep DO, khong phai cua lan chay that: chat luong doc
+    chu cua mot bo OCR doc duoc tu vai chuc anh, con 307 anh tren CPU la 25 phut
+    moi vong. Marker ghi `images` va `keyframes_total`, nen mot lan chay bi cat
+    khong bao gio trong giong mot lan chay du.
+    """
+    limit = int(ctx.params.get("limit", 0))
+    return ctx.keyframes[:limit] if limit > 0 else list(ctx.keyframes)
+
+
+def _progress(label: str, done: int, total: int, started: float, every: int) -> None:
+    """In tien do theo dinh ky. Im lang khi `every <= 0`.
+
+    Ton tai vi mot tang chay 307 anh tren CPU khong in gi trong 25 phut thi tu
+    ngoai KHONG phan biet duoc voi treo — va lan chay dau tien cua tang nay da
+    dung nhu vay.
+    """
+    if every <= 0 or (done % every and done != total):
+        return
+    import time  # noqa: PLC0415
+
+    elapsed = time.perf_counter() - started
+    rate = elapsed / max(1, done)
+    logger.info(
+        "%s %d/%d anh · %.2fs/anh · con ~%.1f phut",
+        label, done, total, rate, rate * (total - done) / 60,
+    )
 
 
 def _paddle_params(ctx: StageContext) -> dict:
@@ -1095,16 +1169,49 @@ def _paddle_params(ctx: StageContext) -> dict:
     }
 
 
-def _paddle_instance(ctx: StageContext) -> Any:
+def _paddle_cache_key(ctx: StageContext) -> str:
     kwargs = _paddle_params(ctx)
     force = dict(ctx.params.get("paddle_kwargs", {}))
     # `force` vao khoa cache: doi no ma dung lai doi tuong cu la chay mot cau
     # hinh khac voi cai marker se ghi.
-    key = (
+    return (
         f"paddleocr lang={kwargs['lang']} device={kwargs['device']} "
         f"mkldnn={kwargs['enable_mkldnn']} force={sorted(force.items())}"
     )
-    return cached_model(key, lambda: build_paddle_ocr(force=force, **kwargs))
+
+
+def _paddle_instance(ctx: StageContext) -> Any:
+    kwargs = _paddle_params(ctx)
+    force = dict(ctx.params.get("paddle_kwargs", {}))
+    return cached_model(
+        _paddle_cache_key(ctx), lambda: build_paddle_ocr(force=force, **kwargs)
+    )
+
+
+def paddle_scan(
+    ctx: StageContext, keyframes: list[Keyframe], *, label: str
+) -> list[list[tuple[tuple[int, int, int, int], str, float]]]:
+    """Chay PaddleOCR tren `keyframes`, dung lai ket qua neu phien nay da chay.
+
+    Ca hai tang N5b goi ham nay, nen tang chay sau **khong tra lai** gia cua
+    pipeline. Do la mot nua thoi gian cua ca phep do khi chay tren CPU.
+    """
+    cache_key = _paddle_cache_key(ctx)
+    todo = [kf for kf in keyframes if (ctx.video_id, cache_key, kf.n) not in _DETECTIONS]
+    if todo:
+        import time  # noqa: PLC0415
+
+        ocr = _paddle_instance(ctx)
+        every = int(ctx.params.get("progress_every", 25))
+        started = time.perf_counter()
+        for done, keyframe in enumerate(todo, 1):
+            _DETECTIONS[(ctx.video_id, cache_key, keyframe.n)] = _paddle_read(
+                ocr, keyframe.image
+            )
+            _progress(label, done, len(todo), started, every)
+    elif keyframes:
+        logger.info("%s: dung lai ket qua Paddle da co cho %d anh", label, len(keyframes))
+    return [_DETECTIONS[(ctx.video_id, cache_key, kf.n)] for kf in keyframes]
 
 
 def _package_version(name: str) -> str:
@@ -1126,16 +1233,16 @@ def stage_n5_ocr_paddle(ctx: StageContext) -> dict:
     """
     lang = _paddle_params(ctx)["lang"]
     score_min = float(ctx.params.get("rec_score_min", 0.0))
+    keyframes = probe_keyframes(ctx)
 
     with Stopwatch() as timer:
-        ocr = _paddle_instance(ctx)
+        scanned = paddle_scan(ctx, keyframes, label="paddle")
         mapping: dict[str, str] = {}
         boxes_total = 0
         dropped_low_score = 0
         silent_images = 0
 
-        for keyframe in ctx.keyframes:
-            found = _paddle_read(ocr, keyframe.image)
+        for keyframe, found in zip(keyframes, scanned, strict=True):
             boxes_total += len(found)
             kept = [(box, text) for box, text, score in found if score >= score_min]
             dropped_low_score += len(found) - len(kept)
@@ -1145,7 +1252,7 @@ def stage_n5_ocr_paddle(ctx: StageContext) -> dict:
             else:
                 silent_images += 1
 
-    images = len(ctx.keyframes)
+    images = len(keyframes)
     return ctx.writer.write_text_part(
         "paddle_ocr",
         ctx.video_id,
@@ -1154,12 +1261,15 @@ def stage_n5_ocr_paddle(ctx: StageContext) -> dict:
         params={
             "lang": lang,
             "rec_score_min": score_min,
-            "api": "predict" if hasattr(ocr, "predict") else "ocr",
+            "api": _PADDLE_API,
             "order": "group_text_lines",
         },
         # Do duoc, khac nhau tung video — xem `write_text_part`.
         facts={
             "images": images,
+            # Mot lan chay bi `limit` cat phai KHONG trong giong mot lan chay du:
+            # `rows` thap co the la "bo doc im lang" hoac "moi chay 40/307 anh".
+            "keyframes_total": len(ctx.keyframes),
             "boxes": boxes_total,
             "silent_images": silent_images,
             "dropped_low_score": dropped_low_score,
@@ -1206,6 +1316,7 @@ def stage_n5_ocr_vietocr(ctx: StageContext) -> dict:
     beamsearch = bool(ctx.params.get("beamsearch", False))
     pad = int(ctx.params.get("crop_pad", 2))
     min_side = int(ctx.params.get("min_crop_side", 3))
+    keyframes = probe_keyframes(ctx)
 
     def load_vietocr():
         from vietocr.tool.config import Cfg  # noqa: PLC0415
@@ -1236,10 +1347,9 @@ def stage_n5_ocr_vietocr(ctx: StageContext) -> dict:
         import time  # noqa: PLC0415
 
         started = time.perf_counter()
-        ocr = _paddle_instance(ctx)
+        scanned = paddle_scan(ctx, keyframes, label="vietocr/phat hien")
         detected: list[list[tuple[int, int, int, int]]] = []
-        for keyframe in ctx.keyframes:
-            found = _paddle_read(ocr, keyframe.image)
+        for found in scanned:
             boxes_total += len(found)
             keep: list[tuple[int, int, int, int]] = []
             for box, _text, _score in found:
@@ -1252,7 +1362,9 @@ def stage_n5_ocr_vietocr(ctx: StageContext) -> dict:
                 keep.append(box)
             detected.append(keep)
         # Tach ra vi hai nua tra loi hai cau hoi khac nhau: "phat hien co du nhanh
-        # de chay 873 video khong" va "VietOCR doc mot dong het bao lau".
+        # de chay 873 video khong" va "VietOCR doc mot dong het bao lau". Khi
+        # `n5_ocr_paddle` da chay truoc trong cung phien, `paddle_scan` tra ve
+        # ket qua da co va con so nay ~0 — dung nhu the.
         detect_seconds = round(time.perf_counter() - started, 2)
 
         # PHA 2 — nap VietOCR roi doc. Anh mo lai o day: giu 307 anh trong bo nho
@@ -1260,24 +1372,29 @@ def stage_n5_ocr_vietocr(ctx: StageContext) -> dict:
         reader = cached_model(f"vietocr {cfg_name}", load_vietocr)
         batch_predict = getattr(reader, "predict_batch", None)
         batched = batch_predict is not None
+        every = int(ctx.params.get("progress_every", 25))
+        phase2 = time.perf_counter()
 
-        for keyframe, boxes in zip(ctx.keyframes, detected, strict=True):
-            if not boxes:
-                silent_images += 1
-                continue
-            page = Image.open(keyframe.image).convert("RGB")
-            crops = [_crop_for_recognition(page, box, pad) for box in boxes]
-            texts = (
-                list(batch_predict(crops)) if batched
-                else [reader.predict(crop) for crop in crops]
-            )
-            text = join_text_lines(boxes, texts)
+        for done, (keyframe, boxes) in enumerate(
+            zip(keyframes, detected, strict=True), 1
+        ):
+            if boxes:
+                page = Image.open(keyframe.image).convert("RGB")
+                crops = [_crop_for_recognition(page, box, pad) for box in boxes]
+                texts = (
+                    list(batch_predict(crops)) if batched
+                    else [reader.predict(crop) for crop in crops]
+                )
+                text = join_text_lines(boxes, texts)
+            else:
+                text = ""
             if text:
                 mapping[build_keyframe_id(ctx.video_id, keyframe.frame_idx)] = text
             else:
                 silent_images += 1
+            _progress("vietocr/doc", done, len(keyframes), phase2, every)
 
-    images = len(ctx.keyframes)
+    images = len(keyframes)
     return ctx.writer.write_text_part(
         "viet_ocr",
         ctx.video_id,
@@ -1298,6 +1415,7 @@ def stage_n5_ocr_vietocr(ctx: StageContext) -> dict:
         facts={
             "images": images,
             "boxes": boxes_total,
+            "keyframes_total": len(ctx.keyframes),
             "crops_skipped": crops_skipped,
             "silent_images": silent_images,
             "batched": batched,

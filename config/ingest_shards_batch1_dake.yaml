@@ -19,7 +19,7 @@
 # theo video thì video của mỗi người rải khắp 14 gói, và **ai cũng phải tải gần
 # hết 77 GB** — đúng thứ mà chia việc sinh ra để tránh.
 
-bundle: aic_dake_r0015_b1_v1
+bundle: aic_dake_p1_b1_v1
 keyframe_set: dake
 calibration_video: L21_V001
 
@@ -34,20 +34,46 @@ zip_inventory: config/zips_batch1.yaml
 stages:
   - n1_keyframes
 
-# Tham số DAKE — CHỆCH KHỎI PAPER CÓ CHỦ Ý (paper: rho 0.02, gap 2.0s).
+# ═══════════════════════════════════════════════════════════════════════════
+# THAM SỐ DAKE — PHƯƠNG ÁN P1, Lead chốt 19-08-2026
+# `notebooks/dake/hieu-chinh-tham-so-dake.md` §4 (số đo) và §7 (quyết định)
 #
-# Đo 18-08 trên 4 đường cong từ 4 chương trình: cặp này cho **71%** số keyframe
-# so với giá trị paper (từng video: 70 · 70 · 72 · 64%), nằm trong khoảng 1/2–3/4
-# Lead yêu cầu. Bản chạy đầu ra ~1.405 kf/video; giờ ~1.000.
+# ĐÂY LÀ NGUỒN DUY NHẤT. Notebook đọc từ file này, không khai lại hằng số trong
+# ô đầu — năm người sửa năm bản sao là đúng thứ `check_fingerprints` tồn tại để
+# bắt, và nó chỉ bắt được SAU khi cả batch đã chạy xong.
+# ═══════════════════════════════════════════════════════════════════════════
 #
-# Vì sao cắt `max_gap_seconds` mạnh hơn `rho`: luật mật độ là phần **mù nội dung**
-# — nó chèn frame chỉ để chặn khoảng cách, tức lấy mẫu đều đội lốt DAKE, và đo
-# được là nó đóng góp quá nửa đầu ra. Cắt nó thì bỏ phần không phải DAKE; cắt
-# `rho` thì bỏ đúng phần là DAKE.
+# Quét trên 20 video / 424.818 frame. Đổi so với bản 18-08 (0,015 / 3,0s / 5f):
 #
-# Vì sao dừng ở 3,0s chứ không 3,5 hay 4,0s (cũng nằm trong khoảng): 3,0s là giá
-# trị lớn nhất còn **chặt hơn khoảng cách trung vị 3,36s của bộ BTC** — mà đó
-# chính là lý do chọn DAKE ngay từ đầu (§3.1).
+#   rho              0,015 -> 0,020   (VỀ LẠI giá trị của paper)
+#   max_gap_seconds  3,0s  -> 8,0s
+#   min_gap          5 frame -> 1,0 GIÂY
+#
+# Hướng đi mới là chỗ đáng nhớ: **tăng rho mà tổng số keyframe lại GIẢM.**
+# 8.692 thay vì 13.205, trong đó phần do nội dung chọn TĂNG từ 6.361 lên 8.486.
+# Lý do: luật mật độ là phần **mù nội dung** — nó chèn frame chỉ để chặn khoảng
+# trống, tức lấy mẫu đều đội lốt DAKE — và ở cấu hình cũ nó sinh ra 52% đầu ra.
+# Hạ `rho` là cắt đúng phần LÀ DAKE và giữ phần không phải.
+#
+# Vì sao 3,0s sai: nó được chọn vì "chặt hơn khoảng cách trung vị 3,36s của BTC"
+# — so một CHẶN TRÊN với một TRUNG VỊ. BTC trung vị 3,36s nghĩa là một nửa
+# khoảng của họ dài hơn thế, nên chặn cứng 3,0s DÀY HƠN BTC trên toàn bộ nửa
+# trên phân bố của họ. Muốn so được thì mốc phải đặt gần MAX của họ (210 frame
+# = 7,0–8,4s tuỳ fps). Ở 8,0s, khoảng cách trung vị của ta (1,44s) vẫn dày hơn
+# BTC — chặn chỉ kích hoạt ở đoạn tĩnh, đúng việc của nó.
+#
+# TẮT HẲN luật mật độ thì KHÔNG dùng được: đo được khoảng trống tới 324 giây.
+#
+# `min_gap_seconds` là cần gạt không có trong paper và cũng không có trong bất kỳ
+# trao đổi nào trước 19-08. Ở 5 frame (0,20s), **36% khoảng cách keyframe dưới
+# nửa giây** — trùng lặp mà không quyết định nội dung nào yêu cầu, chỉ vì thuật
+# toán ĐƯỢC PHÉP lấy hai frame cách nhau 5. Ở 1,0s còn 1–3%, và đó là lý do
+# Lead hoãn được cả việc lọc trùng (quyết định 4).
+#
+# Đơn vị là GIÂY cho cả hai (quyết định 5): 25 frame là 1,00s @25fps nhưng 0,83s
+# @30fps, mà batch 1 có 781 video @25fps và 92 video ở ba fps khác.
 params:
-  rho: 0.015
-  max_gap_seconds: 3.0
+  n1_keyframes:
+    rho: 0.020
+    max_gap_seconds: 8.0
+    min_gap_seconds: 1.0

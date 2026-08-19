@@ -15,6 +15,7 @@ import pytest
 from mfe.contracts.errors import ContractError
 from mfe.offline.dake import (
     MAX_GAP_SECONDS,
+    MIN_GAP_SECONDS,
     RHO,
     pts_for_frame,
     select_keyframes,
@@ -79,7 +80,7 @@ class TestSelectKeyframes:
         that the 2-second window spans the clip, so nothing is added and the
         budget is visible on its own."""
         sizes = [100.0 + (i % 7) * 50 for i in range(200)]
-        picked = select_keyframes(sizes, fps=200.0, rho=0.02, min_gap=1)
+        picked = select_keyframes(sizes, fps=200.0, rho=0.02, min_gap_seconds=1 / 200)
         assert len(picked) == 4
 
     def test_density_rule_can_push_the_count_above_the_budget(self):
@@ -90,7 +91,10 @@ class TestSelectKeyframes:
         curve makes the greedy pass clump them at the front, so the density rule
         has to add more.
         """
-        picked = select_keyframes([500.0] * 600, fps=25.0, rho=0.02, min_gap=5)
+        picked = select_keyframes(
+            [500.0] * 600, fps=25.0, rho=0.02,
+            min_gap_seconds=5 / 25, max_gap_seconds=2.0,
+        )
         assert len(picked) > 12
 
     @pytest.mark.parametrize("fps", [25.0, 30.0, 29.97, 26.44])
@@ -141,7 +145,8 @@ class TestSelectKeyframes:
         passed explicitly — the defect was in the tie-breaking, not the value.
         """
         picked = select_keyframes(
-            [100.0] * 40, fps=5.0, rho=0.1, min_gap=1, max_gap_seconds=2.0
+            [100.0] * 40, fps=5.0, rho=0.1,
+            min_gap_seconds=1 / 5, max_gap_seconds=2.0,
         )
         assert picked == [0, 1, 2, 3, 13, 23, 33]
 
@@ -151,12 +156,12 @@ class TestSelectKeyframes:
         moment. Checked on the greedy pass alone — the density rule is allowed to
         place frames closer, because covering a gap outranks spacing."""
         sizes = [100.0] * 20 + [900.0] * 20 + [100.0] * 20
-        picked = select_keyframes(sizes, fps=1000.0, rho=0.2, min_gap=8)
+        picked = select_keyframes(sizes, fps=1000.0, rho=0.2, min_gap_seconds=8 / 1000)
         assert all(b - a >= 8 for a, b in zip(picked, picked[1:], strict=False))
 
     def test_finds_the_step_it_is_supposed_to_find(self):
         sizes = [100.0] * 50 + [900.0] * 50
-        picked = select_keyframes(sizes, fps=1000.0, rho=0.02, min_gap=1)
+        picked = select_keyframes(sizes, fps=1000.0, rho=0.02, min_gap_seconds=1 / 1000)
         assert 49 in picked
 
     def test_signed_and_absolute_disagree_on_a_downward_cut(self):
@@ -171,20 +176,55 @@ class TestSelectKeyframes:
         (900) to plain (100): steepness +0.9988 at 29, -0.9997 at 59.
         """
         sizes = [500.0] * 30 + [900.0] * 30 + [100.0] * 30
-        common = {"fps": 1000.0, "rho": 0.02, "min_gap": 1}
+        common = {"fps": 1000.0, "rho": 0.02, "min_gap_seconds": 1 / 1000}
         assert select_keyframes(sizes, rank_by="signed", **common) == [29]
         assert select_keyframes(sizes, rank_by="absolute", **common) == [59]
 
     def test_the_configured_defaults_are_the_ones_the_lead_chose(self):
-        """Locks the departure from the paper, so it cannot drift back silently.
+        """Locks plan P1, so it cannot drift back silently.
 
-        Paper: rho 0.02, bound 2.0s. Ours: 0.015 and 3.0s — measured at 71% of the
-        paper's keyframe count across four programmes, inside the half-to-three-
-        quarters band the Lead asked for, and still tighter than BTC's median gap
-        of 3.36s. Changing either number changes every downstream stage's cost, so
-        it should require editing a test that says why.
+        Chosen by the Lead on 19-08-2026 from a sweep over 20 videos / 424.818
+        frames (`notebooks/dake/hieu-chinh-tham-so-dake.md` §4, §7):
+
+            rho              0.015 -> 0.02   (back to the paper's value)
+            max_gap_seconds  3.0   -> 8.0
+            min_gap          5 frames -> 1.0 SECONDS
+
+        The direction is the part worth remembering. Raising `rho` while widening
+        the floor gives **fewer** keyframes than the old pair (8.692 vs 13.205 on
+        that sample) and **more** content-chosen ones (8.486 vs 6.361) — because
+        the floor is the content-blind half, and it had been producing 52% of the
+        output. The old 3.0s came from comparing an upper bound against BTC's
+        *median* gap, which is not a comparison.
+
+        Each of these changes the cost of every downstream stage, so changing one
+        should require editing a test that says why.
         """
-        assert (RHO, MAX_GAP_SECONDS) == (0.015, 3.0)
+        assert (RHO, MAX_GAP_SECONDS, MIN_GAP_SECONDS) == (0.02, 8.0, 1.0)
+
+    @pytest.mark.parametrize(("fps", "expected_frames"), [(25.0, 25), (30.0, 30)])
+    def test_min_gap_means_the_same_time_at_every_frame_rate(self, fps, expected_frames):
+        """The reason the unit changed (decision 5).
+
+        `MIN_GAP = 5` *frames* was 0,20s at 25fps and 0,17s at 30fps: one setting
+        meaning two things, on a batch that runs 781 videos at 25fps against 92 at
+        three other rates. Stated in seconds, the realised frame spacing has to
+        track fps instead.
+        """
+        sizes = [100.0 + (i * 37 % 400) for i in range(4000)]
+        picked = select_keyframes(
+            sizes, fps=fps, rho=0.02, min_gap_seconds=1.0, max_gap_seconds=60.0
+        )
+        gaps = [b - a for a, b in zip(picked, picked[1:], strict=False)]
+        assert min(gaps) >= expected_frames
+
+    def test_a_sub_frame_min_gap_still_never_repeats_an_index(self):
+        """`floor(min_gap_seconds * fps)` can reach 0 — at 25fps anything under
+        0,04s does. A spacing of 0 would let the greedy pass take one index twice,
+        which `_fill_density` then cannot tell from a real keyframe."""
+        sizes = [100.0 + (i * 91 % 500) for i in range(400)]
+        picked = select_keyframes(sizes, fps=25.0, rho=0.1, min_gap_seconds=0.001)
+        assert len(set(picked)) == len(picked)
 
     def test_is_deterministic(self):
         """Two runs on one video must give one keyframe set, or the bundle is not
@@ -213,7 +253,8 @@ class TestSelectKeyframes:
             ({"fps": 0}, "fps"),
             ({"fps": 25.0, "rho": 0}, "rho"),
             ({"fps": 25.0, "rho": 1.5}, "rho"),
-            ({"fps": 25.0, "min_gap": 0}, "min_gap"),
+            ({"fps": 25.0, "min_gap_seconds": 0}, "min_gap_seconds"),
+            ({"fps": 25.0, "min_gap_seconds": -1.0}, "min_gap_seconds"),
         ],
     )
     def test_rejects_impossible_parameters(self, kwargs, match):

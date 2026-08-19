@@ -151,6 +151,63 @@ class TestStageN1:
         assert marker["max_gap_s"] <= MAX_GAP_SECONDS + 0.001
         assert marker["source_frames"] == 3000
 
+    def test_min_gap_seconds_reaches_the_selector(self, fake_cv2, ctx):
+        """Plumbing, and it was not plumbed before 19-08-2026.
+
+        The stage read `rho` and `max_gap_seconds` from `ctx.params` but never
+        `min_gap`, so the spacing knob the Lead tuned could not be set from a
+        config at all — while the marker asserted `"min_gap": 5` regardless.
+        """
+        ctx.params = {"rho": 0.02, "min_gap_seconds": 1.0, "max_gap_seconds": 8.0}
+        stage_n1_keyframes(ctx)
+
+        local = ctx.workdir / "back.csv"
+        ctx.writer.transport.get(ctx.layout.map_keyframes(VIDEO), local)
+        frames = [
+            int(row["frame_idx"])
+            for row in csv.DictReader(local.open(encoding="utf-8"))
+        ]
+        # 1,0s at the stub's 29.97fps is 29 frames. The density rule may still
+        # place frames closer than this, so only the *selected* pass is checked —
+        # via the floor recorded on the marker, below.
+        assert min(b - a for a, b in zip(frames, frames[1:], strict=False)) >= 1
+
+    def test_the_marker_records_what_ran_not_what_is_default(self, fake_cv2, ctx):
+        """A marker that states a number no run ever read is worse than silent.
+
+        The old one hardcoded `"min_gap": 5` beside parameters that *were* read,
+        so all five looked equally authoritative and one of them was fiction.
+        """
+        ctx.params = {"rho": 0.02, "min_gap_seconds": 1.0, "max_gap_seconds": 8.0}
+        marker = stage_n1_keyframes(ctx)
+
+        assert marker["params"]["min_gap_seconds"] == 1.0
+        assert marker["params"]["max_gap_seconds"] == 8.0
+        assert marker["params"]["rho"] == 0.02
+        assert "min_gap" not in marker["params"]
+
+    def test_frame_thresholds_are_facts_not_params(self, fake_cv2, ctx):
+        """1,0s is 25 frames at 25fps and 29 at 29.97 — a per-video measurement.
+
+        `check_fingerprints` refuses a bundle whose shards disagree on `params`,
+        so a number that legitimately varies with the video's own fps cannot live
+        there; it would make every video disagree with every other one.
+        """
+        ctx.params = {"rho": 0.02, "min_gap_seconds": 1.0, "max_gap_seconds": 8.0}
+        marker = stage_n1_keyframes(ctx)
+
+        assert marker["min_gap_frames"] == 29      # floor(1.0 * 29.97)
+        assert marker["max_gap_frames"] == 239     # floor(8.0 * 29.97)
+        assert "min_gap_frames" not in marker["params"]
+
+    def test_defaults_come_from_dake_when_params_omit_them(self, fake_cv2, ctx):
+        from mfe.offline.dake import MAX_GAP_SECONDS, MIN_GAP_SECONDS
+
+        ctx.params = {}
+        marker = stage_n1_keyframes(ctx)
+        assert marker["params"]["min_gap_seconds"] == MIN_GAP_SECONDS
+        assert marker["params"]["max_gap_seconds"] == MAX_GAP_SECONDS
+
     def test_writes_one_image_per_selected_frame(self, fake_cv2, ctx):
         marker = stage_n1_keyframes(ctx)
         assert fake_cv2.stats["imwrite"] == marker["keyframes"]

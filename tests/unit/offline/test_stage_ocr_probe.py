@@ -561,16 +561,57 @@ class TestVietOcrStage:
         assert viet.calls == 2
         assert marker["batched"] is False
 
-    def test_both_stages_share_one_paddle_instance(self, tmp_path, probe_stubs):
-        """Nap PaddleOCR hai lan trong mot phien la tra hai lan cho cung mot model
-        — va cache model la thu §4.2 dung de tranh dung dieu do."""
+    def test_the_second_stage_does_not_pay_for_paddle_again(self, tmp_path, probe_stubs):
+        """Hai tang chay CUNG pipeline tren CUNG bo anh — no chi duoc chay MOT lan.
+
+        Ban dau tang VietOCR goi lai ca pipeline chi de lay hop, va tang do duoc
+        ghi la "phan bi vut la phan re". Do la mot GIA DINH. Do thuc te: tren CPU,
+        `n5_ocr_paddle` + `n5_ocr_vietocr` cho mot video 307 anh chay hon 25 phut,
+        va mot nua thoi gian do la pipeline chay lan thu hai.
+
+        Test nay TUNG khang dinh `len(paddle.asked) == 2` — no khoa dung cai lang
+        phi do lai.
+        """
         paddle = self._paddle()
         probe_stubs(paddle, FakeVietOCR())
         ctx = make_ctx(tmp_path, 1, crop_pad=0)
         stage_n5_ocr_paddle(ctx)
         stage_n5_ocr_vietocr(ctx)
-        # Mot lan cho moi tang, tren cung mot doi tuong.
+        assert len(paddle.asked) == 1
+
+    def test_changing_paddle_settings_invalidates_the_cached_detections(
+        self, tmp_path, probe_stubs
+    ):
+        """Dung lai hop cu sau khi doi tham so la chay mot cau hinh khac voi cai
+        marker se ghi — im lang, va khong the phat hien tu file ket qua."""
+        paddle = self._paddle()
+        probe_stubs(paddle, FakeVietOCR())
+        stage_n5_ocr_paddle(make_ctx(tmp_path, 1))
+        stage_n5_ocr_paddle(make_ctx(tmp_path, 1, lang="en"))
         assert len(paddle.asked) == 2
+
+    def test_unloading_models_drops_the_detections_too(self, tmp_path, probe_stubs):
+        """Hop gan voi doi tuong model da sinh ra chung."""
+        paddle = self._paddle()
+        probe_stubs(paddle, FakeVietOCR())
+        stage_n5_ocr_paddle(make_ctx(tmp_path, 1))
+        unload_models()
+        stage_n5_ocr_paddle(make_ctx(tmp_path, 1))
+        assert len(paddle.asked) == 2
+
+    def test_limit_caps_the_images_and_says_so_in_the_marker(self, tmp_path, probe_stubs):
+        """`limit` la cong cu cua phep DO. Mot lan chay bi cat khong duoc trong
+        giong mot lan chay du: `rows` thap co the la "bo doc im lang" hoac "moi
+        chay 2/10 anh", va hai cai do doi hoi hai phan ung nguoc nhau."""
+        paddle = FakePaddle(
+            {f"{i:03d}.jpg": {"rec_texts": ["x"], "rec_polys": [quad(0, 0, 40, 20)]}
+             for i in range(1, 11)}
+        )
+        probe_stubs(paddle, FakeVietOCR())
+        marker = stage_n5_ocr_paddle(make_ctx(tmp_path, 10, limit=2))
+        assert len(paddle.asked) == 2
+        assert marker["images"] == 2
+        assert marker["keyframes_total"] == 10
 
     def test_all_detection_finishes_before_vietocr_is_loaded(self, tmp_path, probe_stubs):
         """Hai pha, khong xen ke — va thu tu nay la ca ly do sua.

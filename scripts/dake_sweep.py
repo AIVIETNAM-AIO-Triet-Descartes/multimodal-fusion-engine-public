@@ -30,7 +30,29 @@ from pathlib import Path
 import numpy as np
 
 from mfe.core.cli import setup_console
-from mfe.offline.dake import MAX_GAP_SECONDS, RHO, select_keyframes
+from mfe.offline.dake import (
+    MAX_GAP_SECONDS,
+    MIN_GAP_SECONDS,
+    RHO,
+    select_keyframes,
+)
+
+
+def gap_stats(gaps: list[float]) -> dict[str, float]:
+    """Trung vi va ty le khoang cach ngan, tren khoang cach da quy ve GIAY.
+
+    Ty le khoang ngan la thu duy nhat noi len keyframe co gan trung nhau hay
+    khong, va no **khong suy ra duoc tu tong so keyframe**: hai cau hinh cung cho
+    400 keyframe/video co the mot ben rai deu va mot ben dinh chum.
+    """
+    if not gaps:
+        return {"median": 0.0, "under_half": 0.0, "under_one": 0.0}
+    ordered = sorted(gaps)
+    return {
+        "median": ordered[len(ordered) // 2],
+        "under_half": sum(1 for g in gaps if g < 0.5) / len(gaps),
+        "under_one": sum(1 for g in gaps if g < 1.0) / len(gaps),
+    }
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -41,7 +63,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--rho", type=float, nargs="+", default=[0.005, 0.0075, 0.01, 0.015, 0.02],
     )
     parser.add_argument(
-        "--max-gap", type=float, nargs="+", default=[2.0, 2.5, 3.0, 4.0, 5.0],
+        "--max-gap", type=float, nargs="+", default=[2.0, 3.0, 6.0, 8.0],
+        help="Khoang cach TOI DA giua hai keyframe, giay — luat mat do",
+    )
+    parser.add_argument(
+        "--min-gap", type=float, nargs="+", default=[MIN_GAP_SECONDS],
+        help=(
+            "Khoang cach TOI THIEU giua hai keyframe duoc CHON, giay. "
+            "Do 19-08-2026: day la can gat quyet dinh ty le keyframe gan trung "
+            "nhau — o 0,20s thi 36%% khoang cach duoi nua giay, o 1,0s con 1-3%% "
+            "— va truoc do script nay khong quet duoc no."
+        ),
     )
     parser.add_argument(
         "--target", type=float, nargs=2, default=None,
@@ -75,50 +107,74 @@ def main() -> None:
     baseline: dict[str, int] = {}
     for name, curve in sizes.items():
         baseline[name] = len(
-            select_keyframes(curve, fps=fps[name], rho=RHO, max_gap_seconds=MAX_GAP_SECONDS)
+            select_keyframes(
+                curve, fps=fps[name], rho=RHO,
+                min_gap_seconds=MIN_GAP_SECONDS, max_gap_seconds=MAX_GAP_SECONDS,
+            )
         )
     mean_base = sum(baseline.values()) / len(baseline)
-    print(f"moc nen (rho={RHO}, gap={MAX_GAP_SECONDS}s): "
+    print(f"moc nen (rho={RHO}, min {MIN_GAP_SECONDS}s, max {MAX_GAP_SECONDS}s): "
           + ", ".join(f"{k} {v}" for k, v in baseline.items())
           + f"   TB {mean_base:.0f}\n")
 
-    columns = " ".join(f"{n[-8:]:>9}" for n in sizes)
-    header = f"{'rho':>7} {'gap':>6} {columns} {'TB':>7} {'%nen':>6}"
+    header = (
+        f"{'rho':>7} {'min':>6} {'max':>6} {'TB':>7} {'%nen':>6} "
+        f"{'kc tv':>7} {'<0,5s':>6} {'<1s':>6}"
+    )
     print(header)
     print("-" * len(header))
 
     rows = []
     for rho in args.rho:
-        for gap in args.max_gap:
-            counts = {
-                name: len(select_keyframes(
-                    curve, fps=fps[name], rho=rho, max_gap_seconds=gap, rank_by=args.rank_by
-                ))
-                for name, curve in sizes.items()
-            }
-            mean = sum(counts.values()) / len(counts)
-            share = mean / mean_base
-            mark = ""
-            if args.target and args.target[0] <= mean <= args.target[1]:
-                mark = "  <-- trong khoang"
-            rows.append((rho, gap, counts, mean, share, mark))
-            print(
-                f"{rho:>7.4f} {gap:>5.1f}s "
-                + " ".join(f"{counts[n]:>9}" for n in sizes)
-                + f" {mean:>7.0f} {share:>5.0%}{mark}"
-            )
+        for min_gap in args.min_gap:
+            for gap in args.max_gap:
+                counts: dict[str, int] = {}
+                gaps: list[float] = []
+                for name, curve in sizes.items():
+                    picked = select_keyframes(
+                        curve, fps=fps[name], rho=rho,
+                        min_gap_seconds=min_gap, max_gap_seconds=gap,
+                        rank_by=args.rank_by,
+                    )
+                    counts[name] = len(picked)
+                    # Quy ve GIAY truoc khi gop: gop bang frame la tron 25fps voi
+                    # 30fps thanh mot phan bo khong doc duoc.
+                    gaps += [
+                        (b - a) / fps[name]
+                        for a, b in zip(picked, picked[1:], strict=False)
+                    ]
+                mean = sum(counts.values()) / len(counts)
+                share = mean / mean_base
+                stats = gap_stats(gaps)
+                mark = ""
+                if args.target and args.target[0] <= mean <= args.target[1]:
+                    mark = "  <-- trong khoang"
+                rows.append((rho, gap, min_gap, counts, mean, share, stats, mark))
+                print(
+                    f"{rho:>7.4f} {min_gap:>5.2f}s {gap:>5.1f}s {mean:>7.0f} "
+                    f"{share:>5.0%} {stats['median']:>6.2f}s "
+                    f"{stats['under_half']:>5.0%} {stats['under_one']:>5.0%}{mark}"
+                )
+
+    print(
+        "\n`<0,5s` va `<1s`: ty le khoang cach ngan hon nguong do — tuc ty le "
+        "keyframe gan trung nhau.\nDo la thu cot `min` dieu khien, va la ly do "
+        "hai cot do co mat: mot cau hinh cho IT\nkeyframe hon nhung `<0,5s` cao "
+        "hon la cau hinh te hon o cung mot gia."
+    )
 
     if args.target:
         low, high = args.target
-        fits = [r for r in rows if low <= r[3] <= high]
+        fits = [r for r in rows if low <= r[4] <= high]
         print(f"\n{len(fits)} cau hinh roi vao [{low:.0f}, {high:.0f}] keyframe/video.")
         if fits:
             # Prefer the one that keeps the most content-aware selection: highest
             # rho, then the tightest gap that still fits. Cutting the density floor
             # removes uniform sampling; cutting rho removes DAKE itself.
             best = max(fits, key=lambda r: (r[0], -r[1]))
-            print(f"Giu duoc nhieu phan CHON NHAT: rho={best[0]}, gap={best[1]}s "
-                  f"-> TB {best[3]:.0f} ({best[4]:.0%} so voi moc nen)")
+            print(f"Giu duoc nhieu phan CHON NHAT: rho={best[0]}, "
+                  f"min={best[2]}s, max={best[1]}s "
+                  f"-> TB {best[4]:.0f} ({best[5]:.0%} so voi moc nen)")
             print("  (uu tien rho cao = giu phan chon theo noi dung; ha gap = bo bot lay mau deu)")
 
 
