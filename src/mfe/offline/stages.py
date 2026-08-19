@@ -989,14 +989,16 @@ def normalize_paddle_result(raw: Any) -> list[tuple[tuple[int, int, int, int], s
 
 
 #: Ten tham so `PaddleOCR` chap nhan, theo the he. 3.x doi ten gan het.
+#: `enable_mkldnn` co o ca hai — xem `_paddle_params` ve vi sao no mac dinh TAT.
 _PADDLE_KWARGS: dict[int, tuple[str, ...]] = {
-    2: ("lang", "use_gpu", "show_log", "use_angle_cls"),
+    2: ("lang", "use_gpu", "show_log", "use_angle_cls", "enable_mkldnn"),
     3: (
         "lang",
         "device",
         "use_textline_orientation",
         "use_doc_orientation_classify",
         "use_doc_unwarping",
+        "enable_mkldnn",
     ),
 }
 
@@ -1064,7 +1066,20 @@ def _paddle_read(ocr: Any, image: Path) -> list[tuple[tuple[int, int, int, int],
 
 
 def _paddle_params(ctx: StageContext) -> dict:
-    """Bo tham so **hop nhat ca hai the he**; `build_paddle_ocr` loc theo ban da cai."""
+    """Bo tham so **hop nhat ca hai the he**; `build_paddle_ocr` loc theo ban da cai.
+
+    `enable_mkldnn` mac dinh **False**, va do la mot phep doi cham lay chay duoc.
+    Do duoc tren Kaggle CPU voi paddlepaddle 3.x:
+
+        (Unimplemented) ConvertPirAttribute2RuntimeAttribute not support
+        [pir::ArrayAttribute<pir::DoubleAttribute>]
+        (at .../new_executor/instruction/onednn/onednn_instruction.cc:116)
+
+    Duong thuc thi PIR moi cua Paddle gap mot attribute ma nhanh oneDNN cua no
+    chua cai dat. Khong phai loi cua ta va khong co gi ta sua duoc trong Paddle —
+    nhung tat oneDNN thi ca nhanh do bien mat. CPU cham hon, doi lai la no chay.
+    Bat lai bang `params={"enable_mkldnn": True}` khi da co ban Paddle vuot qua.
+    """
     lang = ctx.params.get("lang", "vi")
     device = ctx.params.get("device", "gpu")
     return {
@@ -1076,6 +1091,7 @@ def _paddle_params(ctx: StageContext) -> dict:
         "use_textline_orientation": False,
         "use_doc_orientation_classify": False,
         "use_doc_unwarping": False,
+        "enable_mkldnn": bool(ctx.params.get("enable_mkldnn", False)),
     }
 
 
@@ -1086,7 +1102,7 @@ def _paddle_instance(ctx: StageContext) -> Any:
     # hinh khac voi cai marker se ghi.
     key = (
         f"paddleocr lang={kwargs['lang']} device={kwargs['device']} "
-        f"force={sorted(force.items())}"
+        f"mkldnn={kwargs['enable_mkldnn']} force={sorted(force.items())}"
     )
     return cached_model(key, lambda: build_paddle_ocr(force=force, **kwargs))
 
@@ -1202,24 +1218,30 @@ def stage_n5_ocr_vietocr(ctx: StageContext) -> dict:
             config["predictor"]["beamsearch"] = beamsearch
         return Predictor(config)
 
+    mapping: dict[str, str] = {}
+    boxes_total = 0
+    crops_skipped = 0
+    silent_images = 0
+
     with Stopwatch() as timer:
+        # PHA 1 — Paddle phat hien HET, truoc khi VietOCR (va torch) duoc nap.
+        #
+        # Hai pha chu khong mot vong lap xen ke, vi hai runtime nay khong hoa
+        # thuan: paddle va torch cung mang theo oneDNN/OpenMP rieng, va lan chay
+        # 19-08 chet ngay o anh dau cua tang nay bang mot loi NOI BO cua Paddle —
+        # trong khi chinh phep phat hien do da chay tron ven o `n5_ocr_paddle` vai
+        # phut truoc, cung doi tuong, cung tham so. Tach ra thi phan Paddle cua
+        # tang nay co hinh dang y het tang kia: mot chuoi lien tuc, khong co gi
+        # nap chen vao giua.
+        import time  # noqa: PLC0415
+
+        started = time.perf_counter()
         ocr = _paddle_instance(ctx)
-        reader = cached_model(f"vietocr {cfg_name}", load_vietocr)
-        batch_predict = getattr(reader, "predict_batch", None)
-
-        mapping: dict[str, str] = {}
-        boxes_total = 0
-        crops_skipped = 0
-        silent_images = 0
-        batched = batch_predict is not None
-
+        detected: list[list[tuple[int, int, int, int]]] = []
         for keyframe in ctx.keyframes:
             found = _paddle_read(ocr, keyframe.image)
             boxes_total += len(found)
-            page = Image.open(keyframe.image).convert("RGB")
-
-            boxes: list[tuple[int, int, int, int]] = []
-            crops = []
+            keep: list[tuple[int, int, int, int]] = []
             for box, _text, _score in found:
                 x0, y0, x1, y1 = box
                 if x1 - x0 < min_side or y1 - y0 < min_side:
@@ -1227,17 +1249,28 @@ def stage_n5_ocr_vietocr(ctx: StageContext) -> dict:
                     # tra ve MOT chuoi cho no, va chuoi do di thang vao index.
                     crops_skipped += 1
                     continue
-                boxes.append(box)
-                crops.append(_crop_for_recognition(page, box, pad))
+                keep.append(box)
+            detected.append(keep)
+        # Tach ra vi hai nua tra loi hai cau hoi khac nhau: "phat hien co du nhanh
+        # de chay 873 video khong" va "VietOCR doc mot dong het bao lau".
+        detect_seconds = round(time.perf_counter() - started, 2)
 
-            if crops:
-                if batched:
-                    texts = list(batch_predict(crops))
-                else:
-                    texts = [reader.predict(crop) for crop in crops]
-            else:
-                texts = []
+        # PHA 2 — nap VietOCR roi doc. Anh mo lai o day: giu 307 anh trong bo nho
+        # de tiet kiem mot lan mo file la doi mot van de re lay mot van de dat.
+        reader = cached_model(f"vietocr {cfg_name}", load_vietocr)
+        batch_predict = getattr(reader, "predict_batch", None)
+        batched = batch_predict is not None
 
+        for keyframe, boxes in zip(ctx.keyframes, detected, strict=True):
+            if not boxes:
+                silent_images += 1
+                continue
+            page = Image.open(keyframe.image).convert("RGB")
+            crops = [_crop_for_recognition(page, box, pad) for box in boxes]
+            texts = (
+                list(batch_predict(crops)) if batched
+                else [reader.predict(crop) for crop in crops]
+            )
             text = join_text_lines(boxes, texts)
             if text:
                 mapping[build_keyframe_id(ctx.video_id, keyframe.frame_idx)] = text
@@ -1268,6 +1301,8 @@ def stage_n5_ocr_vietocr(ctx: StageContext) -> dict:
             "crops_skipped": crops_skipped,
             "silent_images": silent_images,
             "batched": batched,
+            "detect_seconds": detect_seconds,
+            "recognize_seconds": round(timer.seconds - detect_seconds, 2),
             "seconds_per_image": round(timer.seconds / max(1, images), 3),
         },
         elapsed_s=timer.seconds,

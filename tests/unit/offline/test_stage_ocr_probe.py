@@ -444,6 +444,23 @@ class TestPaddleStage:
         assert marker["dropped_low_score"] == 1
         assert marker["boxes"] == 2
 
+    def test_onednn_is_off_by_default(self, tmp_path, probe_stubs, monkeypatch):
+        """Do duoc tren Kaggle CPU: nhanh oneDNN cua paddlepaddle 3.x ném
+        `ConvertPirAttribute2RuntimeAttribute not support`. Tat no la doi cham
+        lay chay duoc, va no phai la mac dinh chu khong phai mot co ai do nho bat.
+        """
+        seen: dict = {}
+        paddle_mod = types.ModuleType("paddleocr")
+
+        def factory(**kwargs):
+            seen.update(kwargs)
+            return FakePaddle({"001.jpg": {"rec_texts": [], "rec_polys": []}})
+
+        paddle_mod.PaddleOCR = factory
+        monkeypatch.setitem(sys.modules, "paddleocr", paddle_mod)
+        stage_n5_ocr_paddle(make_ctx(tmp_path, 1))
+        assert seen["enable_mkldnn"] is False
+
     def test_measurements_go_in_facts_and_settings_in_params(self, tmp_path, probe_stubs):
         """`check_fingerprints` tu choi ca bundle khi `params` lech giua cac video,
         nen mot con so khac nhau tung video de trong `params` la mot phep tu choi
@@ -554,6 +571,46 @@ class TestVietOcrStage:
         stage_n5_ocr_vietocr(ctx)
         # Mot lan cho moi tang, tren cung mot doi tuong.
         assert len(paddle.asked) == 2
+
+    def test_all_detection_finishes_before_vietocr_is_loaded(self, tmp_path, probe_stubs):
+        """Hai pha, khong xen ke — va thu tu nay la ca ly do sua.
+
+        Paddle va torch cung mang oneDNN/OpenMP rieng. Lan chay 19-08 chet ngay o
+        anh dau cua tang nay bang mot loi NOI BO cua Paddle, trong khi cung phep
+        phat hien do vua chay tron ven o `n5_ocr_paddle`. Xen ke `_paddle_read`
+        voi mot lan nap torch la khac biet duy nhat giua hai tang.
+        """
+        events: list[str] = []
+
+        class LoggingPaddle(FakePaddle):
+            def predict(self, path):
+                events.append("detect")
+                return super().predict(path)
+
+        class LoggingVietOCR(FakeVietOCR):
+            def predict_batch(self, images):
+                events.append("recognize")
+                return super().predict_batch(images)
+
+        paddle = LoggingPaddle(
+            {f"{i:03d}.jpg": {"rec_texts": ["a"], "rec_polys": [quad(0, 0, 40, 20)]}
+             for i in (1, 2, 3)}
+        )
+        viet = LoggingVietOCR()
+        probe_stubs(paddle, viet)
+        # `load_vietocr` chi chay khi cached_model tra loi truot -> ghi vao events
+        stage_n5_ocr_vietocr(make_ctx(tmp_path, 3, crop_pad=0))
+
+        assert events == ["detect", "detect", "detect", "recognize", "recognize", "recognize"]
+
+    def test_the_two_phases_are_timed_apart(self, tmp_path, probe_stubs):
+        probe_stubs(self._paddle(), FakeVietOCR())
+        marker = stage_n5_ocr_vietocr(make_ctx(tmp_path, 1, crop_pad=0))
+        assert marker["detect_seconds"] >= 0
+        assert marker["recognize_seconds"] >= 0
+        assert marker["detect_seconds"] + marker["recognize_seconds"] == pytest.approx(
+            marker["elapsed_s"], abs=0.05
+        )
 
     def test_the_two_artifacts_land_in_their_own_folders(self, tmp_path, probe_stubs):
         probe_stubs(self._paddle(), FakeVietOCR())
