@@ -1,0 +1,36 @@
+# Môi trường cho các tầng KHÔNG nạp model — §10.2
+#
+# Dùng bởi HAI phương án, nên file này ở gốc `notebooks/` chứ không trong btc/ hay dake/:
+#
+#   dake/01-keyframes-dake-kaggle-modal.ipynb   N1/DAKE — giải mã + đo kích thước JPEG
+#   btc/02-keyframes-btc-import.ipynb           nhập bộ BTC — chuyển dữ liệu thuần
+#
+# Tên cũ là `requirements-kaggle-keyframes.txt`, đổi vì cái tên đó nói sai: nó gợi ý file
+# thuộc phương án DAKE, trong khi lượt nhập bộ BTC cũng cài đúng nó.
+#
+# Năm gói. Không torch, không TensorFlow, không transformers, không easyocr: cả hai tầng
+# trên đều không nạp model nào.
+#
+# CHẠY TRÊN PHIÊN GPU (T4) — nhưng chỉ N1 mới có lý do, và phải biết rõ GPU giúp ở đâu:
+#
+#   - `opencv-python` trên PyPI KHÔNG có CUDA. Nếu chỉ bật Accelerator = GPU mà không đổi
+#     gì khác thì N1 chạy đúng tốc độ CPU và vẫn tiêu quota GPU.
+#   - Chỗ GPU thật sự giúp là GIẢI MÃ, và nó đi qua **ffmpeg + NVDEC**, không đi qua gói
+#     Python nào. Vì thế danh sách dưới đây không có thêm gói nào cho GPU.
+#   - `mfe.offline.dake.cuda_decode_available()` dò `ffmpeg -hwaccels`; có `cuda` thì dùng
+#     NVDEC, không thì lùi về OpenCV. Marker ghi lại đường nào đã chạy.
+#
+# Lượt nhập BTC không giải mã gì, nên với nó Accelerator để **bất kỳ** — kể cả None.
+# `opencv-python` vẫn có trong danh sách vì hai notebook dùng chung một file, và một dòng
+# gói không cần thì rẻ hơn hai file gần trùng nhau rồi lệch nhau về sau.
+#
+# Đo được trên CPU (L21_V001, 37.849 frame): lượt 1 chiếm 92% thời gian, và giải mã là phần
+# nặng trong đó — nên đó là chỗ duy nhất đáng đưa lên GPU.
+#
+# ⚠️ Nếu `requirements-kaggle.lock.txt` đã có trong repo thì bản .lock THẮNG (§2.5).
+
+numpy>=1.26,<3
+opencv-python>=4.9
+pyyaml>=6.0
+tqdm>=4.66
+modal>=1.0

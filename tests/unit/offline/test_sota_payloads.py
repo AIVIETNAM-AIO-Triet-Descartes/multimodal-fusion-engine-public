@@ -9,7 +9,12 @@ from pathlib import Path
 import pytest
 
 from mfe.offline.adapters.sota_ids import SotaIdMap
-from mfe.offline.adapters.sota_payloads import SOURCE_FILES, load_all, load_payload
+from mfe.offline.adapters.sota_payloads import (
+    SOTA_SOURCES,
+    SOURCE_FILES,
+    load_all,
+    load_payload,
+)
 from mfe.offline.provided import ProvidedDataset
 
 PILOT_VIDEOS = ["L21_V001", "L21_V002", "L21_V003"]
@@ -83,6 +88,85 @@ class TestLoadPayload:
         with pytest.raises(ValueError, match="unknown source"):
             load_payload(path, "OCR_TYPO", id_map)
 
+    def test_reports_which_grammar_the_file_used(self, tmp_path, id_map):
+        ordinal = _write(tmp_path, "a.json", {"L21_V001_002": "x"})
+        assert load_payload(ordinal, "ocr", id_map)[1].key_format == "ordinal"
+        ours = _write(tmp_path, "b.json", {"L21_V001#000090": "x"})
+        assert load_payload(ours, "ocr", id_map)[1].key_format == "keyframe_id"
+
+
+class TestOurOwnKeyGrammar:
+    """The `keyframe_id`-keyed payloads our Kaggle notebooks produce — §1.2.
+
+    Frame 90 is ordinal n=2 of L21_V001. Every case below leans on that gap: an
+    id that merely *looks* resolvable is the failure this grammar exists to make
+    impossible, so the tests must not use a video where the two numbers coincide.
+    """
+
+    def test_keyframe_id_key_needs_no_lookup(self, tmp_path, id_map):
+        path = _write(tmp_path, "subtitles.json", {"L21_V001#000090": "Chào mừng quý vị"})
+        records, report = load_payload(path, "subtitle", id_map)
+        assert len(records) == 1
+        assert (records[0].video_id, records[0].frame_id) == ("L21_V001", 90)
+        assert report.records == 1
+        assert report.unknown_ids == []
+        assert report.malformed_ids == []
+
+    def test_both_grammars_agree_on_the_same_frame(self, tmp_path, id_map):
+        """The whole point of accepting two grammars: they must be two spellings
+        of one thing. `L21_V001_002` and `L21_V001#000090` are the same frame."""
+        by_ordinal = _write(tmp_path, "a.json", {"L21_V001_002": "x"})
+        by_frame = _write(tmp_path, "b.json", {"L21_V001#000090": "x"})
+        left, _ = load_payload(by_ordinal, "ocr", id_map)
+        right, _ = load_payload(by_frame, "ocr", id_map)
+        assert (left[0].video_id, left[0].frame_id) == (right[0].video_id, right[0].frame_id)
+
+    def test_frame_outside_the_bundle_goes_to_unknown_ids(self, tmp_path, id_map):
+        """This is the filter that dropping the CSV lookup would otherwise lose.
+
+        Frame 91 exists in the video but is **not a keyframe**, so no row of
+        map-keyframes names it. Letting it through would put a key in
+        Elasticsearch/Milvus that the Relational Map cannot resolve — and that
+        surfaces as a raise in the middle of scoring, not here.
+        """
+        path = _write(tmp_path, "ocr.json", {"L21_V001#000091": "khong phai keyframe"})
+        records, report = load_payload(path, "ocr", id_map)
+        assert records == []
+        assert report.unknown_ids == ["L21_V001#000091"]
+        assert report.malformed_ids == []
+
+    def test_video_outside_the_bundle_goes_to_unknown_ids(self, tmp_path, id_map):
+        path = _write(tmp_path, "ocr.json", {"L99_V001#000090": "video ngoai bo"})
+        _, report = load_payload(path, "ocr", id_map)
+        assert report.unknown_ids == ["L99_V001#000090"]
+
+    def test_malformed_id_is_counted_apart_from_unknown(self, tmp_path, id_map):
+        """A broken producer must not hide behind the state we learned to tolerate.
+
+        `#90` fails the 6-digit contract, so no reader can resolve it. That is a
+        notebook writing bad keys — a different problem from an export covering
+        videos we did not ingest, and with five members writing payloads the two
+        need separate counters.
+        """
+        path = _write(tmp_path, "ocr.json", {"L21_V001#90": "thieu chu so"})
+        records, report = load_payload(path, "ocr", id_map)
+        assert records == []
+        assert report.malformed_ids == ["L21_V001#90"]
+        assert report.unknown_ids == []
+        assert "MALFORMED" in report.summary()
+
+    def test_a_file_mixing_both_grammars_is_flagged(self, tmp_path, id_map):
+        """No correct producer emits both. Seeing both means a run changed
+        convention half way, and the caller should refuse rather than pick."""
+        # n=2 -> frame 90, n=3 -> frame 261 (read off map-keyframes/L21_V001.csv;
+        # picking a round number like 180 gives a frame that is not a keyframe).
+        path = _write(
+            tmp_path, "ocr.json", {"L21_V001_002": "theo thu tu", "L21_V001#000261": "theo frame"}
+        )
+        records, report = load_payload(path, "ocr", id_map)
+        assert report.key_format == "mixed"
+        assert len(records) == 2  # still readable — flagged, not silently dropped
+
 
 class TestAgainstBaosRealExport:
     pytestmark = pytest.mark.skipif(
@@ -90,9 +174,16 @@ class TestAgainstBaosRealExport:
     )
 
     def test_every_source_loads_and_ids_resolve(self, id_map):
-        records, reports = load_all(_SOTA_VECTORS, id_map)
+        """Every source **Bảo ships** must load. Scoped to `SOTA_SOURCES`, not to
+        `SOURCE_FILES`, since lượt 4 added two sources only we produce.
+
+        Asserting over `SOURCE_FILES` conflated two different claims — "Bảo's
+        export is intact" and "no source may exist unless Bảo ships it" — and the
+        second one would block adding any producer of our own.
+        """
+        records, reports = load_all(_SOTA_VECTORS, id_map, sources=sorted(SOTA_SOURCES))
         by_source = {r.source: r for r in reports}
-        assert set(by_source) == set(SOURCE_FILES)
+        assert set(by_source) == SOTA_SOURCES
         for report in reports:
             assert report.present, report.summary()
             assert report.records > 0, report.summary()
@@ -100,9 +191,20 @@ class TestAgainstBaosRealExport:
             # fail to translate. A non-empty list here means the export drifted.
             assert report.unknown_ids == [], report.summary()
 
-        assert {r.source for r in records} == set(SOURCE_FILES)
+        assert {r.source for r in records} == SOTA_SOURCES
         # Every record accounted for: sum of per-source counts, no double count.
         assert len(records) == sum(r.records for r in reports)
+
+    def test_a_source_bao_never_shipped_is_reported_absent_not_raised(self, id_map):
+        """`ocr_paddle` / `ocr_vietocr` come from our own bundle. Pointed at Bảo's
+        directory they must be *reported* missing, because "absent" is a valid
+        state for a payload whose producer is a different pass entirely."""
+        ours = sorted(set(SOURCE_FILES) - SOTA_SOURCES)
+        assert ours == ["ocr_paddle", "ocr_vietocr"]
+        records, reports = load_all(_SOTA_VECTORS, id_map, sources=ours)
+        assert records == []
+        assert all(not r.present for r in reports)
+        assert all("not found" in r.summary() for r in reports)
 
     def test_the_two_ocr_sources_stay_separate(self, id_map):
         """The reason they are two sources and not one concatenated string.

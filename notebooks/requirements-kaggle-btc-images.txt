@@ -1,0 +1,29 @@
+# Môi trường cho notebook 03 — SigLIP + hai nguồn OCR trên keyframe của BTC
+# docs/triet/ke-hoach-offline-ingest.md §2.1, §2.5
+#
+# KHÔNG có tensorflow/tensorflow-hub: `n4_objects` không chạy ở lượt này (BTC
+# cấp sẵn nhãn, notebook 02 đã nạp). Bỏ được TF là bỏ được chính cái xung đột
+# VRAM mà §4.2 mô tả — ở đây chỉ có một stack, PyTorch.
+#
+# KHÔNG có faster-whisper/librosa: những tầng đó ăn video gốc, đi bằng notebook
+# 04 với cách chia người khác.
+#
+# ⚠️ Nếu `requirements-kaggle.lock.txt` đã có trong repo thì DÙNG FILE ĐÓ, không
+# dùng file này — §2.5. Năm người phải cùng phiên bản `transformers`, nếu không
+# tiền xử lý ảnh lệch và vector thành hỗn hợp hai phép đo mà không ai phát hiện.
+
+numpy>=1.26,<3
+pyyaml>=6.0
+tqdm>=4.66
+pillow>=10.0
+modal>=1.0
+
+# SigLIP + Qwen2-VL 4-bit
+torch>=2.2
+transformers>=4.45
+accelerate>=0.30
+sentencepiece>=0.2
+bitsandbytes>=0.43
+
+# OCR nguồn 1
+easyocr>=1.7,<2

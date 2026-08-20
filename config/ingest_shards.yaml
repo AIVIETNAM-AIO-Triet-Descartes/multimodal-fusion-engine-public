@@ -1,0 +1,66 @@
+# Bảng phân công offline ingest — docs/triet/ke-hoach-offline-ingest.md §6.1
+#
+# YAML THUẦN. Không đi qua `mfe.core.config.load_config` — nó không phải cấu hình
+# truy hồi, và không có model pydantic nào cho nó. Đọc bằng
+# `mfe.offline.bundle.load_shard_plan`.
+#
+# VÌ SAO CHIA THEO VIDEO chứ không theo tầng (§6.1):
+#   - chuỗi phụ thuộc N1 -> N2 -> N6 nằm hết trong một video, nên nằm hết trong
+#     một người: không ai phải chờ ai;
+#   - mỗi người chỉ tải video của mình, không phải cả 16;
+#   - không gian keyframe_id rời nhau DO CẤU TRÚC, nên bước gộp là hợp tập hợp
+#     và mọi khoá trùng là lỗi thật, không phải chuyện tranh chấp ghi;
+#   - một người hỏng chỉ mất video của mình.
+#
+# Giá phải trả: cả 5 người phải cài đúng cả 7 model. Lớp phòng là `calibration`
+# ở dưới — xem §2.5 và §6.1.
+
+bundle: aic_btc_v1
+
+# Bộ keyframe của lượt này. `btc` = dùng keyframes/ + map-keyframes/ BTC cấp,
+# BỎ QUA N1. `dake` = tự trích (lượt B, §7). Đổi giá trị này BẮT BUỘC đổi luôn
+# `bundle` ở trên — một bundle chỉ chứa một bộ keyframe (§1.2).
+keyframe_set: btc
+
+# Video mọi người chạy TRƯỚC khi chạm phần việc của mình, để so số với nhau.
+# L21_V001 vì nó thuộc 3 video pilot — bộ DUY NHẤT có đáp án của Bảo để đối
+# chiếu (Jaccard nhãn, cosine SigLIP). Kết quả ghi vào _status/{member}/_calib/.
+# Video này KHÔNG bị loại khỏi phân công: nó vẫn là video của triet, chỉ là
+# 4 người còn lại cũng chạy nó một lần rồi bỏ kết quả đi.
+calibration_video: L21_V001
+
+# 16 video, RỜI NHAU, tổng đúng 16. `merge_bundle.py` từ chối shard chứa video
+# không có trong danh sách của tác giả nó — quy ước thành phép kiểm.
+#
+# triet nhận CẢ BA video pilot (L21_V001..V003) là có chủ ý: Lead chạy lượt đầu
+# để quan sát, mà ba video đó là ba video duy nhất có bundle của Bảo để so. Nên
+# lượt chạy đầu tiên vừa là lượt sản xuất vừa là lượt xác minh (K1).
+members:
+  triet:
+    videos: [L21_V001, L21_V002, L21_V003, L21_V005]
+  trong:
+    videos: [L23_V001, L23_V002, L23_V003]
+  quang:
+    videos: [L23_V004, L25_V001, L25_V002]
+  bao:
+    videos: [L25_V003, L25_V004, L27_V001]
+  dat:
+    videos: [L27_V002, L27_V003, L27_V004]
+
+# Tầng nào chạy, theo thứ tự. Bỏ tên khỏi đây là notebook bỏ qua tầng đó —
+# dùng khi muốn chạy riêng một tầng, hoặc khi một tầng còn đang chờ quyết định.
+#
+# n3_audio xếp SAU n4/n5 có lý do: đây là tầng Bảo đang tắt mặc định, arm CLAP
+# chưa dựng trong online (việc 7+13), và file audio_features.json đang có thì
+# không kiểm chứng được (§4.5). Nó sinh ra để sau này đo được, không phải để
+# dùng ngay — nên nếu hết giờ phiên thì nó là tầng đáng mất nhất.
+stages:
+  - n1_keyframes      # bỏ qua khi keyframe_set = btc
+  - n2_subtitles
+  - n4_objects
+  - n4_siglip
+  - n5_ocr_easyocr
+  - n5_ocr_qwen
+  - n6_recap
+  - n6_bge_m3
+  - n3_audio

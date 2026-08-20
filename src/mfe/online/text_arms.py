@@ -5,6 +5,19 @@ One arm per `source` tag, so `ocr`, `ocr_sviptr`, `subtitle`, `object` and
 "text" signal. The store already discriminates by `source`
 (`stores/production/elasticsearch.py`); this is the online half of that.
 
+**Four OCR arms, and that is a measurement rather than indecision.** `ocr`
+(easyocr), `ocr_sviptr` (Qwen2-VL — the name is legacy, see notebooks/README.md),
+`ocr_paddle` and `ocr_vietocr` read the same frames and fail in different places.
+Measured on 40 shared keyframes of `L21_V001`, with `ocr_paddle` and `ocr_vietocr`
+sharing one detector so only the recogniser differs: VietOCR keeps 20.6% of its
+letters accented and transcribes Vietnamese headlines almost exactly, but turns
+the station logo into Vietnamese words; PaddleOCR keeps 10.7%, reads the logo and
+clock cleanly, and drops diacritics systematically. Fusion adds them; it does not
+choose between them (ke-hoach-merge-sota.md §3.4b, handoff §8.6).
+
+That 40-keyframe table justifies *generating* both. It does **not** set their
+weights — those come from hill-climbing on dev and are published on held-out.
+
 `subtitle` ships as **two** arms over the same source, because exact-phrase and
 token-overlap are different evidence and lumping them produced the score
 discontinuity described in ke-hoach-merge-sota.md §3.4b: Bảo's engine scores an
@@ -34,6 +47,8 @@ TEXT_ARM_SPECS: dict[str, tuple[str, bool]] = {
     "subtitle_partial": ("subtitle", False),
     "ocr_sviptr": ("ocr_sviptr", False),
     "ocr": ("ocr", False),
+    "ocr_paddle": ("ocr_paddle", False),
+    "ocr_vietocr": ("ocr_vietocr", False),
     "object": ("object", False),
     "caption": ("caption", False),
 }
@@ -43,6 +58,8 @@ _DESCRIPTIONS = {
     "subtitle_partial": "Chồng lấn từ khoá trong phụ đề (match)",
     "ocr_sviptr": "OCR SVIPTR — đọc băng rôn, im lặng khi không có chữ",
     "ocr": "OCR easyocr — phủ mọi frame, lẫn nhiễu từ đồng hồ",
+    "ocr_paddle": "OCR PaddleOCR — logo/đồng hồ sạch, RỤNG DẤU tiếng Việt",
+    "ocr_vietocr": "OCR VietOCR trên vùng chữ của PaddleOCR — giữ dấu, lẫn ở logo",
     "object": "Nhãn vật thể phát hiện được",
     "caption": "Mô tả ảnh sinh tự động (TIẾNG ANH — truy vấn tiếng Việt sẽ trượt)",
 }

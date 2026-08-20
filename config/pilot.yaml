@@ -89,17 +89,6 @@ retrieval:
   # Chenh lech nay den tu hinh dang duong suy giam — 1/(k+rank) doc o dau bang,
   # linear_rank deu — chu khong tu do lon diem, vi ca hai deu chuan hoa theo hang.
   # Chot lai sau khi co bo heldout; 9 cau chua du de ket luan.
-  # Dich VI->EN cho arm co query_language="en" (hien la siglip).
-  # THU TU: text_en dien tay -> cache dia -> envit5 chay may.
-  # KHONG co tang "giu nguyen tieng Viet" — het duong dich thi arm NGOI NGOAI.
-  # Xem src/mfe/online/translate.py va docs/handoff.md §5.1.
-  translation:
-    enabled: true
-    tiers: [mt]
-    mt_checkpoint: VietAI/envit5-translation
-    mt_num_beams: 1                  # greedy: chay lai phai ra dung so cu
-    cache_path: eval/translations.json
-
   fusion:
     mode: rrf
   # KHAI DU CA 10 ARM, ke ca cai bang 1.0. FusionWeights cho phep khoa la
@@ -118,6 +107,11 @@ retrieval:
     subtitle_partial: 1.0
     caption: 1.0
     ocr: 1.0
+    # Luot 4 — hai bo doc sai o hai cho khac nhau (§8.6). 1.0 la mac dinh
+    # TRUNG LAP, khong phai gia tri da tune: trong so dat bang leo doc tren
+    # dev roi cong bo tren heldout (§9.4).
+    ocr_paddle: 1.0
+    ocr_vietocr: 1.0
     object: 1.0
     subtitle_exact: 1.0
   rerank_budget_ms: 20000
@@ -126,6 +120,19 @@ retrieval:
   dedup_depth: 20
   clip_checkpoint: clip-ViT-B-32
   clip_text_checkpoint: sentence-transformers/clip-ViT-B-32-multilingual-v1
+
+  # Dich VI->EN cho arm co query_language="en" (hien la siglip). Dat canh
+  # clip_text_checkpoint vi cung la buoc TIEN XU LY TRUY VAN, khong phai buoc gop.
+  # THU TU: text_en dien tay -> cache dia -> envit5 chay may.
+  # KHONG co tang "giu nguyen tieng Viet" — het duong dich thi arm NGOI NGOAI.
+  # Do duoc 16-08: siglip voi ban dich may 9/9 hang 2.2, voi ban dien tay 9/9 hang 2.0.
+  # Xem src/mfe/online/translate.py va docs/triet/handoff.md §5.1.
+  translation:
+    enabled: true
+    tiers: [mt]
+    mt_checkpoint: VietAI/envit5-translation
+    mt_num_beams: 1                  # greedy: chay lai phai ra dung so cu
+    cache_path: eval/translations.json
 
 submit:
   schema_format: by_frame

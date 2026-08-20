@@ -415,6 +415,57 @@ class ElasticsearchTextStore:
             for item in response["hits"]["hits"]
         ]
 
+    def fetch(
+        self,
+        keys: Iterable[tuple[str, int]],
+        *,
+        source: str | None = None,
+        limit: int = 500,
+    ) -> list[StorageHit]:
+        """Every stored document for these `(video_id, frame_id)` pairs.
+
+        A *lookup*, not a search: no query text, no ranking, `score` is 0.0 on
+        every hit. It answers "what text do we hold about this keyframe" — which
+        is what a Q&A operator reads the answer off, and what `search` cannot do
+        because search needs a query and returns one source's view at a time.
+
+        One frame usually has several documents, one per `source` (OCR, subtitle,
+        caption, object labels…). All of them come back; grouping is the caller's
+        job (`mfe.online.answering.gather_evidence`).
+        """
+        pairs = list(keys)
+        if not pairs:
+            return []
+        if not 1 <= limit <= 10_000:
+            raise ValueError("limit must be between 1 and 10000")
+        filters: list[dict[str, Any]] = [
+            {
+                "bool": {
+                    "must": [
+                        {"term": {"video_id": video_id}},
+                        {"term": {"frame_id": int(frame_id)}},
+                    ]
+                }
+            }
+            for video_id, frame_id in pairs
+        ]
+        query: dict[str, Any] = {"bool": {"should": filters, "minimum_should_match": 1}}
+        if source is not None:
+            query["bool"]["filter"] = [{"term": {"source": source}}]
+        response = self.client.search(index=self.config.index, size=limit, query=query)
+        return [
+            StorageHit(
+                video_id=item["_source"]["video_id"],
+                frame_id=int(item["_source"]["frame_id"]),
+                # No query, so no relevance. Reporting the Elasticsearch constant
+                # score here would invite a caller to rank by it.
+                score=0.0,
+                source=item["_source"].get("source"),
+                text=item["_source"].get("text"),
+            )
+            for item in response["hits"]["hits"]
+        ]
+
     def count(self) -> int:
         return int(self.client.count(index=self.config.index)["count"])
 

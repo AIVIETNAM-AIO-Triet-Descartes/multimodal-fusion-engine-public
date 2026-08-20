@@ -1,0 +1,55 @@
+# BUNDLE BTC — CÁC TẦNG ĂN VIDEO GỐC (subtitle Whisper + CLAP)
+# docs/triet/ke-hoach-offline-ingest.md §4.4, §4.5, §5.6, §6.5
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# CHIA NGƯỜI THEO GÓI KEYFRAME, DÙ TẦNG NÀY ĂN VIDEO. Không phải nhầm.
+#
+# Lý do duy nhất khiến việc chia phải theo gói là băng thông: chia theo video mà
+# tải theo gói thì ai cũng phải kéo gần hết 77 GB (§5.6). Nhưng lượt này **không
+# tải gói nào** — nó lấy TỪNG video bằng HTTP Range (`mfe.offline.source`), nên
+# video nằm trong gói nào không còn là câu hỏi. Đo được: cả 873 video đều có
+# entry Range, lớn nhất 325 MB, trung bình 91 MB.
+#
+# Lý do bắt buộc phải theo gói KEYFRAME thì vẫn còn, và nó cứng hơn:
+# `part-manifest/{video}.json` ghi đúng MỘT `author`, còn `check_ownership`
+# (merge.py) từ chối shard có author khác người được giao. Bundle này do ba
+# notebook cùng đổ, nên nếu lượt này chia khác thì mỗi video bị hai người ghi
+# author và bước gộp từ chối toàn bộ bundle.
+#
+# Cách chia theo gói video (`zips_batch1.yaml`) lệch rất xa — đo được:
+#     bao  keyframe=295  video=148  trùng=0
+# Dùng nhầm file đó ở đây là hỏng cả bundle, không phải chỉ chậm.
+# ═══════════════════════════════════════════════════════════════════════════
+
+bundle: aic_btc_b1_v1
+keyframe_set: btc
+calibration_video: L21_V001
+
+# CÙNG file với `ingest_shards_batch1_btc.yaml` và `..._btc_images.yaml`.
+assign: zips
+zip_inventory: config/zips_keyframes_btc.yaml
+
+# Nguồn tải của lượt này — KHÁC với `zip_inventory` bên trên, và đó là chủ ý:
+# một file nói AI LÀM VIDEO NÀO, file kia nói VIDEO NẰM Ở ĐÂU.
+video_catalogue: config/zips_batch1.yaml
+
+# N2 TRƯỚC N3, và hai tầng phải đi cùng phiên: cả hai dùng chung file wav do
+# `StageContext.audio_path()` tách một lần. Tách lại ở phiên sau là giải mã lại
+# toàn bộ audio cho không.
+#
+# N2 còn là tầng DUY NHẤT có đầu ra không dính bộ keyframe: `subtitle_segments`
+# là timestamp thô của video. Khi bộ DAKE chốt, nó dùng lại được nguyên vẹn,
+# chỉ phải suy lại ánh xạ sang keyframe (rẻ) — Whisper không phải chạy lần hai.
+stages:
+  - n2_subtitles
+  - n3_audio
+
+extras:
+  map_keyframes: https://aic-data.ledo.io.vn/map-keyframes-aic25-b1.zip
+
+params:
+  n2_subtitles:
+    beam_size: 5
+    window: next_keyframe     # §4.5 — K2 sẽ đo cái này với "fixed3"
+  n3_audio:
+    half_window_s: 5.0

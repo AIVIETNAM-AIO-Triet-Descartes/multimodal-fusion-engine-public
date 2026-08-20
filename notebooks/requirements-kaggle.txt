@@ -1,0 +1,72 @@
+# Môi trường notebook Kaggle — docs/triet/ke-hoach-offline-ingest.md §2.5
+#
+# VÌ SAO FILE NÀY TỒN TẠI: 5 người chạy cùng model trên 5 máy. Nếu 5 người cài
+# 5 phiên bản `transformers` thì tiền xử lý ảnh có thể lệch, và bundle thành hỗn
+# hợp hai phép đo — mà cosine vẫn trong khoảng hợp lý nên KHÔNG AI PHÁT HIỆN.
+# Cùng hạng lỗi với bẫy số thứ tự ở §1.2: không ném exception, chỉ sai.
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# TRẠNG THÁI: CHƯA GHIM. Đây là bản có CHẶN TRÊN, không phải bản ghim `==`.
+#
+# Ghim bằng số tôi đoán thì tệ hơn không ghim: nó trông như đã kiểm mà chưa.
+# Nên quy trình là hai bước, và bước 1 chính là lượt Lead chạy đầu tiên:
+#
+#   1. Lead chạy notebook một lượt với file NÀY. Ô cuối Step 0 in ra phiên bản
+#      thực tế Kaggle giải được và ghi `requirements-kaggle.lock.txt` cạnh file
+#      này (hàm `mfe.offline.bundle.freeze_environment`).
+#   2. Commit file .lock đó. Bốn người còn lại `pip install -r` file .lock,
+#      KHÔNG dùng file này.
+#
+# Từ bước 2 trở đi, `merge_bundle.py` từ chối shard có `env` lệch ở nhóm
+# "ảnh hưởng số" bên dưới (§6.4).
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# ẢNH HƯỞNG SỐ — lệch phiên bản ở nhóm này làm vector/nhãn khác đi:
+#   torch, transformers, tensorflow, tensorflow-hub, faster-whisper,
+#   sentence-transformers, easyocr, numpy
+# KHÔNG ảnh hưởng số (chỉ cảnh báo khi lệch): modal, pyyaml, tqdm, pillow, av
+
+# ── nền ────────────────────────────────────────────────────────────────────
+numpy>=1.26,<3
+pyyaml>=6.0
+tqdm>=4.66
+pillow>=10.0
+modal>=1.0                      # transport lên Volume, §5
+
+# ── N1 DAKE: giải mã + nén JPEG ────────────────────────────────────────────
+# opencv để decode tuần tự (KHÔNG seek, §3.4). Kaggle đã có sẵn, giữ dòng này
+# để bản .lock ghi lại phiên bản.
+opencv-python>=4.9
+
+# ── N2 subtitle ────────────────────────────────────────────────────────────
+faster-whisper>=1.1,<2
+# ffmpeg-python chỉ để tách wav; Kaggle đã có binary ffmpeg.
+ffmpeg-python>=0.2
+
+# ── N3 audio (CLAP) ────────────────────────────────────────────────────────
+# librosa để resample về 48 kHz — sr CLAP yêu cầu (§4.5).
+librosa>=0.10
+soundfile>=0.12
+
+# ── N4a object detector: Faster R-CNN OpenImages V4 ────────────────────────
+# TF vào chung stack với PyTorch. ĐẶT TF_FORCE_GPU_ALLOW_GROWTH=true TRƯỚC KHI
+# import tensorflow, và cân nhắc chạy tầng này trong subprocess riêng — TF mặc
+# định chiếm hết VRAM khi khởi tạo (§4.2).
+tensorflow>=2.15
+tensorflow-hub>=0.16
+
+# ── N4b SigLIP · N5b Qwen2-VL · N6b BGE-M3 ─────────────────────────────────
+torch>=2.2
+transformers>=4.45
+accelerate>=0.30
+sentencepiece>=0.2
+# Qwen2-VL 4-bit
+bitsandbytes>=0.43
+# BGE-M3
+sentence-transformers>=2.5
+
+# ── N5a OCR ────────────────────────────────────────────────────────────────
+easyocr>=1.7,<2
+
+# ── N6a ReCap (Gemini) ─────────────────────────────────────────────────────
+google-genai>=1.0
