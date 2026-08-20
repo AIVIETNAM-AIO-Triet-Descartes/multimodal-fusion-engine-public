@@ -46,7 +46,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="eval_qa_reader", description=__doc__)
     parser.add_argument("--config", default="config/pilot.yaml")
     parser.add_argument("--queryset", default="eval/dev", help="Thu muc *.jsonl")
-    parser.add_argument("--model", default="gemini-2.5-flash")
+    parser.add_argument("--model", default="gemini-3.6-flash")
     parser.add_argument("--images", type=int, default=1,
                         help="So khung hinh gui kem. 1 = dung khung hinh dap an.")
     parser.add_argument("--limit", type=int, default=0, help="0 = tat ca")

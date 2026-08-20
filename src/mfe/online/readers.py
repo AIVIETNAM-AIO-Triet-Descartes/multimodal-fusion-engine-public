@@ -6,13 +6,25 @@ BTC cho phép truy cập mạng và gọi API trong vòng sơ tuyển, nên đư
 được. Nó cắm vào `answering.propose` và không cái nào trong `answering.py` biết
 gì về Gemini — đổi nhà cung cấp là viết một lớp khác ở file này.
 
-Vì sao `gemini-2.5-flash`
+Vì sao `gemini-3.6-flash`
 --------------------------
 Cùng model `mfe.offline.stages.build_gemini_generate` đã dùng cho ReCap: một phụ
 thuộc (`google-genai`), một khoá API, một hành vi phải hiểu. Flash chứ không Pro
 vì đây là vòng lặp **tương tác** — người vận hành đợi câu trả lời hiện ra rồi mới
 duyệt, nên độ trễ tính vào đúng chỗ đắt nhất (TTCA, `buoi-2.md` §2). Và vì có
 người duyệt, chênh lệch chất lượng giữa Flash và Pro rẻ hơn chênh lệch độ trễ.
+
+Số hiệu là `3.6` chứ không phải `2.5` vì Google đã **ngừng cấp `gemini-2.5-flash`
+cho khoá mới** (20-08-2026): khoá của đội gọi nó ra `404 NOT_FOUND` kèm đúng câu
+"no longer available to new users". Đáng chú ý là `client.models.list()` **vẫn
+liệt kê** `gemini-2.5-flash` — danh sách model không phải danh sách thứ khoá này
+gọi được, nên đừng dùng nó để kiểm.
+
+Pin số hiệu cụ thể, **không** dùng `gemini-flash-latest`. Bí danh trôi làm câu
+trả lời đổi giữa hai lượt chạy mà không có gì trong `run-report.json` ghi lại
+được — mà đây là tầng người vận hành **tin rồi nộp**. `gemini-3.7-flash` mới hơn
+và đã có, nhưng lúc đo nó trả `503 UNAVAILABLE (overloaded)`; đổi lên khi nào nó
+ổn định là một dòng ở đây.
 
 Khối lượng **không** phải vấn đề ở đây, khác hẳn ReCap. Lead từng bác Gemini cho
 ReCap vì 116.028 shot vượt hạn mức free tier; Q&A gọi **một lần mỗi truy vấn**,
@@ -81,7 +93,7 @@ class GeminiAnswerReader:
     hỏi bị pha loãng và model bắt đầu trả lời về khung hình khác.
     """
 
-    model: str = "gemini-2.5-flash"
+    model: str = "gemini-3.6-flash"
     images: int = 3
     api_key_env: str = "GEMINI_API_KEY"
     name: str = "gemini"
@@ -131,9 +143,45 @@ class GeminiAnswerReader:
         parts.append(PROMPT.format(bail=BAIL, question=question.strip(), evidence=blob))
 
         self.calls += 1
-        response = self.client().models.generate_content(model=self.model, contents=parts)
+        response = self._generate(parts)
         text = (getattr(response, "text", "") or "").strip()
         return self._parse(text, used)
+
+    def _generate(self, parts: list[object]):
+        """Gọi API, thử lại khi máy chủ quá tải.
+
+        `503 UNAVAILABLE (high demand)` và `429` là **trạng thái của Google lúc
+        đó**, không phải câu trả lời về video. Nhưng `answering.propose` bắt mọi
+        lỗi và trả `None`, nên nếu không thử lại thì một phút bận của Gemini trông
+        y hệt "model không đọc ra được" — và người vận hành sẽ đi sửa prompt, hoặc
+        tệ hơn, kết luận rằng bộ đọc vô dụng. Đo được: cùng một khoá, cùng một
+        model, hỏng lúc 20:52 và trả lời bình thường lúc 20:55.
+
+        Ba lần, lùi 2s/4s/8s. Không nhiều hơn: đây là vòng lặp tương tác, và một
+        lần chờ một phút thì người vận hành đã tự đi tra tay xong rồi. Hết lượt
+        thì ném lỗi lên — `propose` ghi log kèm nguyên văn `ServerError`, nên
+        "Google bận" vẫn phân biệt được với "model bỏ cuộc" trong log.
+        """
+        import time  # noqa: PLC0415
+
+        last: Exception | None = None
+        for attempt in range(3):
+            try:
+                return self.client().models.generate_content(
+                    model=self.model, contents=parts
+                )
+            except Exception as err:  # noqa: BLE001 - phan loai ngay ben duoi
+                status = getattr(err, "code", None) or getattr(err, "status_code", None)
+                if status not in (429, 500, 502, 503, 504):
+                    raise
+                last = err
+                delay = 2 ** (attempt + 1)
+                logger.warning(
+                    "%s ban (%s), thu lai sau %ds (lan %d/3)",
+                    self.model, status, delay, attempt + 1,
+                )
+                time.sleep(delay)
+        raise last  # type: ignore[misc]
 
     def _parse(self, text: str, used: Sequence[Evidence]) -> Answer | None:
         # Model đôi khi thêm dấu câu hoặc xuống dòng quanh đáp án ngắn.

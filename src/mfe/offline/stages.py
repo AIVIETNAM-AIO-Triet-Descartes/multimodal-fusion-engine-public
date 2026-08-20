@@ -1566,7 +1566,7 @@ def build_qwen_generate(checkpoint: str = "Qwen/Qwen2-VL-7B-Instruct", **kwargs)
     return generate
 
 
-def build_gemini_generate(model_name: str = "gemini-2.5-flash"):
+def build_gemini_generate(model_name: str = "gemini-3.6-flash"):
     """A `generate(prompts) -> list[str]` backed by the Gemini API, one call each.
 
     Kept alongside the local backend so the two can be compared on the same data,
@@ -1636,7 +1636,7 @@ def stage_n6_recap(ctx: StageContext) -> dict:
         generate = (
             build_qwen_generate(ctx.params.get("qwen_checkpoint", "Qwen/Qwen2-VL-7B-Instruct"))
             if backend == "qwen"
-            else build_gemini_generate(ctx.params.get("gemini_model", "gemini-2.5-flash"))
+            else build_gemini_generate(ctx.params.get("gemini_model", "gemini-3.6-flash"))
         )
 
     def save(current: VideoState) -> None:
@@ -1656,7 +1656,7 @@ def stage_n6_recap(ctx: StageContext) -> dict:
         model=(
             ctx.params.get("qwen_checkpoint", "Qwen/Qwen2-VL-7B-Instruct")
             if backend == "qwen"
-            else ctx.params.get("gemini_model", "gemini-2.5-flash")
+            else ctx.params.get("gemini_model", "gemini-3.6-flash")
         ),
         params={
             "backend": backend,
