@@ -473,14 +473,18 @@ def stage_n2_subtitles(ctx: StageContext) -> dict:
         if text.strip():
             mapping[build_keyframe_id(ctx.video_id, keyframe.frame_idx)] = text
 
-    empty_ratio = 1 - len(mapping) / max(1, len(ctx.keyframes))
+    keyframes_total = len(ctx.keyframes)
+    keyframes_without_subtitle = keyframes_total - len(mapping)
+    empty_ratio = (
+        keyframes_without_subtitle / keyframes_total if keyframes_total else 0.0
+    )
     if empty_ratio > 0.30 and spans:
-        # §4.5 stop condition. Raised, not warned: a video that transcribed but
-        # landed on almost no keyframes usually means the window or the audio
-        # track is wrong, and finishing the run would bury that in a manifest.
-        raise RuntimeError(
+        # Empty windows usually mean silence, music, or a transition.  They are
+        # useful quality telemetry, but not evidence that timestamp alignment
+        # failed and must not block the independent audio stage for this video.
+        logger.warning(
             f"{ctx.video_id}: {empty_ratio:.0%} keyframe khong co subtitle du "
-            f"Whisper ra {len(spans)} doan. Nghi sai cua so hoac sai kenh audio."
+            f"Whisper ra {len(spans)} doan; ghi ket qua va tiep tuc."
         )
 
     return ctx.writer.write_text_part(
@@ -489,6 +493,13 @@ def stage_n2_subtitles(ctx: StageContext) -> dict:
         mapping,
         model="faster-whisper large-v3",
         params={"beam_size": beam, "language": "vi", "vad_filter": True, "window": window},
+        facts={
+            "segments": len(spans),
+            "keyframes_total": keyframes_total,
+            "keyframes_with_subtitle": len(mapping),
+            "keyframes_without_subtitle": keyframes_without_subtitle,
+            "empty_ratio": round(empty_ratio, 6),
+        },
         elapsed_s=timer.seconds,
     )
 
