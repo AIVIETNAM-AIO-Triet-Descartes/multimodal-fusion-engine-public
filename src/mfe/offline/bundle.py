@@ -723,6 +723,11 @@ class BundleWriter:
 
     # -- manifest ----------------------------------------------------------
 
+    def _validate_existing_manifest(self, manifest: dict[str, Any]) -> None:
+        """Hook for fail-closed writers before a merged manifest is replaced."""
+
+        return None
+
     def write_part_manifest(
         self, video_id: str, markers: list[dict], keyframes: int, *, merge: bool = False
     ) -> dict:
@@ -747,7 +752,9 @@ class BundleWriter:
             local = self.workdir / f"prev_manifest_{video_id}.json"
             try:
                 self.transport.get(self.layout.part_manifest(video_id), local)
-                artifacts = json.loads(local.read_text(encoding="utf-8")).get("artifacts", {})
+                previous = json.loads(local.read_text(encoding="utf-8"))
+                self._validate_existing_manifest(previous)
+                artifacts = previous.get("artifacts", {})
             except Exception:  # noqa: BLE001 - chua co manifest la truong hop binh thuong
                 artifacts = {}
             finally:
