@@ -19,25 +19,41 @@ from mfe.eval.official import (
 
 
 class _FakeKeyframe:
-    def __init__(self, frame_idx: int) -> None:
+    def __init__(self, frame_idx: int, keyframe_index: int) -> None:
         self.frame_idx = frame_idx
+        self.keyframe_index = keyframe_index
 
 
 class _FakeMap:
-    """Stands in for the Relational Map: keyframe_id -> frame_idx.
+    """Stands in for the Relational Map: keyframe_id -> (frame_idx, ordinal).
 
     A fake is right here. The point of these tests is that the translation reads
-    `frame_idx` off the map rather than deriving it, so the map's contents must
-    be something the test controls and the translation cannot recompute.
+    both numbers off the map rather than deriving either, so the map's contents
+    must be something the test controls and the translation cannot recompute.
+
+    **The two are deliberately different numbers.** `frame_idx` is the source
+    video frame BTC scores; `keyframe_index` is the ordinal DANTE measures its
+    temporal penalty on. A fake that made them equal would let a translation that
+    confuses the two pass every test here — which is the exact bug
+    `mfe.contracts.ids` exists to prevent.
     """
 
     def __init__(self, frames: dict[str, int]) -> None:
         self._frames = frames
+        # Ordinal = rank of this keyframe within its own video, by frame order —
+        # which is how `map-keyframes` numbers them.
+        self._ordinals: dict[str, int] = {}
+        by_video: dict[str, list[str]] = {}
+        for keyframe_id in frames:
+            by_video.setdefault(keyframe_id.split("#")[0], []).append(keyframe_id)
+        for keys in by_video.values():
+            for ordinal, keyframe_id in enumerate(sorted(keys, key=frames.__getitem__), 1):
+                self._ordinals[keyframe_id] = ordinal
 
     def get_keyframe(self, keyframe_id: str) -> _FakeKeyframe:
         if keyframe_id not in self._frames:
             raise KeyError(keyframe_id)
-        return _FakeKeyframe(self._frames[keyframe_id])
+        return _FakeKeyframe(self._frames[keyframe_id], self._ordinals[keyframe_id])
 
 
 def _cand(keyframe_id: str, score: float, ordinal: int) -> Candidate:
