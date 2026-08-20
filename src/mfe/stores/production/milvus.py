@@ -241,6 +241,80 @@ class MilvusVectorStore:
         ]
         return sorted(hits, key=lambda hit: (-hit.score, hit.video_id, hit.frame_id))
 
+    @staticmethod
+    def calibrate_cosine_score(raw_score: float) -> float:
+        """Calibrate raw Cosine similarity (-1.0 to 1.0) to bounded score (0.0 to 1.0)."""
+        return max(0.0, min(1.0, (raw_score + 1.0) / 2.0))
+
+    def search_multi_vector(
+        self,
+        query_embeddings: Sequence[Sequence[float]],
+        *,
+        weights: Sequence[float] | None = None,
+        top_k: int = 10,
+        video_id: str | None = None,
+        aggregation: str = "max",
+    ) -> list[StorageHit]:
+        """Search across multiple query vectors simultaneously and aggregate per-frame scores.
+
+        Parameters
+        ----------
+        query_embeddings:
+            Sequence of embedding vectors matching the collection's dimension.
+        weights:
+            Optional relative importance weights for each query vector.
+        top_k:
+            Number of top results to return.
+        video_id:
+            Optional scalar filter by video_id.
+        aggregation:
+            'max', 'mean', or 'weighted_sum'.
+        """
+        if not query_embeddings:
+            return []
+        if not 1 <= top_k <= 500:
+            raise ValueError("top_k must be between 1 and 500")
+
+        n_queries = len(query_embeddings)
+        q_weights = list(weights) if weights is not None else [1.0] * n_queries
+        if len(q_weights) != n_queries:
+            raise ValueError(
+                f"weights length ({len(q_weights)}) must match query_embeddings ({n_queries})"
+            )
+
+        # Collect hits from each query vector
+        query_results: list[list[StorageHit]] = []
+        for vec in query_embeddings:
+            hits = self.search(vec, top_k=top_k * 2, video_id=video_id)
+            query_results.append(hits)
+
+        # Aggregate by (video_id, frame_id)
+        from collections import defaultdict
+
+        frame_scores: dict[tuple[str, int], list[tuple[float, float]]] = defaultdict(list)
+        for _q_idx, (q_hits, w) in enumerate(zip(query_results, q_weights, strict=True)):
+            for h in q_hits:
+                frame_scores[(h.video_id, h.frame_id)].append((h.score, w))
+
+        aggregated_hits: list[StorageHit] = []
+        for (v_id, f_id), score_list in frame_scores.items():
+            if aggregation == "max":
+                final_score = max(s * w for s, w in score_list)
+            elif aggregation == "mean":
+                final_score = sum(s for s, _ in score_list) / len(score_list)
+            elif aggregation == "weighted_sum":
+                final_score = sum(s * w for s, w in score_list)
+            else:
+                msg = f"unknown aggregation: {aggregation!r}"
+                raise ValueError(msg)
+
+            aggregated_hits.append(
+                StorageHit(video_id=v_id, frame_id=f_id, score=float(final_score))
+            )
+
+        aggregated_hits.sort(key=lambda hit: (-hit.score, hit.video_id, hit.frame_id))
+        return aggregated_hits[:top_k]
+
     def count(self) -> int:
         rows = self.client.query(
             collection_name=self.config.collection,

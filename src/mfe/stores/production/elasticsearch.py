@@ -10,6 +10,21 @@ from .config import ElasticsearchConfig
 from .contracts import HealthStatus, IngestError, IngestReport, StorageHit, StorageRecord
 from .ids import elasticsearch_document_id
 
+# Source weights for multi-source aggregation, inspired by AIC top-team
+# techniques: caption carries full sentence semantics; OCR/subtitle carry
+# specific surface forms; object tags are sparse by design.
+# These weights are combined at score-merge time — they are NOT query-time
+# boosts sent to Elasticsearch (which stays BM25-pure for reproducibility).
+SOURCE_SCORE_WEIGHTS: dict[str, float] = {
+    "caption": 1.0,
+    "ocr": 0.85,
+    "subtitle": 0.80,
+    "subtitle_partial": 0.70,
+    "asr": 0.75,
+    "object": 0.60,
+}
+DEFAULT_SOURCE_WEIGHT: float = 0.70
+
 DEV_ANALYZER = "aic_vi_dev_fallback_v2"
 DEV_CHAR_FILTER = "aic_vi_strip_combining_marks_v1"
 
@@ -199,7 +214,19 @@ class ElasticsearchTextStore:
         video_id: str | None = None,
         source: str | None = None,
         phrase: bool = False,
+        phrase_boost: float = 2.0,
     ) -> list[StorageHit]:
+        """Search text with optional phrase-boost for compound word precision.
+
+        When *phrase_boost* > 1 (default 2.0), a ``match_phrase`` sub-clause is
+        added to the ``should`` list with the given boost.  This rewards
+        Vietnamese compound words such as "áo dài" or "xe máy" appearing
+        together without changing the base ``match`` recall behaviour.
+
+        Technique observed in AIC 2024–2025 top-team solutions; boosts frames
+        where the exact phrase appears over frames that only have the individual
+        tokens in different fields.
+        """
         # Match the normalization `StorageRecord.validate_text` applied on write.
         text = unicodedata.normalize("NFC", text)
         if not text.strip():
@@ -211,11 +238,34 @@ class ElasticsearchTextStore:
             filters.append({"term": {"video_id": video_id}})
         if source is not None:
             filters.append({"term": {"source": source}})
-        match_kind = "match_phrase" if phrase else "match"
+        if phrase:
+            # Caller explicitly wants phrase search — exact mode, no match fallback.
+            query: dict[str, Any] = {
+                "bool": {
+                    "must": [{"match_phrase": {"text": text}}],
+                    "filter": filters,
+                }
+            }
+        elif phrase_boost > 1.0 and " " in text:
+            # Hybrid: must match (recall) + should phrase (precision boost).
+            query = {
+                "bool": {
+                    "must": [{"match": {"text": text}}],
+                    "should": [{"match_phrase": {"text": {"query": text, "boost": phrase_boost}}}],
+                    "filter": filters,
+                }
+            }
+        else:
+            query = {
+                "bool": {
+                    "must": [{"match": {"text": text}}],
+                    "filter": filters,
+                }
+            }
         response = self.client.search(
             index=self.config.index,
             size=top_k,
-            query={"bool": {"must": [{match_kind: {"text": text}}], "filter": filters}},
+            query=query,
         )
         hits = [
             StorageHit(
@@ -228,6 +278,193 @@ class ElasticsearchTextStore:
             for item in response["hits"]["hits"]
         ]
         return sorted(hits, key=lambda hit: (-hit.score, hit.video_id, hit.frame_id))
+
+    def search_multisource(
+        self,
+        text: str,
+        *,
+        top_k: int = 10,
+        video_id: str | None = None,
+        sources: list[str] | None = None,
+        phrase_boost: float = 2.0,
+    ) -> list[StorageHit]:
+        """Search across multiple sources and aggregate by (video_id, frame_id).
+
+        Retrieves ``top_k * 4`` raw hits from all matching source documents,
+        then aggregates per logical frame using source-weighted BM25 scores
+        (see ``SOURCE_SCORE_WEIGHTS``).
+
+        This mirrors the technique used by AIC 2024/2025 top teams: a single
+        query searches the entire index and the best-matching source per frame
+        is selected, weighted by semantic quality (caption > ocr > subtitle >
+        object).  The ``source`` field in returned hits is set to the
+        highest-scoring source for that frame.
+
+        Args:
+            text:        Query string (NFC-normalized before search).
+            top_k:       Number of unique frames to return after aggregation.
+            video_id:    Optional exact filter.
+            sources:     Allowlist of sources; ``None`` searches all sources.
+            phrase_boost: See ``search()``.
+        """
+        text = unicodedata.normalize("NFC", text)
+        if not text.strip():
+            raise ValueError("query text must be non-empty")
+        if not 1 <= top_k <= 500:
+            raise ValueError("top_k must be between 1 and 500")
+
+        raw_top_k = min(top_k * 4, 500)
+        filters: list[dict[str, Any]] = []
+        if video_id is not None:
+            filters.append({"term": {"video_id": video_id}})
+        if sources is not None:
+            filters.append({"terms": {"source": sources}})
+
+        if phrase_boost > 1.0 and " " in text:
+            query: dict[str, Any] = {
+                "bool": {
+                    "must": [{"match": {"text": text}}],
+                    "should": [
+                        {"match_phrase": {"text": {"query": text, "boost": phrase_boost}}}
+                    ],
+                    "filter": filters,
+                }
+            }
+        else:
+            query = {
+                "bool": {
+                    "must": [{"match": {"text": text}}],
+                    "filter": filters,
+                }
+            }
+
+        response = self.client.search(
+            index=self.config.index,
+            size=raw_top_k,
+            query=query,
+        )
+
+        # Aggregate: for each (video_id, frame_id) keep best weighted score.
+        # Weighted score = raw_bm25 * source_weight.  The raw BM25 scale is
+        # kept intact so the fusion layer can normalize consistently.
+        aggregated: dict[tuple[str, int], dict[str, Any]] = {}
+        for item in response["hits"]["hits"]:
+            vid = item["_source"]["video_id"]
+            fid = int(item["_source"]["frame_id"])
+            src = item["_source"].get("source") or ""
+            weight = SOURCE_SCORE_WEIGHTS.get(src, DEFAULT_SOURCE_WEIGHT)
+            weighted = float(item["_score"]) * weight
+            key = (vid, fid)
+            if key not in aggregated or weighted > aggregated[key]["weighted"]:
+                aggregated[key] = {
+                    "video_id": vid,
+                    "frame_id": fid,
+                    "score": float(item["_score"]),
+                    "weighted": weighted,
+                    "source": src or None,
+                    "text": item["_source"].get("text"),
+                }
+
+        ranked = sorted(
+            aggregated.values(),
+            key=lambda d: (-d["weighted"], d["video_id"], d["frame_id"]),
+        )[:top_k]
+        return [
+            StorageHit(
+                video_id=d["video_id"],
+                frame_id=d["frame_id"],
+                score=d["score"],
+                source=d["source"],
+                text=d["text"],
+            )
+            for d in ranked
+        ]
+
+    def search_by_frame(
+        self,
+        video_id: str,
+        frame_id: int,
+    ) -> list[StorageHit]:
+        """Return every indexed text document for a specific (video_id, frame_id).
+
+        Useful for debugging: shows all sources (OCR, caption, subtitle, object)
+        that were indexed for a given frame, without scoring.
+        """
+        if not video_id:
+            raise ValueError("video_id must be non-empty")
+        response = self.client.search(
+            index=self.config.index,
+            size=50,
+            query={
+                "bool": {
+                    "filter": [
+                        {"term": {"video_id": video_id}},
+                        {"term": {"frame_id": frame_id}},
+                    ]
+                }
+            },
+        )
+        return [
+            StorageHit(
+                video_id=item["_source"]["video_id"],
+                frame_id=int(item["_source"]["frame_id"]),
+                score=float(item.get("_score") or 0.0),
+                source=item["_source"].get("source"),
+                text=item["_source"].get("text"),
+            )
+            for item in response["hits"]["hits"]
+        ]
+
+    def fetch(
+        self,
+        keys: Iterable[tuple[str, int]],
+        *,
+        source: str | None = None,
+        limit: int = 500,
+    ) -> list[StorageHit]:
+        """Every stored document for these `(video_id, frame_id)` pairs.
+
+        A *lookup*, not a search: no query text, no ranking, `score` is 0.0 on
+        every hit. It answers "what text do we hold about this keyframe" — which
+        is what a Q&A operator reads the answer off, and what `search` cannot do
+        because search needs a query and returns one source's view at a time.
+
+        One frame usually has several documents, one per `source` (OCR, subtitle,
+        caption, object labels…). All of them come back; grouping is the caller's
+        job (`mfe.online.answering.gather_evidence`).
+        """
+        pairs = list(keys)
+        if not pairs:
+            return []
+        if not 1 <= limit <= 10_000:
+            raise ValueError("limit must be between 1 and 10000")
+        filters: list[dict[str, Any]] = [
+            {
+                "bool": {
+                    "must": [
+                        {"term": {"video_id": video_id}},
+                        {"term": {"frame_id": int(frame_id)}},
+                    ]
+                }
+            }
+            for video_id, frame_id in pairs
+        ]
+        query: dict[str, Any] = {"bool": {"should": filters, "minimum_should_match": 1}}
+        if source is not None:
+            query["bool"]["filter"] = [{"term": {"source": source}}]
+        response = self.client.search(index=self.config.index, size=limit, query=query)
+        return [
+            StorageHit(
+                video_id=item["_source"]["video_id"],
+                frame_id=int(item["_source"]["frame_id"]),
+                # No query, so no relevance. Reporting the Elasticsearch constant
+                # score here would invite a caller to rank by it.
+                score=0.0,
+                source=item["_source"].get("source"),
+                text=item["_source"].get("text"),
+            )
+            for item in response["hits"]["hits"]
+        ]
 
     def count(self) -> int:
         return int(self.client.count(index=self.config.index)["count"])
