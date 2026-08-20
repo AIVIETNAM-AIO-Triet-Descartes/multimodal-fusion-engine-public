@@ -49,6 +49,10 @@ online = [
     # them (scripts/verify_clip_checkpoint.py). Pulls torch.
     "sentence-transformers>=2.5",
     "pillow>=10.0",
+    # Bo doc cau tra loi Q&A (mfe.online.readers). BTC cho phep goi API trong
+    # vong so tuyen. Cung thu vien `build_gemini_generate` dung cho ReCap, nen
+    # mot phu thuoc va mot khoa API cho ca hai duong.
+    "google-genai>=1.0",
 ]
 browser = [
     "streamlit>=1.32",
