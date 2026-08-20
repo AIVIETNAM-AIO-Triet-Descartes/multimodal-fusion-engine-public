@@ -141,11 +141,20 @@ class TestRefusals:
         assert any(r.kind == "model_lech" for r in report.refusals)
 
     def test_numeric_package_mismatch(self, bundle, tmp_path):
+        """Two shards transcribed the same bundle with two `faster-whisper`
+        versions — the mixture-of-two-measurements case (§6.4)."""
         _patch_manifest(
-            bundle, tmp_path, "L23_V001", lambda m: m["env"].update({"transformers": "0.0.1"})
+            bundle,
+            tmp_path,
+            "L23_V001",
+            lambda m: m["stages"]["n2_subtitles"]["env"].update({"faster-whisper": "0.0.1"}),
         )
         report = run(bundle, tmp_path)
-        assert any(r.kind == "env_lech" for r in report.refusals)
+        refusals = [r for r in report.refusals if r.kind == "env_lech"]
+        assert refusals
+        # The refusal names the stage, not just the package: "faster-whisper
+        # differs" sends someone to look at every notebook.
+        assert "n2_subtitles/faster-whisper" in refusals[0].detail
 
     def test_non_numeric_package_mismatch_only_warns(self, bundle, tmp_path):
         """`modal` does not change a vector, so it is provenance, not a gate.
@@ -154,6 +163,68 @@ class TestRefusals:
         report = run(bundle, tmp_path)
         assert report.ok
         assert any("modal" in w for w in report.warnings)
+
+    def test_package_irrelevant_to_the_stage_does_not_refuse(self, bundle, tmp_path):
+        """`transformers` cannot move a faster-whisper transcript.
+
+        It is in `NUMERIC_PACKAGES` because it moves numbers *somewhere*, and a
+        whole-manifest comparison cannot tell where. `STAGE_PACKAGES` can, and a
+        refusal that names a package the stage never loaded is the kind people
+        learn to pass --force through.
+        """
+        _patch_manifest(
+            bundle,
+            tmp_path,
+            "L23_V001",
+            lambda m: m["stages"]["n2_subtitles"]["env"].update({"transformers": "0.0.1"}),
+        )
+        report = run(bundle, tmp_path)
+        assert report.ok, [str(r) for r in report.refusals]
+
+    def test_multi_pass_bundle_is_not_refused_for_being_multi_pass(self, bundle, tmp_path):
+        """The regression this whole grain exists for.
+
+        The BTC bundle is filled by four notebooks, and top-level `env` belongs
+        to whichever wrote last. Two shards whose last pass ran in different
+        sessions therefore disagree on `torch` while every measurement in them
+        was taken in matching environments. Refusing there is refusing over a
+        difference that touched no number the bundle holds.
+        """
+
+        def as_second_pass(manifest: dict) -> None:
+            manifest["env"]["torch"] = "9.9.9+cu999"
+            manifest["env"]["transformers"] = "9.9.9"
+
+        _patch_manifest(bundle, tmp_path, "L23_V001", as_second_pass)
+        report = run(bundle, tmp_path)
+        assert report.ok, [str(r) for r in report.refusals]
+
+    def test_manifest_without_stages_is_unknown_not_agreed(self, bundle, tmp_path):
+        """Manifests written before per-stage env: reported, never waved through.
+
+        Silence here would be the worst of both — the bundle would claim a check
+        it did not perform. So it warns, and says what to do about it.
+        """
+
+        def strip_stages(manifest: dict) -> None:
+            manifest.pop("stages", None)
+            manifest["env"]["faster-whisper"] = "0.0.1"
+
+        _patch_manifest(bundle, tmp_path, "L23_V001", strip_stages)
+        report = run(bundle, tmp_path)
+        assert report.ok, [str(r) for r in report.refusals]
+        assert any("stages" in w for w in report.warnings)
+        assert any("n2_subtitles" in w and "KHONG" in w for w in report.warnings)
+
+    def test_agreed_environment_is_recorded_per_stage(self, bundle, tmp_path):
+        run(bundle, tmp_path)
+        manifest = json.loads(
+            (tmp_path / "merge" / "out" / "manifest.json").read_text(encoding="utf-8")
+        )
+        # Provenance the bundle can stand behind: written only where every shard
+        # that ran the stage agreed.
+        assert set(manifest["env_check"]) == {"n2_subtitles", "n4_siglip"}
+        assert "transformers" not in manifest["env_check"]["n2_subtitles"]
 
     def test_video_written_by_the_wrong_member(self, bundle, tmp_path):
         """Detection, not prevention — one Modal workspace gives no write

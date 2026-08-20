@@ -18,6 +18,10 @@ import pytest
 from mfe.contracts.errors import ContractError
 from mfe.offline.bundle import (
     ARTIFACTS,
+    DIRECTORY_STAGES,
+    NUMERIC_PACKAGES,
+    OTHER_PACKAGES,
+    STAGE_PACKAGES,
     BundleLayout,
     BundleWriter,
     StageStatus,
@@ -354,6 +358,87 @@ class TestPartManifest:
         assert manifest["key_format"] == "keyframe_id"
         assert manifest["artifacts"]["subtitles"]["model"] == "faster-whisper large-v3"
         assert "numpy" in manifest["env"]
+        assert "numpy" in manifest["stages"]["n2_subtitles"]["env"]
+
+    def test_a_second_pass_keeps_the_first_pass_environment(self, writer, tmp_path):
+        """The bug per-stage `env` exists to remove.
+
+        Four notebooks fill one BTC manifest. Top-level `env` is the last writer's,
+        so if it were the only record, `04` would overwrite what `03` measured
+        under and `merge_bundle.py` would compare two shards on a difference that
+        belongs to two notebooks rather than to two measurements.
+        """
+        subs = writer.write_text_part(
+            "subtitles", VIDEO, {f"{VIDEO}#000090": "x"}, model="faster-whisper large-v3"
+        )
+        with mock.patch(
+            "mfe.offline.bundle.freeze_environment",
+            return_value={"faster-whisper": "1.0.0", "torch": "2.4.0"},
+        ):
+            writer.write_part_manifest(VIDEO, [subs], keyframes=307)
+
+        vecs = writer.write_vector_part(
+            "siglip_vectors", VIDEO, [f"{VIDEO}#000090"], np.ones((1, 1152), np.float32),
+            model="google/siglip-so400m-patch14-384",
+        )
+        with mock.patch(
+            "mfe.offline.bundle.freeze_environment",
+            return_value={"transformers": "4.44.0", "torch": "2.6.0"},
+        ):
+            writer.write_part_manifest(VIDEO, [vecs], keyframes=307, merge=True)
+
+        local = tmp_path / "m.json"
+        writer.transport.get(writer.layout.part_manifest(VIDEO), local)
+        manifest = json.loads(local.read_text(encoding="utf-8"))
+        assert manifest["stages"]["n2_subtitles"]["env"]["torch"] == "2.4.0"
+        assert manifest["stages"]["n4_siglip"]["env"]["torch"] == "2.6.0"
+        # Top-level env still describes only the pass that wrote last — left
+        # in place, and no longer the thing the merge compares.
+        assert manifest["env"]["torch"] == "2.6.0"
+
+    def test_an_old_manifest_is_not_backfilled(self, writer, tmp_path):
+        """A manifest from before this change has one `env` belonging to its last
+        pass. Copying it onto the stages it does not describe would invent
+        provenance; the merge reports the gap as unknown instead."""
+        subs = writer.write_text_part(
+            "subtitles", VIDEO, {f"{VIDEO}#000090": "x"}, model="faster-whisper large-v3"
+        )
+        writer.write_part_manifest(VIDEO, [subs], keyframes=307)
+
+        local = tmp_path / "old.json"
+        writer.transport.get(writer.layout.part_manifest(VIDEO), local)
+        old = json.loads(local.read_text(encoding="utf-8"))
+        old.pop("stages")
+        local.write_text(json.dumps(old), encoding="utf-8")
+        writer.transport.put(local, writer.layout.part_manifest(VIDEO))
+
+        vecs = writer.write_vector_part(
+            "siglip_vectors", VIDEO, [f"{VIDEO}#000090"], np.ones((1, 1152), np.float32),
+            model="google/siglip-so400m-patch14-384",
+        )
+        writer.write_part_manifest(VIDEO, [vecs], keyframes=307, merge=True)
+
+        writer.transport.get(writer.layout.part_manifest(VIDEO), local)
+        manifest = json.loads(local.read_text(encoding="utf-8"))
+        assert set(manifest["artifacts"]) == {"subtitles", "siglip_vectors"}
+        assert set(manifest["stages"]) == {"n4_siglip"}
+
+
+class TestStagePackages:
+    def test_every_known_stage_is_declared(self):
+        """An undeclared stage falls back to comparing every NUMERIC package,
+        which refuses on versions it never loaded. That fallback is a safety net,
+        not a place to leave a stage — so adding one to `ARTIFACTS` without a row
+        here fails right here rather than as a mystery refusal at merge time."""
+        known = set(DIRECTORY_STAGES) | {a.stage for a in ARTIFACTS.values()}
+        assert known - set(STAGE_PACKAGES) == set()
+
+    def test_declared_packages_are_actually_recorded(self):
+        """A package `freeze_environment` never looks up reads as "(khong cai)"
+        in every shard — perfect agreement, measured on nothing."""
+        recorded = set(NUMERIC_PACKAGES) | set(OTHER_PACKAGES)
+        for stage, packages in STAGE_PACKAGES.items():
+            assert set(packages) - recorded == set(), stage
 
 
 class TestTransportExists:

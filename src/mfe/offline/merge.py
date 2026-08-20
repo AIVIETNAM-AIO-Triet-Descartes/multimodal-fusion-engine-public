@@ -38,6 +38,7 @@ from mfe.offline.bundle import (
     ARTIFACTS,
     NUMERIC_PACKAGES,
     OTHER_PACKAGES,
+    STAGE_PACKAGES,
     BundleLayout,
     ShardPlan,
     utc_now,
@@ -83,6 +84,10 @@ class MergeReport:
     refusals: list[Refusal] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     fingerprint_check: dict[str, str] = field(default_factory=dict)
+    #: `{stage: {package: agreed version}}` — what every shard that ran the stage
+    #: had installed. Written only where they agreed, so it is the provenance the
+    #: bundle can actually stand behind, not a sample of one shard.
+    env_check: dict[str, dict[str, str]] = field(default_factory=dict)
 
     @property
     def ok(self) -> bool:
@@ -99,6 +104,7 @@ class MergeReport:
             "authors": self.authors,
             "ok": self.ok,
             "fingerprint_check": self.fingerprint_check,
+            "env_check": self.env_check,
             "artifacts": {
                 name: {
                     "parts": a.parts,
@@ -181,13 +187,18 @@ def _read_part_manifests(
 
 
 def check_fingerprints(manifests: dict[str, dict], report: MergeReport) -> None:
-    """Every shard must claim the same model, params and numeric-package versions.
+    """Every shard must claim the same model and params, and — per stage — the
+    same package versions.
 
     This check is the entire reason `parts/manifest/` exists. Sharding by video
     buys parallelism and pays for it with five machines running one model; if two
     of them resolved different `transformers` versions, the bundle is a mixture of
     two measurements and cosine stays plausible throughout, so nothing downstream
     can tell. Comparing five manifests is the only moment that is visible.
+
+    The environment half lives in `check_stage_environments`, which compares per
+    stage rather than per manifest — see there for why the finer grain is what
+    makes the check survive a bundle filled by four notebooks.
     """
     for artifact in ARTIFACTS:
         seen: dict[tuple[str, str], list[str]] = {}
@@ -209,20 +220,7 @@ def check_fingerprints(manifests: dict[str, dict], report: MergeReport) -> None:
         elif seen:
             report.fingerprint_check[artifact] = next(iter(seen))[0]
 
-    for package in NUMERIC_PACKAGES:
-        # Absence is a value, not a skip. A package one shard loaded and another
-        # never had is a divergence of exactly the kind this check exists for —
-        # treating "missing" as agreement would wave through the case where one
-        # member's environment is simply not the same stack.
-        versions: dict[str, list[str]] = {}
-        for video_id, manifest in manifests.items():
-            value = manifest.get("env", {}).get(package) or "(khong cai)"
-            versions.setdefault(value, []).append(video_id)
-        if len(versions) > 1:
-            detail = "; ".join(
-                f"{v} <- {', '.join(sorted(vids))}" for v, vids in sorted(versions.items())
-            )
-            report.refuse("env_lech", f"{package}: {detail}")
+    check_stage_environments(manifests, report)
 
     for package in OTHER_PACKAGES:
         seen_versions = {
@@ -234,6 +232,93 @@ def check_fingerprints(manifests: dict[str, dict], report: MergeReport) -> None:
                 f"{package} khac nhau giua cac manh ({', '.join(sorted(seen_versions))}) "
                 "— khong anh huong so, chi ghi lai"
             )
+
+
+def stage_env(manifest: dict, stage: str) -> dict[str, str] | None:
+    """Environment recorded for `stage`, or `None` if this manifest never recorded it.
+
+    `None` is the third answer, and keeping it distinct from `{}` is the point of
+    this function. A manifest written before per-stage env existed carries one
+    top-level `env` belonging to whichever pass wrote last; reading that as this
+    stage's environment is a guess, and a guess is exactly what produced the
+    spurious refusals per-stage env was added to remove.
+    """
+    body = (manifest.get("stages") or {}).get(stage)
+    if isinstance(body, dict) and body.get("env"):
+        return body["env"]
+    return None
+
+
+def check_stage_environments(manifests: dict[str, dict], report: MergeReport) -> None:
+    """Per stage, every shard that ran it must have run it in the same versions.
+
+    Compared **per stage** rather than per manifest because one bundle is filled
+    by several passes (`02` imports, `03` adds SigLIP and OCR, `04` adds
+    subtitles and CLAP). A whole-manifest comparison asks "did these two videos
+    finish in the same environment", which on a multi-pass bundle is answered
+    "no" almost always and means almost nothing — the difference is usually
+    between two notebooks, not between two measurements of the same thing.
+
+    Which packages matter is declared per stage in `bundle.STAGE_PACKAGES`, so a
+    refusal always names a version that could have moved a number this stage
+    wrote.
+
+    Stages a manifest never recorded are reported as **unknown**, not as
+    agreement and not as a refusal. Nothing can be proved about them either way,
+    and pretending otherwise in either direction is worse than saying so.
+    """
+    stages = sorted({s for m in manifests.values() for s in (m.get("stages") or {})})
+    for stage in stages:
+        packages = STAGE_PACKAGES.get(stage)
+        if packages is None:
+            report.warnings.append(
+                f"tang {stage} chua khai bao trong STAGE_PACKAGES — so TAT CA goi "
+                f"NUMERIC cho no. Khai bao lai de phep kiem noi dung chinh xac."
+            )
+            packages = NUMERIC_PACKAGES
+
+        recorded = {v: env for v, m in manifests.items() if (env := stage_env(m, stage))}
+        for package in packages:
+            # Absence is a value, not a skip. A package one shard loaded and
+            # another never had is a divergence of exactly the kind this check
+            # exists for — treating "missing" as agreement would wave through the
+            # case where one member's environment is simply not the same stack.
+            versions: dict[str, list[str]] = {}
+            for video_id, env in recorded.items():
+                versions.setdefault(env.get(package) or "(khong cai)", []).append(video_id)
+            if len(versions) > 1:
+                detail = "; ".join(
+                    f"{v} <- {', '.join(sorted(vids))}" for v, vids in sorted(versions.items())
+                )
+                report.refuse("env_lech", f"{stage}/{package}: {detail}")
+            elif versions:
+                report.env_check.setdefault(stage, {})[package] = next(iter(versions))
+
+        # Manifests that hold an artifact of this stage but recorded no
+        # environment for it. Countable because the artifact proves the stage
+        # ran; a directory stage leaves no artifact, so it can only be counted in
+        # the whole-manifest summary below.
+        produced = {a for a, spec in ARTIFACTS.items() if spec.stage == stage}
+        blind = sorted(
+            video_id
+            for video_id, manifest in manifests.items()
+            if video_id not in recorded and (set(manifest.get("artifacts") or {}) & produced)
+        )
+        if blind:
+            report.warnings.append(
+                f"{stage}: {len(blind)}/{len(manifests)} manh co artifact nhung KHONG "
+                f"ghi env cua tang nay — khong ket luan duoc gi ve moi truong cua chung "
+                f"(vd {', '.join(blind[:5])})"
+            )
+
+    legacy = sorted(v for v, m in manifests.items() if not (m.get("stages") or {}))
+    if legacy:
+        report.warnings.append(
+            f"{len(legacy)}/{len(manifests)} manifest khong co `stages` (ghi truoc "
+            "20-08-2026): chi co MOT `env` cua luot ghi cuoi, khong biet tang nao chay "
+            "trong moi truong nao. Chay lai mot tang bat ky se ghi lai `stages` cho "
+            "video do; den luc do moi truong cua chung la CHUA KIEM, khong phai da dat."
+        )
 
 
 def check_ownership(manifests: dict[str, dict], plan: ShardPlan, report: MergeReport) -> None:
@@ -431,6 +516,10 @@ def merge_bundle(
             for name, a in report.artifacts.items()
         },
         "fingerprint_check": report.fingerprint_check,
+        # Which versions produced which stage, kept beside the model fingerprints
+        # for the same reason: the merged bundle outlives the sessions that filled
+        # it, and `parts/manifest/` is not shipped with it.
+        "env_check": report.env_check,
         "emit": emit,
         "generated_at": utc_now(),
     }

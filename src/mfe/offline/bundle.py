@@ -116,10 +116,52 @@ NUMERIC_PACKAGES = (
     "sentence-transformers",
     "easyocr",
     "numpy",
+    # The two Vietnamese OCR sources became arms on 19-08-2026; their recognisers
+    # decide the text that reaches BM25, so their versions belong here and not in
+    # provenance. Both spellings of the Paddle wheel are listed because the GPU
+    # build ships under a different distribution name than the CPU one, and only
+    # the installed one is ever recorded.
+    "paddleocr",
+    "paddlepaddle-gpu",
+    "paddlepaddle",
+    "vietocr",
 )
 
 #: Recorded for provenance, ignored when comparing shards.
 OTHER_PACKAGES = ("modal", "opencv-python", "pillow", "librosa", "google-genai")
+
+#: Packages whose version changes **that stage's** numbers.
+#:
+#: `NUMERIC_PACKAGES` says which versions can move a number *somewhere*;
+#: this says where. The distinction is what makes the check usable on a bundle
+#: filled by more than one pass: comparing `transformers` across two shards whose
+#: only difference is who imported the keyframes is correct in form and empty in
+#: content, and a check that refuses on empty differences gets bypassed.
+#:
+#: Names here are not restricted to `NUMERIC_PACKAGES` — `opencv-python` is
+#: provenance for most stages and decisive for `n1_keyframes`, where DAKE selects
+#: on JPEG byte size and the encoder is the measuring instrument.
+#:
+#: An empty tuple is a claim, not an omission: the stage runs no model. Every
+#: known stage must appear — `tests/unit/offline/test_bundle.py` enforces that,
+#: so a new stage cannot slip in unexamined.
+STAGE_PACKAGES: dict[str, tuple[str, ...]] = {
+    "n0_import_btc": (),  # keyframes come from BTC; nothing is computed
+    "n1_keyframes": ("numpy", "opencv-python"),
+    "n2_subtitles": ("faster-whisper", "torch"),
+    "n3_audio": ("torch", "transformers", "librosa"),
+    "n4_objects": ("tensorflow", "tensorflow-hub"),
+    "n4_siglip": ("torch", "transformers"),
+    "n5_ocr_easyocr": ("easyocr", "torch"),
+    "n5_ocr_qwen": ("torch", "transformers"),
+    "n5_ocr_paddle": ("paddleocr", "paddlepaddle-gpu", "paddlepaddle", "numpy"),
+    # VietOCR has no detector of its own — PaddleOCR finds the text regions and
+    # VietOCR reads them (`stages.stage_n5_ocr_vietocr`), so a Paddle version
+    # change moves this stage's output too.
+    "n5_ocr_vietocr": ("vietocr", "torch", "paddleocr", "paddlepaddle-gpu", "paddlepaddle"),
+    "n6_recap": ("torch", "transformers"),
+    "n6_bge_m3": ("torch", "transformers", "sentence-transformers"),
+}
 
 _SHA_CHUNK = 1 << 20
 
@@ -741,23 +783,54 @@ class BundleWriter:
 
         Off by default because a single-pass bundle writes every artifact in one
         call, and there the read-back is a wasted round trip per video.
+
+        `stages` records **which environment produced which stage**, and it is
+        merged the same way `artifacts` is. Top-level `env` cannot do that job:
+        it is the environment of whichever pass wrote last, so on a four-pass
+        bundle it describes `04` and silently claims to describe `02` as well.
+        Two videos whose last pass ran in different sessions then disagree on
+        `torch` and `merge_bundle.py` refuses — over a difference that touched no
+        number either of them holds. Per stage, the comparison lands on the pass
+        that actually ran the model. Top-level `env` is left in place: it is still
+        true about this pass, and older readers still find it.
         """
         artifacts: dict[str, dict] = {}
+        stages: dict[str, dict] = {}
         if merge:
             local = self.workdir / f"prev_manifest_{video_id}.json"
             try:
                 self.transport.get(self.layout.part_manifest(video_id), local)
-                artifacts = json.loads(local.read_text(encoding="utf-8")).get("artifacts", {})
+                previous = json.loads(local.read_text(encoding="utf-8"))
+                artifacts = previous.get("artifacts") or {}
+                # Manifests written before 20-08-2026 have no `stages`. They are
+                # NOT backfilled from their top-level `env`: that env belongs to
+                # the last pass, and copying it onto earlier stages would invent
+                # provenance. `merge.check_stage_environments` reports the gap as
+                # unknown, which is what it is.
+                stages = previous.get("stages") or {}
             except Exception:  # noqa: BLE001 - chua co manifest la truong hop binh thuong
                 artifacts = {}
+                stages = {}
             finally:
                 local.unlink(missing_ok=True)
 
+        env = freeze_environment()
         artifacts.update(
             {
                 m["artifact"]: {k: v for k, v in m.items() if k not in ("video_id", "stage")}
                 for m in markers
                 if "artifact" in m
+            }
+        )
+        stages.update(
+            {
+                m["stage"]: {
+                    "author": self.member,
+                    "at": m.get("finished_at"),
+                    "env": env,
+                }
+                for m in markers
+                if m.get("stage")
             }
         )
         manifest = {
@@ -767,7 +840,8 @@ class BundleWriter:
             "key_format": "keyframe_id",
             "counts": {"keyframes": keyframes},
             "artifacts": artifacts,
-            "env": freeze_environment(),
+            "stages": stages,
+            "env": env,
             "generated_at": utc_now(),
         }
         local = self.workdir / f"manifest_{video_id}.json"
