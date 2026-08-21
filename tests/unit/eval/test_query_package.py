@@ -87,6 +87,32 @@ class TestTachSuKien:
         assert preamble == "Video nấu ăn:"
         assert "THU TU DONG" in caplog.text
 
+    def test_dau_ngan_la_tuy_chon(self):
+        r"""Gói đề 21-08-2026 viết `E1 Khoảnh khắc…` KHÔNG có hai chấm.
+
+        Bản regex đòi `[:.\-]` làm hỏng cả lượt chạy trên Kaggle với thông báo
+        "không có dòng nào dạng E<n>" — trong khi file có đủ ba dòng, ngay trước
+        mắt người đọc. Một phép nhận dạng định dạng do người gõ ra phải chịu được
+        cách gõ của người đó.
+        """
+        _, events = split_events(
+            "Doan video mua lan.\n"
+            "E1 Khoanh khac dau tien xuat hien hai con rong vang.\n"
+            "E2 Khoanh khac con lan hoan tat cu xoay nguoi.\n"
+            "E3 Khoanh khac dui cham vao keng dong.\n"
+        )
+        assert len(events) == 3
+        assert events[0].startswith("Khoanh khac dau tien xuat hien")
+
+    def test_van_can_khoang_trang_truoc_noi_dung(self):
+        """`E1000` hay mã hiệu `E5A` KHÔNG được thành mốc sự kiện.
+
+        Đây là cái giá của việc nới dấu ngăn: nếu bỏ luôn yêu cầu khoảng trắng
+        thì mọi chuỗi bắt đầu bằng E-rồi-số đều bị nuốt thành một sự kiện.
+        """
+        with pytest.raises(ContractError):
+            split_events("Ma hieu E1000ABC va E5A khong phai su kien.")
+
     def test_thieu_han_mot_dong_thi_dung(self):
         """Nhãn chạy đến E4 mà chỉ đọc được 3 dòng: thiếu hẳn một sự kiện, không
         phải lỗi gõ nhãn. Mọi dòng nộp sẽ sai số cột — thể lệ đòi số Frame ID

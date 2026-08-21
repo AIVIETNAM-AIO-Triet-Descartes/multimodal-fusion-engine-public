@@ -58,9 +58,18 @@ QueryType = Literal["KIS", "QA", "TRAKE"]
 #: Hậu tố tên file -> dạng truy vấn (thể lệ §"Quy ước tên file truy vấn").
 SUFFIXES: dict[str, QueryType] = {"kis": "KIS", "qa": "QA", "trake": "TRAKE"}
 
-#: `E1:`, `E 2 :`, `e3.` — BTC gõ tay nên khoảng trắng và dấu ngăn không cố định.
+#: `E1:`, `E 2 :`, `e3.`, và `E1 ` — BTC gõ tay nên dấu ngăn không cố định.
+#:
+#: Dấu ngăn là TUỲ CHỌN vì gói đề ngày 21-08-2026 viết `E1 Khoảnh khắc…` không
+#: có hai chấm, và bản regex đòi `[:.\-]` đã làm hỏng cả lượt chạy với thông báo
+#: "không có dòng nào dạng E<n>" — trong khi file có đủ ba dòng, ngay trước mắt.
+#: Một phép nhận dạng định dạng do người gõ phải chịu được cách gõ của người đó.
+#:
+#: Nhưng vẫn phải có KHOẢNG TRẮNG rồi mới tới nội dung: không thế thì `E1` trong
+#: `E1000` hay một mã hiệu như `E5A` cũng thành mốc sự kiện.
+#:
 #: Neo `^` với `re.MULTILINE` để một chữ "E1" giữa câu không bị hiểu thành mốc.
-_EVENT = re.compile(r"^\s*E\s*(\d+)\s*[:.\-]\s*(.+)$", re.IGNORECASE | re.MULTILINE)
+_EVENT = re.compile(r"^\s*E\s*(\d+)\s*[:.\-]?\s+(.+)$", re.IGNORECASE | re.MULTILINE)
 
 
 @dataclass(frozen=True)
