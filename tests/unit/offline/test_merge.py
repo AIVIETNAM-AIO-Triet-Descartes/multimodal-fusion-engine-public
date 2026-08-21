@@ -9,6 +9,7 @@ Modal run takes, minus the network.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -225,6 +226,103 @@ class TestRefusals:
         # that ran the stage agreed.
         assert set(manifest["env_check"]) == {"n2_subtitles", "n4_siglip"}
         assert "transformers" not in manifest["env_check"]["n2_subtitles"]
+
+    def test_params_are_compared_per_key_not_as_one_blob(self, bundle, tmp_path):
+        """Hai khoá lệch phải ra hai lần từ chối, không phải một.
+
+        So cả dict `params` một cục thì chấp nhận một lệch là chấp nhận cả hai
+        — thứ Lead ký duyệt không còn là thứ được bỏ qua.
+        """
+        _patch_manifest(
+            bundle,
+            tmp_path,
+            "L23_V001",
+            lambda m: m["artifacts"]["subtitles"]["params"].update(
+                {"beam_size": 1, "window": "fixed3"}
+            ),
+        )
+        report = run(bundle, tmp_path)
+        keys = {r.detail.split(":")[0] for r in report.refusals if r.kind == "model_lech"}
+        assert keys == {"subtitles.params.beam_size", "subtitles.params.window"}
+
+    def test_accepted_divergence_does_not_stop_the_merge(self, bundle, tmp_path):
+        _patch_manifest(
+            bundle,
+            tmp_path,
+            "L23_V001",
+            lambda m: m["artifacts"]["subtitles"]["params"].update({"beam_size": 1}),
+        )
+        plan = replace(
+            PLAN,
+            accepted_divergences={
+                "subtitles.params.beam_size": {
+                    "reason": "greedy vs beam — chay lai 12 gio GPU",
+                    "decided_by": "triet",
+                    "decided_on": "2026-08-20",
+                }
+            },
+        )
+        report = run(bundle, tmp_path, plan=plan)
+        assert report.ok, [str(r) for r in report.refusals]
+
+        # Chap nhan KHONG phai tat: no van do, van biet video nao mang gia tri nao.
+        assert len(report.accepted_divergences) == 1
+        entry = report.accepted_divergences[0]
+        assert entry["key"] == "subtitles.params.beam_size"
+        assert entry["decided_by"] == "triet"
+        assert set(entry["values"]) == {"1", "5"}
+        assert entry["values"]["1"] == ["L23_V001"]
+
+    def test_accepting_one_key_does_not_accept_another(self, bundle, tmp_path):
+        """Phạm vi của một quyết định đúng bằng chính nó — và một khoá lệch về
+        sau vẫn chặn, kể cả trên cùng artifact."""
+        _patch_manifest(
+            bundle,
+            tmp_path,
+            "L23_V001",
+            lambda m: m["artifacts"]["subtitles"]["params"].update(
+                {"beam_size": 1, "window": "fixed3"}
+            ),
+        )
+        plan = replace(
+            PLAN,
+            accepted_divergences={
+                "subtitles.params.beam_size": {
+                    "reason": "x", "decided_by": "triet", "decided_on": "2026-08-20"
+                }
+            },
+        )
+        report = run(bundle, tmp_path, plan=plan)
+        assert not report.ok
+        assert [r.detail.split(":")[0] for r in report.refusals] == [
+            "subtitles.params.window"
+        ]
+
+    def test_the_reason_reaches_the_merged_bundle_manifest(self, bundle, tmp_path):
+        """`parts/manifest/` không đi cùng bản gộp. Nếu lý do không nằm trong
+        `manifest.json` của bundle thì sau khi gộp xong, trên đĩa không còn gì
+        nói rằng một nửa `subtitles` được giải mã kiểu khác."""
+        _patch_manifest(
+            bundle,
+            tmp_path,
+            "L23_V001",
+            lambda m: m["artifacts"]["subtitles"]["params"].update({"beam_size": 1}),
+        )
+        plan = replace(
+            PLAN,
+            accepted_divergences={
+                "subtitles.params.beam_size": {
+                    "reason": "greedy vs beam, chay lai qua dat",
+                    "decided_by": "triet",
+                    "decided_on": "2026-08-20",
+                }
+            },
+        )
+        run(bundle, tmp_path, plan=plan)
+        manifest = json.loads(
+            (tmp_path / "merge" / "out" / "manifest.json").read_text(encoding="utf-8")
+        )
+        assert manifest["accepted_divergences"][0]["reason"].startswith("greedy vs beam")
 
     def test_video_written_by_the_wrong_member(self, bundle, tmp_path):
         """Detection, not prevention — one Modal workspace gives no write

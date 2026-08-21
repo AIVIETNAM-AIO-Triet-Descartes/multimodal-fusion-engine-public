@@ -88,6 +88,9 @@ class MergeReport:
     #: had installed. Written only where they agreed, so it is the provenance the
     #: bundle can actually stand behind, not a sample of one shard.
     env_check: dict[str, dict[str, str]] = field(default_factory=dict)
+    #: Lech ma Lead da xem va quyet dinh giu, kem ly do. Di vao manifest cua
+    #: bundle gop de bundle mang theo loi canh bao cua chinh no.
+    accepted_divergences: list[dict] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -105,6 +108,7 @@ class MergeReport:
             "ok": self.ok,
             "fingerprint_check": self.fingerprint_check,
             "env_check": self.env_check,
+            "accepted_divergences": self.accepted_divergences,
             "artifacts": {
                 name: {
                     "parts": a.parts,
@@ -186,7 +190,11 @@ def _read_part_manifests(
 # ---------------------------------------------------------------------------
 
 
-def check_fingerprints(manifests: dict[str, dict], report: MergeReport) -> None:
+def check_fingerprints(
+    manifests: dict[str, dict],
+    report: MergeReport,
+    accepted: dict[str, dict] | None = None,
+) -> None:
     """Every shard must claim the same model and params, and — per stage — the
     same package versions.
 
@@ -200,25 +208,48 @@ def check_fingerprints(manifests: dict[str, dict], report: MergeReport) -> None:
     stage rather than per manifest — see there for why the finer grain is what
     makes the check survive a bundle filled by four notebooks.
     """
+    accepted = accepted or {}
     for artifact in ARTIFACTS:
-        seen: dict[tuple[str, str], list[str]] = {}
-        for video_id, manifest in manifests.items():
-            body = manifest.get("artifacts", {}).get(artifact)
-            if not body:
-                continue
-            key = (
-                str(body.get("model", "")),
-                json.dumps(body.get("params", {}), sort_keys=True, ensure_ascii=False),
+        bodies = {
+            video_id: body
+            for video_id, manifest in manifests.items()
+            if (body := manifest.get("artifacts", {}).get(artifact))
+        }
+        if not bodies:
+            continue
+
+        _compare(
+            artifact,
+            "model",
+            {v: str(b.get("model", "")) for v, b in bodies.items()},
+            report,
+            accepted,
+        )
+        # Từng khoá `params` một, không phải cả dict một cục.
+        #
+        # So cả dict thì một lệch ở `beam_size` và một lệch ở `window` ra cùng
+        # một dòng, và **chấp nhận một cái là chấp nhận cả hai** — thứ Lead ký
+        # duyệt không còn là thứ được bỏ qua. So theo khoá thì mỗi quyết định
+        # đúng bằng phạm vi của nó, và một khoá mới lệch về sau vẫn chặn.
+        keys = sorted({k for b in bodies.values() for k in (b.get("params") or {})})
+        for key in keys:
+            _compare(
+                artifact,
+                f"params.{key}",
+                {
+                    v: json.dumps(
+                        (b.get("params") or {}).get(key, "(khong khai)"),
+                        sort_keys=True, ensure_ascii=False,
+                    )
+                    for v, b in bodies.items()
+                },
+                report,
+                accepted,
             )
-            seen.setdefault(key, []).append(video_id)
-        if len(seen) > 1:
-            detail = "; ".join(
-                f"{model} {params} <- {', '.join(sorted(videos))}"
-                for (model, params), videos in sorted(seen.items())
-            )
-            report.refuse("model_lech", f"{artifact}: {detail}")
-        elif seen:
-            report.fingerprint_check[artifact] = next(iter(seen))[0]
+        if artifact not in report.fingerprint_check:
+            models = {str(b.get("model", "")) for b in bodies.values()}
+            if len(models) == 1:
+                report.fingerprint_check[artifact] = next(iter(models))
 
     check_stage_environments(manifests, report)
 
@@ -232,6 +263,50 @@ def check_fingerprints(manifests: dict[str, dict], report: MergeReport) -> None:
                 f"{package} khac nhau giua cac manh ({', '.join(sorted(seen_versions))}) "
                 "— khong anh huong so, chi ghi lai"
             )
+
+
+def _compare(
+    artifact: str,
+    field_name: str,
+    values: dict[str, str],
+    report: MergeReport,
+    accepted: dict[str, dict],
+) -> None:
+    """Refuse if shards disagree on one field — unless the Lead accepted it.
+
+    An accepted divergence is **not** a silenced check. It still runs, still
+    reports the exact values and which videos carry them, and the reason the
+    Lead wrote is carried into the merged bundle's own manifest. The only thing
+    acceptance changes is whether it stops the merge.
+    """
+    groups: dict[str, list[str]] = {}
+    for video_id, value in values.items():
+        groups.setdefault(value, []).append(video_id)
+    if len(groups) < 2:
+        return
+
+    key = f"{artifact}.{field_name}"
+    detail = "; ".join(
+        f"{value} <- {len(videos)} video ({', '.join(sorted(videos)[:3])}"
+        f"{', …' if len(videos) > 3 else ''})"
+        for value, videos in sorted(groups.items())
+    )
+    decision = accepted.get(key)
+    if decision is None:
+        report.refuse("model_lech", f"{key}: {detail}")
+        return
+    report.accepted_divergences.append(
+        {
+            "key": key,
+            "values": {value: sorted(videos) for value, videos in sorted(groups.items())},
+            "detail": detail,
+            **{k: decision[k] for k in ("reason", "decided_by", "decided_on")},
+        }
+    )
+    report.warnings.append(
+        f"LECH DA CHAP NHAN {key}: {detail} — {decision['reason']} "
+        f"({decision['decided_by']}, {decision['decided_on']})"
+    )
 
 
 def stage_env(manifest: dict, stage: str) -> dict[str, str] | None:
@@ -467,7 +542,7 @@ def merge_bundle(
         )
     report.authors = sorted({m.get("author", "?") for m in manifests.values()})
     check_ownership(manifests, plan, report)
-    check_fingerprints(manifests, report)
+    check_fingerprints(manifests, report, plan.accepted_divergences)
 
     found = _list_parts(transport, layout)
     wanted = [name for name, spec in ARTIFACTS.items() if spec.stage in plan.stages]
@@ -520,6 +595,10 @@ def merge_bundle(
         # for the same reason: the merged bundle outlives the sessions that filled
         # it, and `parts/manifest/` is not shipped with it.
         "env_check": report.env_check,
+        # BANG CHUNG DI THEO BUNDLE. `parts/manifest/` khong duoc ship cung ban
+        # gop, nen neu cho nay khong ghi thi sau khi gop xong khong con gi tren
+        # dia noi rang mot nua `subtitles` duoc giai ma kieu khac.
+        "accepted_divergences": report.accepted_divergences,
         "emit": emit,
         "generated_at": utc_now(),
     }

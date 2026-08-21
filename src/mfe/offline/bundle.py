@@ -273,6 +273,51 @@ class BundleLayout:
 # ---------------------------------------------------------------------------
 
 
+#: Where accepted divergences live. One file for the whole bundle, **not** a
+#: block in each shard config: `aic_btc_b1_v1` is filled by four different yaml
+#: files (`…_btc`, `…_btc_images`, `…_btc_video`, `…_btc_ocr2`), and a decision
+#: copied into four places is four places to drift — which is the exact failure
+#: `check_fingerprints` exists to catch, now committed against the check itself.
+ACCEPTED_DIVERGENCES_FILE = "accepted_divergences.yaml"
+
+
+def load_accepted_divergences(bundle: str, config_dir: Path) -> dict[str, dict]:
+    """Divergences the Lead decided to keep, for one bundle.
+
+    Absent file, or no entry for this bundle, means **nothing is accepted** —
+    the safe direction. A missing file must never read as "all clear".
+
+    Every entry must carry a `reason`. An accepted divergence without a written
+    reason is a silenced check, and six weeks later nobody can tell the two
+    apart. `decided_by` and `decided_on` are required for the same reason: this
+    is a decision, and a decision has an owner and a date.
+    """
+    import yaml  # noqa: PLC0415 - cung kieu voi `load_shard_plan`
+
+    path = Path(config_dir) / ACCEPTED_DIVERGENCES_FILE
+    if not path.is_file():
+        return {}
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    entries = (raw.get(bundle) or {}) if isinstance(raw, dict) else {}
+
+    out: dict[str, dict] = {}
+    for key, body in entries.items():
+        if not isinstance(body, dict):
+            raise ContractError(
+                ErrorCode.INVALID_ARGUMENT,
+                f"{path}: {key} phai la mot khoi co `reason`, khong phai {body!r}",
+            )
+        missing = [f for f in ("reason", "decided_by", "decided_on") if not body.get(f)]
+        if missing:
+            raise ContractError(
+                ErrorCode.INVALID_ARGUMENT,
+                f"{path}: {key} thieu {', '.join(missing)}. Mot lech duoc chap nhan "
+                "ma khong ghi ly do thi khong phan biet duoc voi mot phep kiem bi tat.",
+            )
+        out[key] = dict(body)
+    return out
+
+
 @dataclass(frozen=True)
 class ShardPlan:
     """`config/ingest_shards.yaml`, validated.
@@ -294,6 +339,10 @@ class ShardPlan:
     zips: dict[str, list[str]] = field(default_factory=dict)
     #: `{zip name: url}` for whatever this plan covers.
     zip_urls: dict[str, str] = field(default_factory=dict)
+    #: Divergences the Lead has looked at and decided to keep, keyed
+    #: `{artifact}.model` or `{artifact}.params.{key}`, each carrying the reason.
+    #: See `config/accepted_divergences.yaml` and `merge.check_fingerprints`.
+    accepted_divergences: dict[str, dict] = field(default_factory=dict)
     #: `{zip name: [video_id, …]}`, measured from each archive's central directory.
     #: Read rather than guessed from the name: `Videos_L26_a.zip` … `_e.zip` all
     #: start with `L26`, so deriving the contents from the filename would give
@@ -445,6 +494,7 @@ def load_shard_plan(
         calibration_video=raw["calibration_video"],
         members=members,
         stages=list(raw["stages"]),
+        accepted_divergences=load_accepted_divergences(raw["bundle"], path.parent),
         **plan_extra,
     )
     unknown = set(plan.stages) - set(DIRECTORY_STAGES) - {a.stage for a in ARTIFACTS.values()}

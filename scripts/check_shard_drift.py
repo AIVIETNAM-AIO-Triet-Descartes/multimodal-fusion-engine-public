@@ -36,6 +36,7 @@ import argparse
 import json
 import sys
 import tempfile
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -58,6 +59,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--bundle", default="aic_btc_b1_v1")
     parser.add_argument("--version", type=int, default=2)
     parser.add_argument("--artifact", default=None, help="Chi xem mot artifact")
+    parser.add_argument(
+        "--shards",
+        default="config/ingest_shards_batch1_btc.yaml",
+        help="De doc `config/accepted_divergences.yaml` cua bundle nay. Khong co "
+        "no thi script bao KHAC voi merge — dung cai script nay ton tai de tranh.",
+    )
     parser.add_argument("--workers", type=int, default=8, help="So luong doc song song")
     parser.add_argument("--out", default="eval/results/shard_drift.json")
     return parser
@@ -79,28 +86,82 @@ def load_manifests(transport, layout: BundleLayout, workers: int = 8) -> dict[st
     root = f"{layout.root}/parts/manifest"
     remotes = sorted(r for r in transport.listdir(root) if r.endswith(".json"))
     out: dict[str, dict] = {}
+    failures: dict[str, str] = {}
     done = 0
 
-    def fetch(remote: str, tmp: Path) -> tuple[str, dict | None]:
+    def fetch(remote: str, tmp: Path, tries: int = 3) -> tuple[str, dict | None, str]:
+        """Đọc một manifest, thử lại khi Volume bận.
+
+        Thử lại chứ không bỏ qua ngay: một lượt đọc hỏng vì Modal đang bận
+        **không** phải một phát hiện về bundle, nhưng nếu bỏ qua thì nó biến
+        thành một — video đó biến mất khỏi mọi phép so bên dưới.
+        """
         video_id = Path(remote).stem
         local = tmp / f"{video_id}.json"
-        try:
-            transport.get(remote, local)
-            return video_id, json.loads(local.read_text(encoding="utf-8"))
-        except Exception as err:  # noqa: BLE001
-            print(f"  (bo qua {video_id}: {type(err).__name__}: {err})")
-            return video_id, None
+        last = ""
+        for attempt in range(tries):
+            try:
+                transport.get(remote, local)
+                return video_id, json.loads(local.read_text(encoding="utf-8")), ""
+            except Exception as err:  # noqa: BLE001
+                last = f"{type(err).__name__}: {err}"
+                if attempt + 1 < tries:
+                    time.sleep(2 ** attempt)
+        return video_id, None, last
 
     with tempfile.TemporaryDirectory() as tmp:
         root_tmp = Path(tmp)
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            for video_id, body in pool.map(lambda r: fetch(r, root_tmp), remotes):
+            for video_id, body, err in pool.map(lambda r: fetch(r, root_tmp), remotes):
                 done += 1
-                if body is not None:
+                if body is None:
+                    failures[video_id] = err
+                else:
                     out[video_id] = body
                 if done % 50 == 0 or done == len(remotes):
                     print(f"  ... doc {done}/{len(remotes)}")
+
+    # Đọc thiếu thì DỪNG, không báo cáo.
+    #
+    # Đây là chỗ script này suýt trở thành thứ tệ hơn không có nó. Lượt chạy
+    # 20-08-2026 đọc được 128/873 manifest rồi vẫn in ra "6 lệch đã chấp nhận,
+    # không có lý do từ chối nào" — một kết luận tự tin về 15% dữ liệu, không
+    # dòng nào nói rằng 745 video còn lại chưa hề được nhìn tới. Một phép kiểm
+    # im lặng thu hẹp phạm vi rồi vẫn kết luận thì tệ hơn hẳn một phép kiểm
+    # không chạy: người đọc tin nó.
+    if failures:
+        sample = list(failures.items())[:5]
+        raise SystemExit(
+            f"\nDOC THIEU: {len(failures)}/{len(remotes)} manifest khong doc duoc "
+            f"sau 3 lan thu.\n"
+            + "\n".join(f"  {v}: {e}" for v, e in sample)
+            + f"\n\nKHONG bao cao tren so con lai — mot ket luan tren "
+            f"{len(out)}/{len(remotes)} manh trong y het mot ket luan day du.\n"
+            "Cho Volume ranh roi chay lai, hoac giam --workers."
+        )
     return out
+
+
+def _accepted(shards: str, bundle: str) -> dict[str, dict]:
+    """Lệch Lead đã ký duyệt, hoặc `{}` kèm lý do đã in ra.
+
+    Đọc qua `load_shard_plan` chứ không đọc thẳng file, để script này và
+    `merge_bundle.py` dùng đúng một đường nạp — hai đường nạp là hai chỗ để lệch
+    nhau, và lệch ở đây nghĩa là script hứa sai về việc merge sẽ làm gì.
+    """
+    from mfe.offline.bundle import load_shard_plan  # noqa: PLC0415
+
+    try:
+        plan = load_shard_plan(shards)
+    except Exception as err:  # noqa: BLE001
+        print(f"  (khong doc duoc {shards}: {type(err).__name__}: {err})")
+        print("  -> coi nhu KHONG co lech nao duoc chap nhan. Bao cao duoi day co "
+              "the GAT hon merge that.")
+        return {}
+    if plan.bundle != bundle:
+        print(f"  (canh bao) {shards} khai bundle {plan.bundle!r}, khong phai {bundle!r} "
+              "— lech da chap nhan doc tu file nay co the khong thuoc bundle dang xem")
+    return plan.accepted_divergences
 
 
 def main() -> None:
@@ -231,7 +292,16 @@ def main() -> None:
     print("\n" + "=" * 72)
     print("chay CHINH `merge.check_fingerprints` tren nhung manifest nay:")
     report = MergeReport(bundle=args.bundle)
-    check_fingerprints(manifests, report)
+    accepted = _accepted(args.shards, args.bundle)
+    check_fingerprints(manifests, report, accepted)
+
+    if report.accepted_divergences:
+        print(f"\n  {len(report.accepted_divergences)} LECH DA CHAP NHAN "
+              "(van do, van ghi vao manifest bundle, KHONG chan merge):\n")
+        for item in report.accepted_divergences:
+            print(f"  [{item['key']}] {item['detail']}")
+            print(f"      vi: {item['reason'].strip()}")
+            print(f"      quyet dinh: {item['decided_by']} · {item['decided_on']}\n")
 
     refusals = [r for r in report.refusals]
     if args.artifact:
@@ -263,6 +333,7 @@ def main() -> None:
                 "refusals": [
                     {"kind": r.kind, "detail": r.detail} for r in report.refusals
                 ],
+                "accepted_divergences": report.accepted_divergences,
                 "warnings": report.warnings,
                 # Mot dong moi video: du de tra loi "video nao, cua ai, moi
                 # truong gi, co artifact gi" ma khong phai doc lai Volume.

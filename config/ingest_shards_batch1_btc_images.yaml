@@ -33,7 +33,26 @@ zip_inventory: config/zips_keyframes_btc.yaml
 stages:
   - n4_siglip          # ~1 ảnh/40ms, model 1,1 GB
   - n5_ocr_easyocr     # nhanh, CPU-GPU hỗn hợp
-  - n5_ocr_qwen        # CHẬM NHẤT — 7B 4-bit, sinh token cho từng ảnh
+
+# ═══════════════════════════════════════════════════════════════════════════
+# `n5_ocr_qwen` ĐÃ BỎ — Lead chốt 21-08-2026.
+#
+# Đo được: 10,8 giây/ảnh trên Qwen2-VL 7B 4-bit, tức ~532 giờ GPU cho 177.321
+# ảnh của batch 1. Hai tầng thay chỗ nó — `n5_ocr_paddle` + `n5_ocr_vietocr`
+# trong `…_btc_ocr2.yaml` — đọc cùng bộ vùng chữ, sai ở hai chỗ khác nhau nên
+# fusion ăn được cả hai (§8.6).
+#
+# Xoá khỏi ĐÂY chứ không để ở `SKIP_STAGES` của notebook 03: `plan.stages` là
+# HỢP ĐỒNG của bundle, còn `SKIP_STAGES` chỉ là lựa chọn của một lượt chạy.
+# `merge_bundle.py` đọc hợp đồng — `wanted` lọc artifact theo `spec.stage in
+# plan.stages` — nên chừng nào tầng còn nằm đây thì merge còn ĐÒI đủ 873 mảnh
+# `sviptr_ocr` và từ chối cả bundle vì thiếu.
+#
+# Trên Volume còn 2 mảnh `parts/sviptr_ocr/` từ lượt probe. GIỮ, không xoá:
+# chúng là bằng chứng của phép đo 10,8 s/ảnh, và vì `sviptr_ocr` không còn
+# trong `plan.stages` nên `merge._list_parts` tìm thấy mà `wanted` không nhận —
+# chúng nằm ngoài bản gộp mà không chặn gì.
+# ═══════════════════════════════════════════════════════════════════════════
 
 extras:
   map_keyframes: https://aic-data.ledo.io.vn/map-keyframes-aic25-b1.zip

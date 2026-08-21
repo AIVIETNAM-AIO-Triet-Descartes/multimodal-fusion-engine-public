@@ -488,7 +488,25 @@ def stage_n2_subtitles(ctx: StageContext) -> dict:
         ctx.video_id,
         mapping,
         model="faster-whisper large-v3",
-        params={"beam_size": beam, "language": "vi", "vad_filter": True, "window": window},
+        # GHI ĐỦ những gì tầng này thực sự đặt, kể cả thứ nằm cứng trong mã.
+        #
+        # Bản cũ chỉ ghi bốn khoá, còn `compute_type` và `min_silence_duration_ms`
+        # thì nằm cứng ở hai dòng trên mà không vào `params`. Cái giá hiện ra ngày
+        # 20-08-2026: Quang chạy một bản cài đặt khác và khai đủ tham số, nên
+        # `check_fingerprints` báo lệch ở `compute_type`/`min_silence_duration_ms`
+        # — trong khi hai bên chạy đúng cùng một giá trị. Sáu lần từ chối, năm
+        # trong đó chỉ tồn tại trong sổ sách.
+        #
+        # Một tham số KHÔNG được ghi thì không so được, và "không so được" trông
+        # y hệt "đã so và khớp" ở mọi báo cáo phía sau.
+        params={
+            "beam_size": beam,
+            "language": "vi",
+            "window": window,
+            "vad_filter": True,
+            "min_silence_duration_ms": 500,
+            "compute_type": "float16",
+        },
         elapsed_s=timer.seconds,
     )
 

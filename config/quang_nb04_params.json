@@ -1,0 +1,26 @@
+{
+  "//": "Tham so THAT cua luot chay notebook 04 ben Quang, do Quang cung cap 20-08-2026.",
+  "//nguon": "Anh chup cau hinh notebook 04 cua Quang. KHONG suy ra tu du lieu — xem docstring scripts/rebuild_artifact_manifest.py.",
+  "//window": "Ban cai dat cua Quang KHONG khai quy tac gan segment -> keyframe. Ghi 'khong ghi lai' chu khong doan 'next_keyframe': do minh chung 49 chuoi khac nhau tren 93 keyframe co chu (L22_V001), tuc ~1,9 keyframe moi segment, nhung khong the tu do ket luan cung quy tac voi Trong.",
+
+  "subtitles": {
+    "beam_size": 1,
+    "best_of": 1,
+    "language": "vi",
+    "task": "transcribe",
+    "temperature": 0.0,
+    "patience": 1.0,
+    "condition_on_previous_text": false,
+    "vad_filter": true,
+    "min_silence_duration_ms": 500,
+    "word_timestamps": false,
+    "compute_type": "float16",
+    "batch_size": 4,
+    "window": "khong ghi lai"
+  },
+
+  "audio_features": {
+    "half_window_s": 5.0,
+    "sample_rate": 48000
+  }
+}
