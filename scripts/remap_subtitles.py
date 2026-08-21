@@ -282,7 +282,11 @@ def main() -> None:
                     },
                 )
                 writer.write_part_manifest(
-                    video_id, [marker], keyframes=facts["keyframes"], merge=True
+                    video_id, [marker], keyframes=facts["keyframes"], merge=True,
+                    # Script nay KHONG chay Whisper — chu la chu cu, chi anh xa
+                    # sang keyframe la moi. Ghi env cua may nay vao `stages` la
+                    # khai rang faster-whisper chay o day, ma no khong he duoc cai.
+                    record_env=False,
                 )
                 return video_id, None
             except Exception as err:  # noqa: BLE001

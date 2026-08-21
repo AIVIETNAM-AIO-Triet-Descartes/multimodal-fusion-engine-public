@@ -1,0 +1,110 @@
+# Toàn bộ batch 1 của BTC — 873 video, 178.195 keyframe.
+#
+# Tách khỏi `config/pilot.yaml` thay vì sửa nó: pilot trỏ vào `stores/pilot/`
+# với 3 video lấy từ SOTA_AIC, và nó là mốc so sánh đang dùng được. Ghi đè lên
+# đó là mất mốc.
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# KHO NÀY KHÔNG DỰNG BẰNG `mfe-ingest`.
+#
+# `mfe.offline.ingest` đòi một `ProvidedDataset` đầy đủ trên đĩa — ảnh keyframe,
+# `objects/`, và `clip-features/{video}.npy` khớp từng dòng với `map-keyframes`.
+# Với batch 1 là ~28 GB, và `clip-features` thì KHÔNG có trên Volume.
+#
+# Thay vào đó: `scripts/build_btc_relational.py` dựng bảng `videos`/`keyframes`
+# từ hai thư mục nhỏ (~2 MB), còn 10 arm chính đọc Elasticsearch + Milvus. Hai
+# kho local dưới đây (`vector_store`, `inverted_store`) CỐ Ý để rỗng — arm `clip`
+# và `bm25` sẽ ngồi ngoài và nói rõ lý do trong bảng arm.
+# ═══════════════════════════════════════════════════════════════════════════
+
+paths:
+  # Hai thư mục THẬT SỰ cần, kéo từ Volume về.
+  map_keyframes: data/btc_b1/map-keyframes/   # NGUỒN SỰ THẬT cho frame_idx
+  media_info: data/btc_b1/media-info/
+
+  # Không tải về: ~28 GB, và tầng truy vấn không đọc chúng. Khai để `Config`
+  # hợp lệ; thư mục rỗng thì arm tương ứng tự tắt kèm lý do.
+  videos: data/btc_b1/videos/
+  keyframes: data/btc_b1/keyframes/
+  clip_features: data/btc_b1/clip-features/
+  objects: data/btc_b1/objects/
+
+  segments: data/segments_btc_b1/
+  vector_store: stores/btc_b1/vector/
+  inverted_store: stores/btc_b1/inverted/
+  asset_store: stores/btc_b1/asset/
+  relational_db: stores/btc_b1/relational/app.db
+  eval_results: eval/results_btc_b1/
+  throughput: eval/throughput_btc_b1.json
+  event_log: eval/results_btc_b1/events.jsonl
+
+storage:
+  backend: local
+
+models:
+  clip: null
+  detector: null
+  ocr: null
+  metadata: null
+  # Stage C TẮT cho lượt đo đầu tiên trên toàn tập, hai lý do:
+  #   1. Đo được 116 ms/ảnh trên CPU (`torch` trong venv là bản +cpu), tức
+  #      ~12 giây/truy vấn. Trên 51 câu dev là 10 phút chỉ cho tầng cuối.
+  #   2. Reranker chạy SAU khi gộp, nên nó làm nhoè đúng phép đo ta cần: arm nào
+  #      đóng góp gì ở quy mô 873 video.
+  # Bật lại sau khi có con số nền, và sau khi cài torch CUDA.
+  reranker: null
+
+features:
+  source: provided
+  object_score_min: 0.3
+  metadata_fields: [title, keywords, author]
+
+retrieval:
+  embed_dim: 512
+  coarse_topk: 500
+  rerank_topk: 100                   # = trần 100 đáp án/truy vấn của BTC (§2.2)
+  fusion:
+    mode: rrf
+  # KHAI ĐỦ mọi arm, kể cả cái đang bằng 1.0 và cái chưa có dữ liệu.
+  # `tune_weights.py` chỉ quét những khoá CÓ MẶT trong file này, nên arm không
+  # khai là arm không bao giờ được chỉnh.
+  #
+  # `ocr_paddle` / `ocr_vietocr`: Trọng còn ~234 video chưa chạy xong, nên chúng
+  # KHÔNG được nạp vào ES lượt này. Arm sẽ trả rỗng và góp 0 — không thiên lệch.
+  # Nạp bản phủ một phần mới là thiên lệch: 234 video chưa có sẽ bị dìm xuống
+  # một cách có hệ thống, và điểm thấp lúc đó không phân biệt được là do truy
+  # hồi kém hay do thiếu dữ liệu.
+  fusion_weights:
+    clip: 1.0
+    bm25: 1.0
+    siglip: 1.0
+    bge_m3: 1.0
+    ocr_sviptr: 1.0
+    subtitle_partial: 1.0
+    subtitle_exact: 1.0
+    caption: 1.0
+    ocr: 1.0
+    ocr_paddle: 1.0
+    ocr_vietocr: 1.0
+    object: 1.0
+  rerank_budget_ms: 20000
+  rerank_depth: 100
+  temporal_window_frames: 640
+  dedup_depth: 20
+  clip_checkpoint: clip-ViT-B-32
+  clip_text_checkpoint: sentence-transformers/clip-ViT-B-32-multilingual-v1
+
+  translation:
+    enabled: true
+    tiers: [mt]
+    mt_checkpoint: VietAI/envit5-translation
+    mt_num_beams: 1                  # greedy: chạy lại phải ra đúng số cũ
+    cache_path: eval/translations.json
+
+submit:
+  schema_format: by_frame
+  frame_range_window: 25
+
+eval:
+  queryset: eval/dev/
+  recall_at: [1, 5, 20, 50, 100]

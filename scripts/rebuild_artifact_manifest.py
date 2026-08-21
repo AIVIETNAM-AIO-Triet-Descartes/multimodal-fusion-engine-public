@@ -246,7 +246,10 @@ def main() -> None:
             video_id, markers = pair
             try:
                 writer.write_part_manifest(
-                    video_id, markers, keyframes=keyframe_count(video_id), merge=True
+                    video_id, markers, keyframes=keyframe_count(video_id), merge=True,
+                    # Dung lai muc manifest tu marker + file da co: khong model
+                    # nao chay o day, nen khong co moi truong nao de khai.
+                    record_env=False,
                 )
                 return video_id, None
             except Exception as err:  # noqa: BLE001

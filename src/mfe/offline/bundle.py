@@ -34,7 +34,7 @@ import logging
 import time
 import unicodedata
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -314,7 +314,15 @@ def load_accepted_divergences(bundle: str, config_dir: Path) -> dict[str, dict]:
                 f"{path}: {key} thieu {', '.join(missing)}. Mot lech duoc chap nhan "
                 "ma khong ghi ly do thi khong phan biet duoc voi mot phep kiem bi tat.",
             )
-        out[key] = dict(body)
+        # `decided_on: 2026-08-20` KHÔNG ngoặc kép -> PyYAML dựng `datetime.date`,
+        # và `json.dumps` không serialise được nó. Lệch này đi thẳng vào
+        # `manifest.json` của bản gộp, nên nó nổ ở **bước cuối cùng** của một lượt
+        # merge dài — sau khi đã tải 1.746 mảnh và ghi xong file phẳng 329 MB.
+        #
+        # Chuẩn hoá tại BIÊN, nơi kiểu của YAML lần đầu chạm vào code, chứ không
+        # phải ở chỗ ghi JSON: sửa ở chỗ ghi thì mọi chỗ đọc khác vẫn nhận `date`.
+        out[key] = {k: (str(v) if isinstance(v, (date, datetime)) else v)
+                    for k, v in body.items()}
     return out
 
 
@@ -821,7 +829,8 @@ class BundleWriter:
         return None
 
     def write_part_manifest(
-        self, video_id: str, markers: list[dict], keyframes: int, *, merge: bool = False
+        self, video_id: str, markers: list[dict], keyframes: int, *, merge: bool = False,
+        record_env: bool = True,
     ) -> dict:
         """The per-video manifest. `merge=True` keeps artifacts already recorded.
 
@@ -886,7 +895,13 @@ class BundleWriter:
                 m["stage"]: {
                     "author": self.member,
                     "at": m.get("finished_at"),
-                    "env": env,
+                    # `record_env=False` -> KHONG ghi `env`, va do la mot su that:
+                    # mot script SUA CHUA (remap, backfill) khong chay model nao,
+                    # nen moi truong cua no khong noi gi ve con so trong artifact.
+                    # Ghi bua vao day la BIA XUAT XU — da xay ra ngay 21-08-2026:
+                    # 469 manifest khai `n2_subtitles` chay voi torch 2.13.0 va
+                    # KHONG co faster-whisper, tu mau thuan ngay tren mat chu.
+                    **({"env": env} if record_env else {}),
                 }
                 for m in markers
                 if m.get("stage")
@@ -900,6 +915,8 @@ class BundleWriter:
             "counts": {"keyframes": keyframes},
             "artifacts": artifacts,
             "stages": stages,
+            # Cap manifest van ghi env cua luot nay — no dung ve luot nay. Chi
+            # phan THEO TANG moi phai im khi khong do duoc gi.
             "env": env,
             "generated_at": utc_now(),
         }

@@ -26,7 +26,9 @@ from __future__ import annotations
 import csv
 import json
 import logging
+import time
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -128,14 +130,114 @@ class MergeReport:
 # ---------------------------------------------------------------------------
 
 
+def _local_for(remote: str, workdir: Path) -> Path:
+    return workdir / remote.lstrip("/").replace("/", "__")
+
+
 def _fetch(transport: Transport, remote: str, workdir: Path) -> Path:
-    local = workdir / remote.lstrip("/").replace("/", "__")
+    """Tải một tệp, hoặc dùng lại tệp `_prefetch` đã kéo về.
+
+    Tệp **0 byte không được tính là đã có**: một lượt tải đứt giữa chừng để lại
+    đúng hình dạng đó, và coi nó là bộ nhớ đệm sẽ biến một cú đứt mạng thành
+    một mảnh rỗng đi thẳng vào bản gộp.
+    """
+    local = _local_for(remote, workdir)
+    if local.is_file() and local.stat().st_size > 0:
+        return local
     transport.get(remote, local)
     return local
 
 
+def _prefetch(
+    transport: Transport,
+    remotes: list[str],
+    workdir: Path,
+    *,
+    label: str,
+    workers: int = 4,
+    tries: int = 3,
+    reuse: bool = False,
+) -> None:
+    """Kéo trước cả danh sách, song song và có thử lại. Thiếu một tệp là DỪNG.
+
+    Vì sao cần: `merge_bundle.py` tải 873 manifest rồi 873 mảnh mỗi artifact,
+    **tuần tự và không timeout**. Ngày 21-08-2026 lượt gộp đứng im 25 phút ở
+    `L22_V008`, để lại một tệp 0 byte — Modal bận, `transport.get` không ném lỗi
+    mà cũng không trả về. Vòng lặp cũ bắt `Exception` nên một cú đứt thì bỏ qua
+    được, còn một cú TREO thì không: không có gì để bắt.
+
+    **Không tự đặt luật cho "thiếu file".** Nó chỉ lo song song và thử lại; ai
+    gọi nó thì giữ nguyên chính sách của mình — thiếu `map-keyframes` là
+    `FileNotFoundError`, thiếu manifest là refusal `thieu_manifest`. Cho hàm này
+    ném khi thiếu là đổi hai luật đó cùng lúc, và cả hai đều có test khoá.
+
+    Cái nó kéo về được thì vòng tuần tự phía sau đọc từ đĩa; cái nó không kéo
+    được thì để vòng đó xử theo đúng luật cũ. Một file vắng mặt thật sẽ ném
+    ngay, không treo — chỉ có Volume bận mới treo, và chỗ đó đã thử lại 3 lần.
+    """
+    if not remotes:
+        return
+    # `reuse` là một LỰA CHỌN CÓ Ý THỨC, không phải mặc định.
+    #
+    # Mặc định tải lại tất cả vì `workdir` sống qua nhiều lượt: một bản cũ sẽ
+    # che mất thay đổi trên Volume, kể cả việc tệp đã bị XOÁ — đó là cách một
+    # phép kiểm "thiếu manifest" báo đủ trong khi manifest không còn ở đó.
+    #
+    # Nhưng ở quy mô batch 1 (1.746 mảnh cho một config), tải lại sau một lần
+    # chạy hỏng là mười phút. Nên có đường tắt, và nó phải được gõ ra.
+    todo = [
+        r for r in remotes
+        if not (reuse and _local_for(r, workdir).is_file()
+                and _local_for(r, workdir).stat().st_size > 0)
+    ]
+    if not todo:
+        print(f"  dung lai {len(remotes)} {label} da tai (--reuse-downloads)")
+        return
+    print(f"  tai {len(todo)}/{len(remotes)} {label} ({workers} luong) …")
+
+    def grab(remote: str) -> tuple[str, str | None]:
+        local = _local_for(remote, workdir)
+        # XOA truoc khi tai. Khong bo qua tep da co, va khong giu tep cu:
+        # `workdir` song qua nhieu luot chay, nen mot ban cu se che mat thay doi
+        # tren Volume — ke ca viec no da bi XOA. Do la cach mot phep kiem
+        # "thieu manifest" bao la du du trong khi manifest khong con o do nua.
+        local.unlink(missing_ok=True)
+        last = ""
+        for attempt in range(tries):
+            try:
+                transport.get(remote, local)
+                if local.is_file() and local.stat().st_size > 0:
+                    return remote, None
+                last = "tep 0 byte"
+            except Exception as err:  # noqa: BLE001
+                last = f"{type(err).__name__}: {err}"
+            local.unlink(missing_ok=True)
+            if attempt + 1 < tries:
+                time.sleep(2 ** attempt)
+        return remote, last
+
+    failed: dict[str, str] = {}
+    done = 0
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for remote, err in pool.map(grab, todo):
+            done += 1
+            if err:
+                failed[remote] = err
+            if done % 200 == 0 or done == len(todo):
+                print(f"    … {done}/{len(todo)}")
+    if failed:
+        sample = "; ".join(f"{Path(r).name} ({e})" for r, e in list(failed.items())[:5])
+        logger.warning(
+            "khong tai truoc duoc %d/%d %s sau %d lan thu — de vong tuan tu xu "
+            "theo luat cua no: %s", len(failed), len(remotes), label, tries, sample,
+        )
+        print(f"  (canh bao) {len(failed)}/{len(remotes)} {label} chua tai duoc: {sample}")
+
+
 def read_keyframe_set(
-    transport: Transport, layout: BundleLayout, videos: list[str], workdir: Path
+    transport: Transport, layout: BundleLayout, videos: list[str], workdir: Path,
+    workers: int = 4,
+    reuse: bool = False,
 ) -> tuple[set[str], dict[str, int]]:
     """Every `keyframe_id` the bundle's own `map-keyframes` declares.
 
@@ -146,6 +248,8 @@ def read_keyframe_set(
     """
     known: set[str] = set()
     per_video: dict[str, int] = {}
+    _prefetch(transport, [layout.map_keyframes(v) for v in videos], workdir,
+              label="map-keyframes", workers=workers, reuse=reuse)
     for video_id in videos:
         local = _fetch(transport, layout.map_keyframes(video_id), workdir)
         with local.open(encoding="utf-8") as handle:
@@ -173,9 +277,13 @@ def _list_parts(transport: Transport, layout: BundleLayout) -> dict[str, dict[st
 
 
 def _read_part_manifests(
-    transport: Transport, layout: BundleLayout, videos: list[str], workdir: Path
+    transport: Transport, layout: BundleLayout, videos: list[str], workdir: Path,
+    workers: int = 4,
+    reuse: bool = False,
 ) -> dict[str, dict]:
     out: dict[str, dict] = {}
+    _prefetch(transport, [layout.part_manifest(v) for v in videos], workdir,
+              label="manifest", workers=workers, reuse=reuse)
     for video_id in videos:
         try:
             local = _fetch(transport, layout.part_manifest(video_id), workdir)
@@ -429,10 +537,14 @@ def _merge_text(
     workdir: Path,
     report: MergeReport,
     artifact: str,
+    workers: int = 4,
+    reuse: bool = False,
 ) -> dict[str, str]:
     merged: dict[str, str] = {}
     owner: dict[str, str] = {}
     dropped = 0
+    _prefetch(transport, [r for _, r in sorted(parts.items())], workdir,
+              label=artifact, workers=workers, reuse=reuse)
     for video_id, remote in sorted(parts.items()):
         local = _fetch(transport, remote, workdir)
         payload = json.loads(local.read_text(encoding="utf-8"))
@@ -465,11 +577,16 @@ def _merge_vectors(
     report: MergeReport,
     artifact: str,
     dim: int,
+    workers: int = 4,
+    reuse: bool = False,
 ) -> tuple[np.ndarray, np.ndarray]:
     all_ids: list[str] = []
     blocks: list[np.ndarray] = []
     seen: dict[str, str] = {}
     dropped = 0
+    collapsed = 0
+    _prefetch(transport, [r for _, r in sorted(parts.items())], workdir,
+              label=artifact, workers=workers)
     for video_id, remote in sorted(parts.items()):
         local = _fetch(transport, remote, workdir)
         payload = np.load(local, allow_pickle=False)
@@ -484,6 +601,22 @@ def _merge_vectors(
         keep_rows: list[int] = []
         for index, key in enumerate(ids):
             if key in seen:
+                if seen[key] == video_id:
+                    # Trùng TRONG CÙNG MỘT VIDEO — không phải hai người đụng nhau.
+                    #
+                    # `map-keyframes` của BTC có 614 cặp dòng khác `n` mà cùng
+                    # `frame_idx`, và khoá là `frame_idx` (`mfe.contracts.ids`).
+                    # Tầng sinh vector chạy theo TỪNG DÒNG CSV nên nó xuất hai
+                    # vector cho một `keyframe_id`. Đây là tính chất đã biết của
+                    # dữ liệu BTC, không phải lỗi của mảnh.
+                    #
+                    # Giữ dòng ĐẦU = giữ `n` nhỏ nhất, đúng luật mà
+                    # `SotaIdMap._frame_to_ordinal` và
+                    # `scripts/build_btc_relational.py` dùng. Ba chỗ phải cùng
+                    # luật: lệch nhau thì một `keyframe_id` do kho trả về sẽ trỏ
+                    # tới hàng không tồn tại trong Relational Map.
+                    collapsed += 1
+                    continue
                 report.refuse(
                     "khoa_trung", f"{artifact}: {key} co trong ca {seen[key]} va {video_id}"
                 )
@@ -497,6 +630,15 @@ def _merge_vectors(
         blocks.append(vectors[keep_rows])
 
     report.artifacts[artifact].dropped += dropped
+    if collapsed:
+        # Cảnh báo, không từ chối — nhưng CÓ ĐẾM. Con số này phải khớp số cặp
+        # trùng `frame_idx` mà `build_btc_relational.py` gộp (614 cho batch 1);
+        # lệch nghĩa là hai chỗ đang gộp theo hai luật khác nhau.
+        report.warnings.append(
+            f"{artifact}: gop {collapsed} dong trung keyframe_id TRONG cung mot "
+            "video (map-keyframes cua BTC co dong khac `n` cung `frame_idx`); "
+            "giu dong dau, cung luat voi Relational Map"
+        )
     if dropped:
         report.refuse(
             "khoa_ngoai_bo_keyframe",
@@ -521,6 +663,8 @@ def merge_bundle(
     *,
     emit: Emit = "single",
     layout: BundleLayout | None = None,
+    workers: int = 4,
+    reuse: bool = False,
 ) -> MergeReport:
     """Read every part, check it, and write the flat files. One writer only."""
     layout = layout or BundleLayout(plan.bundle)
@@ -531,9 +675,9 @@ def merge_bundle(
     outdir.mkdir(parents=True, exist_ok=True)
 
     report = MergeReport(bundle=plan.bundle, videos=plan.videos)
-    known, per_video = read_keyframe_set(transport, layout, plan.videos, staging)
+    known, per_video = read_keyframe_set(transport, layout, plan.videos, staging, workers, reuse)
 
-    manifests = _read_part_manifests(transport, layout, plan.videos, staging)
+    manifests = _read_part_manifests(transport, layout, plan.videos, staging, workers, reuse)
     missing_manifests = sorted(set(plan.videos) - set(manifests))
     if missing_manifests:
         report.refuse(
@@ -564,14 +708,14 @@ def merge_bundle(
             report.refuse("manh_la", f"{artifact}: co video ngoai phan cong: {', '.join(extra)}")
 
         if spec.kind == "text":
-            merged = _merge_text(transport, parts, known, staging, report, artifact)
+            merged = _merge_text(transport, parts, known, staging, report, artifact, workers, reuse)
             report.artifacts[artifact].rows = len(merged)
             report.artifacts[artifact].written = _write_text(
                 merged, outdir, spec.flat_name, emit, report
             )
         else:
             ids, vectors = _merge_vectors(
-                transport, parts, known, staging, report, artifact, spec.dim or 0
+                transport, parts, known, staging, report, artifact, spec.dim or 0, workers, reuse
             )
             report.artifacts[artifact].rows = len(ids)
             report.artifacts[artifact].written = _write_vectors(

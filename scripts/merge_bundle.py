@@ -44,6 +44,20 @@ def build_parser() -> argparse.ArgumentParser:
         "parts + an index (quy mô batch 1). Phép kiểm giống hệt nhau.",
     )
     parser.add_argument(
+        "--workers",
+        type=int,
+        default=4,
+        help="So luong tai song song. Merge keo 873 manifest + 873 manh moi "
+        "artifact; tuan tu thi mot cu treo cua Modal la dung ca luot gop.",
+    )
+    parser.add_argument(
+        "--reuse-downloads",
+        action="store_true",
+        help="Dung lai manh da tai trong workdir thay vi tai lai. NHANH nhung "
+        "mot ban cu se che mat thay doi tren Volume — chi dung khi chay lai "
+        "ngay sau mot luot hong.",
+    )
+    parser.add_argument(
         "--upload",
         action="store_true",
         help="Đẩy data/vectors/ + manifest.json lên bundle sau khi báo cáo sạch.",
@@ -63,7 +77,10 @@ def main() -> None:
     workdir = Path(args.workdir or Path("eval/merge") / plan.bundle)
 
     print(f"bundle {plan.bundle} · {len(plan.videos)} video · {len(plan.members)} nguoi")
-    report = merge_bundle(transport, plan, workdir, emit=args.emit, layout=layout)
+    report = merge_bundle(
+        transport, plan, workdir, emit=args.emit, layout=layout, workers=args.workers,
+        reuse=args.reuse_downloads
+    )
 
     print(f"\n{'artifact':<18} {'manh':>5} {'dong':>8} {'bo':>5}")
     print("-" * 40)
