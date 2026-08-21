@@ -163,6 +163,12 @@ class Cascade:
                 else load("text store", cls._build_text_store)
             ),
             dense_store_factory=overrides.get("dense_store_factory", _milvus_store_factory),
+            # PHAI chuyen tiep. `from_config` dung `cls(...)` bang danh sach khoa
+            # tuong minh, nen mot `**overrides` khong duoc liet ke o day se bi BO
+            # QUA IM LANG: `Cascade.from_config(cfg, flat_bundle=b)` chay binh
+            # thuong roi tra ve 0/12 arm, vi `_build_arms` thay `self.flat_bundle`
+            # la None va roi ve duong Elasticsearch/Milvus khong ton tai.
+            flat_bundle=overrides.get("flat_bundle"),
             translator=(
                 overrides["translator"]
                 if "translator" in overrides

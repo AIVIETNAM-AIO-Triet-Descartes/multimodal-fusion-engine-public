@@ -51,10 +51,11 @@ from pathlib import Path
 import numpy as np
 
 from mfe.contracts.ids import parse_keyframe_id
-from mfe.contracts.tools import Candidate, create_evidence_id
+from mfe.contracts.tools import Candidate
 from mfe.online.arms import Arm
 from mfe.online.dense_arms import DENSE_ARM_SPECS, encode_query
 from mfe.online.text_arms import TEXT_ARM_SPECS
+from mfe.online.tools.evidence import create_evidence_id
 from mfe.stores.inverted.index import _normalize_text, _tokenize
 
 logger = logging.getLogger(__name__)
