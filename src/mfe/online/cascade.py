@@ -163,9 +163,19 @@ class Cascade:
             translator=(
                 overrides["translator"]
                 if "translator" in overrides
-                else load("translator", lambda: build_translator(config))
+                else load("translator", lambda: _build_translator_with_quest(config))
             ),
         )
+
+    @staticmethod
+    def _build_translator_with_quest(config):
+        from mfe.online.translate import build_translator
+        try:
+            from mfe.online.quest import QuestKIS
+            backends = {"llm": QuestKIS()}
+        except ImportError:
+            backends = None
+        return build_translator(config, extra_backends=backends)
 
     @staticmethod
     def _build_text_store() -> Any:
@@ -218,6 +228,7 @@ class Cascade:
         top_k: int | None = None,
         run_id: str = "cascade_run",
         query_text_en: str | None = None,
+        ocr_keywords: str | None = None,
     ) -> list[Candidate]:
         """Run stage A -> B -> C and return a ranked candidate list.
 
@@ -230,11 +241,12 @@ class Cascade:
                 Vietnamese (SigLIP's text tower, CLAP, ColPali) need it and sit
                 out without it — see `Arm.query_language`. Left unset, a
                 configured translator fills it in (`mfe.online.translate`).
+            ocr_keywords: Optional Vietnamese keywords for text/OCR arms.
         """
         top_k = top_k or self._cfg("rerank_topk", 100)
         query_text_en = self.resolve_english(query_text, query_text_en)
 
-        coarse = self._coarse(query_text, run_id=run_id, query_text_en=query_text_en)
+        coarse = self._coarse(query_text, run_id=run_id, query_text_en=query_text_en, ocr_keywords=ocr_keywords)
         if not coarse:
             return []
 
@@ -289,11 +301,12 @@ class Cascade:
         query_text: str,
         run_id: str = "cascade_run",
         query_text_en: str | None = None,
+        ocr_keywords: str | None = None,
     ) -> list[Candidate]:
         """Stage A — late fusion over every active arm (`mfe.online.arms`)."""
         coarse_topk = self._cfg("coarse_topk", 500)
         result_lists = self.arms.run(
-            query_text, coarse_topk, run_id, query_text_en=query_text_en
+            query_text, coarse_topk, run_id, query_text_en=query_text_en, ocr_keywords=ocr_keywords
         )
 
         if not result_lists:
