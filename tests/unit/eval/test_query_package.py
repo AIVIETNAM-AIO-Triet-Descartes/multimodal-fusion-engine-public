@@ -168,6 +168,17 @@ class TestBoDeThat:
         counts = {t: sum(1 for q in queries if q.type == t) for t in ("KIS", "QA", "TRAKE")}
         assert counts == {"KIS": 18, "QA": 3, "TRAKE": 3}
 
+    def test_bo_de_dot_1_doc_duoc(self):
+        """Gói đề THẬT của đợt 1 — 25 câu, và nó dùng định dạng `E1 …` không hai
+        chấm. Test này tồn tại vì gói đó đã làm vỡ một lượt chạy Kaggle."""
+        queries = load_package("docs/context/bo-de-dot-1")
+        assert len(queries) == 25
+        counts = {t: sum(1 for q in queries if q.type == t) for t in ("KIS", "QA", "TRAKE")}
+        assert counts == {"KIS": 20, "QA": 4, "TRAKE": 1}
+        trake = [q for q in queries if q.type == "TRAKE"]
+        assert trake[0].n_events == 3
+        assert trake[0].preamble  # câu mở đầu được ghép vào từng sự kiện
+
     def test_moi_de_trake_deu_co_4_su_kien(self):
         for query in load_package(BO_DE):
             if query.type == "TRAKE":

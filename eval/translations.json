@@ -1,257 +1,413 @@
 {
-  "version": 1,
-  "entries": [
-    {
-      "text": "Biển số của chiếc xe máy màu xanh dương dựng ở hiện trường ban đêm là gì?",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "What's the plate number of the blue motorcycle that was parked at the scene at night?"
-    },
-    {
-      "text": "Cảnh trong vườn thú: con lừa hoang trưởng thành cúi xuống gặm cỏ, sau đó con lừa con bước đi dọc hàng rào gỗ",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "Scene at the zoo: adult wild ass bent down to graze, then young donkey walking along the wooden fence"
-    },
-    {
-      "text": "Khoảng khắc miếng măng tây cuối cùng rời chảo dầu và nằm hoàn toàn trên dĩa.",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "The last instant of asparagus leaves the oil and lies entirely on the plate."
-    },
-    {
-      "text": "Khoảnh khắc miếng măng tây đầu tiên rời khỏi chảo dầu.",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "The moment the first piece of asparagus leaves the oil."
-    },
-    {
-      "text": "Khoảnh khắc đầu tiên bột được bỏ vào tô măng tây.",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "The first moment the dough is put into the bowl."
-    },
-    {
-      "text": "Khoảnh khắc đầu tiên thấy miến măng tây đầu tiên tiếp xúc với dầu trong chảo.",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "The first moment of asparagus is when it first comes into contact with oil in the pan."
-    },
-    {
-      "text": "Lá cờ treo trên nóc toà nhà ngân hàng trung ương trong bản tin là cờ nước nào?",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "Which country's flag hangs on the roof of the central bank in the news?"
-    },
-    {
-      "text": "Mẩu tin giới thiệu về đàn hổ tại một địa phương ở miền Nam vừa có thêm khoảng 3-6 con hổ con. Đây là một giống hổ quý hiếm",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "This piece of information introduces the tiger herd in a local area in the South that has just added about three to six cubs."
-    },
-    {
-      "text": "Một con lừa hoang con lông vàng nhạt đang bước đi cạnh hàng rào gỗ trong vườn thú",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "A pale yellow wild ass walking by the wooden fence in the zoo"
-    },
-    {
-      "text": "Nhóm cán bộ đội mũ bảo hộ trắng và mũ tai bèo đứng chụm lại xem hiện trường sạt lở bờ sông",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "A group of officers wearing white helmets and straw hats gathered around the riverbank to watch the scene of the river landslide."
-    },
-    {
-      "text": "Phóng sự về tiền tệ: cận cảnh tờ tiền chưa cắt trên dây chuyền in, sau đó là toàn cảnh toà nhà ngân hàng trung ương",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "Money story: close - up of the uncut note on the print line, then a panoramic view of the central bank building"
-    },
-    {
-      "text": "Theo băng rôn dưới màn hình, Cần Thơ thiệt hại bao nhiêu tiền do sạt lở bờ sông?",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "According to the banner below, how much money did Can Tho lose due to a riverbank landslide?"
-    },
-    {
-      "text": "Toà nhà cổ điển châu Âu có hàng cột đá lớn và lá cờ Anh treo trên nóc, bầu trời nhiều mây xám",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "The European classicist building has a row of large stone columns and the British flag hangs on the roof, the sky is gray with clouds"
-    },
-    {
-      "text": "Trong đoạn clip có là một chàng trai đội mũ lưỡi trai đen, mặc áo thun trắng có dòng chữ tiếng Anh, đang ngồi cạnh một chiếc hộp. Trên hộp, anh sắp xếp nhiều mảnh bìa cắt rời với hình thù ngẫu nhiên.\nNhờ ánh sáng chiếu từ một phía, các mảnh bìa đó đổ bóng lên tường, tạo thành hình chân dung một người đàn ông với khuôn mặt rõ nét, tóc vuốt gọn và mặc vest.",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "The clip shows a man in a black baseball cap and a white T-shirt with English letters sitting next to a box. On the box he has arranged several random-looking cardboard pieces. Illuminated by light on one side, the pieces cast shadows on the wall, creating a portrait of a man with a distinct face, neat hair, and a suit."
-    },
-    {
-      "text": "Trong đoạn video có 2 câu thơ của một nhà thơ ca ngợi anh hùng Nguyễn Trung Trực trong đình thần Nguyễn Trung Trực tại Kiên Giang. Hai câu thơ đó là gì?",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "In the video, there are two verses of a poet praising the hero Nguyen Trung Truc in the Nguyen Trung Truc deity's family in Kien Giang. What are those two verses?"
-    },
-    {
-      "text": "Trong đoạn video nấu ăn một món ăn về nấm, gồm các khoảnh khắc sơ chế: Khoảnh khắc chảo đặt lên bếp, đầu bếp mở lửa và thấy lửa bắt đầu xuất hiện",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "In a video of a mushroom dish, there are moments of preparation: The moment the pan is on the stove, the cook turns on the stove and sees the fire begin to appear"
-    },
-    {
-      "text": "Trong đoạn video nấu ăn một món ăn về nấm, gồm các khoảnh khắc sơ chế: Khoảnh khắc đầu tiên cắt củ năng.",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "In the video of a mushroom dish, there are moments of preparation: The first moment of cutting the tuber."
-    },
-    {
-      "text": "Trong đoạn video nấu ăn một món ăn về nấm, gồm các khoảnh khắc sơ chế: Khoảnh khắc đầu tiên cắt đậu hủ.",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "In the video of a mushroom dish, there are moments of preparation: The first moment of cutting tofu."
-    },
-    {
-      "text": "Trong đoạn video nấu ăn một món ăn về nấm, gồm các khoảnh khắc sơ chế: Khoảnh khắc đầu tiên thấy cắt nấm.",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "In the video of a mushroom dish, there are moments of preparation: The first moment of seeing a mushroom cut."
-    },
-    {
-      "text": "Trên đĩa tròn màu trắng có 1 ly panna cotta. Có một bàn tay lần lượt đặt thêm 2 ly panna cotta nữa vào đĩa.\nMỗi ly panna cotta có lớp kem mịn màu trắng ngà, bên trên trang trí vài lát nho đỏ, thêm lá bạc hà xanh tạo điểm nhấn tươi mát.\nBên cạnh trên đĩa còn có hai bông hoa ăn được (màu đỏ và vàng) để tăng phần đẹp mắt.",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "On the white round plate there is a glass of panna cotta. There is one hand which puts two more panna cotta in turn on the plate. Each panna cotta has a creamy ivory white layer, on top of which are decorated with some slices of red grapes, with green mint leaves for a fresh accent. Besides on the plate are two edible flowers (red and yellow) to enhance the beauty."
-    },
-    {
-      "text": "Tìm chính xác đoạn clip ngắn có ba người (hai phụ nữ và một nam giới) đang ngồi cạnh nhau, tập trung chơi nhạc cụ kim loại có dạng tròn, rỗng, với các vết lõm để tạo ra âm thanh khi gõ tay. Có 1 người mặc áo trắng ngồi giữa 2 người mặc áo đen. Bối cảnh phía sau là một kệ sách nhiều ngăn, xếp đầy sách với nhiều màu sắc",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "Find the exact clip of three people (two women and one man) sitting side by side, focusing on playing a round, hollow metal instrument with indentations to create a tapping sound. There is a white person sitting between two black people. The background is a multicompartment bookcase, filled with books of various colors."
-    },
-    {
-      "text": "Tìm một đoạn video đua xe đạp, góc quay từ flycam trên cao, một vận động viên mặc áo xanh dương, trắng đang vượt ba vận động viên khác và lên vị trí dẫn đầu. Biết sau đó vận động viên này dẫn đầu suốt đoạn đường còn lại đến đích.",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "Looking for a video of a race, shot from an overhead flycam, of a blue-and-white-shirted athlete crossing over three other athletes and taking the lead. Knowing that the athlete is leading the rest of the way to the finish line, the driver is the one who gets to the top."
-    },
-    {
-      "text": "Đoàn cán bộ khảo sát điểm sạt lở bờ sông: đứng xem hiện trường, xem bản vẽ thiết kế, rồi tới bờ kè bê tông đã sập xuống sông",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "The survey team shall observe the site, the design drawing and the concrete embankment that has collapsed into the river."
-    },
-    {
-      "text": "Đoạn clip bắt đầu với cảnh một tác phẩm điêu khắc cát hoành tráng tại Lễ hội điêu khắc trên cát. Tác phẩm mô tả cảnh những thanh niên chơi thể thao đường phố: một người trượt patin, hai người trượt ván\nNền phía sau là họa tiết vòm cong lớn và có khắc chữ.\nTiếp theo có cảnh nhiều tác phẩm khác bằng cát, và có 2 cột khói màu hồng",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "The clip begins with a scene of a monumental sand sculpture at the Sand Sculpture Festival. The sculpture depicts young people playing street sport: a roller skater, two skaters. The background is a large arch pattern and text is carved. It is followed by scenes of many other sand sculptures, and there are two pink smoke columns."
-    },
-    {
-      "text": "Đoạn clip cần tìm bắt đầu bằng cảnh 1 người đầu bếp đặt đang đặt món gỏi cuốn chay bày trên đĩa, nhân gồm rau xanh cuộn tròn và đậu hũ, gói trong bánh tráng màu vàng và tím. Đĩa được trang trí thêm lá xanh và hoa pansy tím-vàng, tạo cảm giác thanh mát và tinh tế.",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "The video begins with a chef ordering vegetarian spring rolls on a plate, filled with rolled green vegetables and tofu wrapped in yellow and purple rice paper. The plate is decorated with green leaves and purple-yellow pansy flowers, which give it a cool, delicate feel."
-    },
-    {
-      "text": "Đoạn clip cần tìm là cảnh hai người phụ nữ đang cho dê ăn: một người mặc áo thun trắng quàng áo đỏ trên vai, người kia mặc áo dài tay kẻ sọc tím truyền thống. Cả hai đều mỉm cười, tỏ vẻ thích thú.\nKhông gian trại rộng rãi, có mái che bằng tôn và hàng rào gỗ chia thành nhiều dãy chuồng, trong đó có hàng dài dê được nuôi nhốt.",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "The video was about two women feeding goats: one wore a white T-shirt with a red shirt over her shoulder, the other wore a long-sleeved traditional purple striped shirt. Both women smiled, amused. The farm was spacious, with a metal roof and wooden fence, and it was divided into rows of cages, including long rows of captive goats."
-    },
-    {
-      "text": "Đoạn clip cần tìm là cảnh quay trong một khu rừng, dưới gốc cây to với nhiều lá khô phủ đầy mặt đất. Nổi bật ở cận cảnh là một chú chim có bộ lông đen ánh xanh ở đầu và thân trên, còn cánh và lưng màu nâu đỏ. Đôi mắt chim đỏ rực, tạo điểm nhấn rõ ràng. Đây là loài chim thường thấy ở vùng Nam Bộ Việt Nam.",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "The video clip to be found was shot in a forest, under a large tree with many dry leaves covering the ground. Featured in the close-up is a bird with a blue-black plumage at the head and upper body, and reddish-brown wings and back. The bird's eyes are bright red, giving a clear accent. This is a bird commonly found in the southern part of Vietnam."
-    },
-    {
-      "text": "Đoạn clip là cảnh thu hoạch dứa ở miền Tây: một bà cụ ngồi bên giỏ dứa trò chuyện với cô gái mặc áo hồng quàng khăn rằn; xung quanh chất đầy dứa, phía sau có người phụ nữ đội nón lá cầm trái dứa và một chiếc ghe xanh đậu cạnh bờ, tạo không khí nông thôn mộc mạc, yên bình.",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "The clip is a western harvest of pineapples: an old woman sitting by a basket of pineapples talks to a girl in a pink shirt and bandana; the area is filled with pineapples, behind which a woman in a leaf cap carries pineapples and a blue boat perches by the shore, creating a quiet, rustic countryside."
-    },
-    {
-      "text": "Đoạn clip về 1 thị trấn ven biển thu hút du khách hiếu kỳ nhờ 1 loài động vật biển nguy hiểm. Loài động vật này nổi tiếng trong 1 bộ phim của đạo diễn Steven Spielberg được sản xuất vào năm 1975",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "Video of a seaside town that fascinated tourists because of a dangerous marine animal. The animal was famously featured in a 1975 film directed by Steven Spielberg."
-    },
-    {
-      "text": "Đoạn video mô tả cảnh trang trí bánh rán. Phân cảnh bắt đầu là một chiếc đĩa sứ màu trắng nằm trên một khay gỗ hình chữ nhật. Bên cạnh chiếc đĩa sứ là một chén đựng một vài trái dâu, nhưng có 2 trái bị rơi ra ngoài. Ngoài ra, bên cạnh đĩa sứ còn có một chén sứ nhỏ màu trắng đựng chuối đã được cắt sẵn và một cái thìa nhỏ màu nâu. Phân cảnh tiếp theo cho thấy đầu bếp đặt 2 chiếc bánh rán lên đĩa sứ và bắt đầu trang trí. Bước đầu tiên là việc rưới chocolate lên trên mặt bánh. Sau đó, đầu bếp đặt các lát chuối lên trên một chiếc bánh rán, chiếc còn lại được đặt các lát dâu tây lên.",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "The video depicts the doughnut decoration scene. The scene begins with a white ceramic plate resting on a rectangular wooden tray. Next to the ceramic plate is a bowl containing some strawberries, but two of them fall out. In addition, next to the ceramic plate is a small white ceramic bowl containing pre-cut bananas and a small brown spoon. The next scene shows the cook placing two doughnuts on the ceramic plate and starting the decoration. The first step is to drizzle chocolate on top of the doughnuts. Then, the cook places the slices of bananas on top of one doughnut, the other one is placed with the"
-    },
-    {
-      "text": "Đoạn video mô tả một người ngồi vệ sinh máy ảnh. Công đoạn này bắt đầu bằng việc tháo rời máy ảnh. Tiếp theo, chiếc ống kính đã được tháo rời và được đặt ngay ngắn trên một chiếc khăn màu tím hồng. Phân cảnh cuối cùng là vệ sinh ống kính (lens) bằng một chiếc tăm bông.",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "The video shows a person cleaning a camera. This begins with the removal of the camera. Next, the lens is removed and placed on a pinkish-purple towel. The final scene is cleaning the lens with a cotton swab."
-    },
-    {
-      "text": "Đoạn video múa lân một con lân màu vàng đen trắng, tìm các sự kiện sau: Khoảnh khắc 4 chân hoàn toàn chạm đất đầu tiên.",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "The video of a yellow-and-white phosphor dance, finds the following events: The first full-foot landing moment."
-    },
-    {
-      "text": "Đoạn video múa lân một con lân màu vàng đen trắng, tìm các sự kiện sau: Khoảnh khắc đầu tiên 2 người biểu diễn lân cuối chào ban giám khảo.",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "The video of the phosphor dance, a yellow and black phosphor, finds the following events: The first moment the last two phosphor performers greet the judges."
-    },
-    {
-      "text": "Đoạn video múa lân một con lân màu vàng đen trắng, tìm các sự kiện sau: Lân quay vòng trên cột số 4 bằng 2 chân trước rồi tiếp đất. Khoảnh khắc đầu tiên mà lân bắt đầu xoay vòng.",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "Video of a phosphor dance, a yellow and black and white phosphor, looking for the following events: The phosphor spins on column four on its front legs and lands. The first moment the phosphor starts to spin."
-    },
-    {
-      "text": "Đoạn video múa lân một con lân màu vàng đen trắng, tìm các sự kiện sau: Sau đó lân tiến lại chào một con rồng. Khoảnh khắc đầu tiên con rồng cử động đầu.",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "The video of a yellow-and-white phosphor dancing, finds the following events: Then the phosphor approaches to greet a dragon. The first moment the dragon moves its head."
-    },
-    {
-      "text": "Đoạn video trong buổi trao quà từ thiện diễn ra tại 1 bệnh viện trong dịp Xuân 2024. Trong cảnh có hai người đàn ông (mặc áo sơ mi hồng và sơ mi trắng) đứng hai bên, đại diện ban tổ chức. Ở giữa là bốn em nhỏ và thiếu niên, trong đó có em mặc áo đỏ, em mặc áo trắng, em mặc váy hồng và em mặc áo xanh. Các em được trao bảng tượng trưng với nội dung “Chương trình: Trao kinh phí hỗ trợ cho trẻ em mồ côi do dịch COVID-19”. Trước mặt mỗi em là túi quà lớn mang logo y tế. Phía sau là phông nền màu đỏ với khẩu hiệu đón xuân và thông tin sự kiện.",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "Video of a gift giving taking place at a hospital during Spring 2024. In the scene, two men (wearing pink shirts and white shirts) stand on either side, representing the organizing committee. In the middle are four children and teenagers, including one in red shirt, one in white shirt, one in pink skirt and one in blue shirt. They are given a symbolic sign with the content \"Program: Offering financial support to orphans due to COVID-19\". In front of each child is a large gift bag bearing the medical logo. Behind is a red background with a"
-    },
-    {
-      "text": "Đoạn video về một chương trình từ thiện của một câu lạc bộ tên là FANA. Trong đoạn video có thể thấy câu lạc bộ này đang đi trao quà tại một xã thuộc tỉnh Khánh Hòa. Hỏi xã này có tên là gì? (tại thời điểm đó)",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "Video of a charity program by a club called FANA. In the video can be seen the club is going to give gifts in a commune in Khanh Hoa province. Ask what is the name of this commune (at that time)."
-    },
-    {
-      "text": "Đoạn video về một lễ hội ẩm thực Nhật Bản lớn nhất thế giới. Hãy tìm chính xác phân cảnh một cô bé đeo một con bạch tuộc / con mực màu đỏ phía trước ngực. Trên tay cô bé có cầm một chiếc túi giấy.",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "Video of the world's largest Japanese food festival. Find the exact scene of a little girl wearing a red octopus / squid on her chest. In her hand she carries a paper bag."
-    },
-    {
-      "text": "Đoạn video về một người phụ nữ dạy nấu ăn cho những người khác. Trong đoạn video có thể thấy một người đang cầm công thức món ăn với nguyên liệu chính là 200g thịt nạc xay. Hỏi tiêu đề của công thức nấu ăn (tên món ăn) này là gì?",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "Video of a woman teaching cooking to others. In the video one can see holding a recipe with 200g of lean ground meat as the main ingredient. What is the title of the recipe (the recipe name)?"
-    },
-    {
-      "text": "Đoạn video về tường thuật một cuộc đua xe đạp. Tìm phân cảnh với góc quay trực diện từ trên cao xuống dõi theo các tay đua. Trong khung hình gồm có 3 tay đua đang đạp thành một đường thẳng. Cả 3 tay đua đều đến từ cùng một đội, với đồng phục áo trắng quần vàng xanh. Tay đua đầu tiên đội nón trắng, tay đua thứ hai đội nón đỏ và tay đua cuối cùng đội nón đen.",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "The video is about a bicycle race. Find the scene from the top of the screen and watch the riders. The frame features three riders who are riding in a straight line. All three riders are from the same team, wearing white uniforms and blue yellow pants. The first rider wears a white hat, the second rider wears a red hat and the last rider wears a black hat."
-    },
-    {
-      "text": "Đoạn video vể nghiên cứu tại 1 Đại học ở thành phố Lausanne về việc nghiên cứu cơ chế bay của bọ để chế tạo robot",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "Video of research done at a university in Lausanne on the fly mechanism of bugs to build robots"
-    },
-    {
-      "text": "Đây là phần giới thiệu việc phóng tàu vũ trụ tư nhân. Đoạn clip bắt đầu với hình ảnh 4 phi hành gia mặc áo đen. Một trong những nhiệm vụ dự kiến của tàu vũ trụ là nghiên cứu ánh sáng cực quang ở vùng cực",
-      "tier": "mt",
-      "model": "VietAI/envit5-translation|beams=1|max_new=128",
-      "text_en": "This is a preview of the private launch of a spacecraft. The clip begins with an image of four black-clad astronauts. One of the spacecraft's planned missions is to study the aurora luminescence in the polar region."
-    }
-  ]
+ "entries": [
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Ba người đang đi bộ xuống một con dốc trong cơn mưa, có 2 người cầm dù, trong đó người cầm dù đi sau lại mặc một chiếc áo mưa có in hình con gấu ở sau lưng. Sau đó ta thấy nhiều người đang cùng nhau bước về hướng một căn nhà thông qua một con đường đất, bên cạnh là một cái ao.",
+   "text_en": "Three people walk down a slope in the rain, two of them holding umbrellas; the one walking behind wears a raincoat with a bear printed on the back. Then several people walk together towards a house along a dirt road, with a pond beside it.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Biển số của chiếc xe máy màu xanh dương dựng ở hiện trường ban đêm là gì?",
+   "text_en": "What's the plate number of the blue motorcycle that was parked at the scene at night?",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Bản đồ phân bố động đất tại một vùng trên thế giới, với một bảng chú giải phía bên trái gồm các kí hiệu nhiều màu sắc tương ứng với các vị trí tâm chấn có cấp độ động đất khác nhau. Không tính bảng chú giải, có bao nhiêu vị trí ghi nhận động đất cấp độ 4?",
+   "text_en": "A map of earthquake distribution in one region of the world, with a left-hand glossary of multicolored symbols corresponding to epicenter locations of different earthquake levels. Excluding the glossary, how many locations do fourth-degree earthquakes occur?",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Con lân do hai người điều khiển đang đứng thẳng và xoay vòng trên đỉnh cột. Sau vài giây nghỉ, con lân bất ngờ nhảy qua hai chiếc cột kế bên, chúi đầu xuống ngoạm lấy quả bí đỏ kèm bông hoa màu vàng. Cảnh quay kết thúc khi con lân tiếp tục nhảy sang các cột tiếp theo.",
+   "text_en": "A lion dance costume operated by two performers stands upright and spins on top of a pole. After a few seconds of rest, the lion suddenly leaps across two neighbouring poles, dips its head down and bites a pumpkin decorated with a yellow flower. The shot ends as the lion keeps leaping to the following poles.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Có thể thấy trong cảnh quay có 4 tài xế xe ôm công nghệ trong trạm xăng, trong đó 3 người đứng đợi còn 1 người lái xe từ trái sang phải khung hình. Trước đó là cảnh một người đậy nắp bình xăng xe máy của họ. Có thông tin về giá dầu mazut được hiển thị trong khung hình.",
+   "text_en": "There are four tech motorcycle drivers in the gas station, three of whom are waiting while one is driving from left to right in the shot. Before that is a man putting the cap on their motorcycle gas tank. There is information about the price of mazut oil shown in the frame.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Cảnh quay bắt đầu bằng cảnh những con tôm đã được lột vỏ và nấu chín đang nằm trên dĩa, phía sau là người đầu bếp đang đặt 3 ổ bánh mì lên bàn. Sau đó là cảnh quay các đầu bếp, có người thì trang trí món ăn, có người thì chế biến món ăn. Những con tôm được cắt làm đôi và được nướng trên bếp.",
+   "text_en": "The shoot started with the shrimp that were peeled and cooked lying on a plate, behind which the cook was putting three loaves of bread on the table. Then the shoot of the cooks, some decorating the dish, some cooking the dish. The shrimp were cut in half and grilled on the stove.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Cảnh quay cho thấy hành động trình bày món ăn sau khi hoàn thành giai đoạn chế biến. Bún được cho đầu tiên vào một chén rỗng, sau đó đầu bếp lần lượt cho từng vá nước dùng cùng các nguyên liệu như thịt gà, cà rốt, sả, nấm mèo vào chén bún, và kết thúc bằng việc thả một cọng ngò lên trên cùng. Cảnh quay tiếp theo là cảnh zoom xa dần chén bún, ta thấy bên cạnh chén bún còn có 1 chén nước chấm nhỏ với 2 miếng ớt.",
+   "text_en": "The shot shows the act of presenting the dish after the processing stage is completed. Bún is first put in an empty bowl, then the cook one by one puts the broth together with ingredients such as chicken, carrot, lemongrass, and mushroom in the vermicelli, and ends by dropping a cilantro stem on top. The next shot is a shot of zooming away from the vermicelli, where beside the vermicelli there is also a small bowl of dipping sauce with 2 pieces of chili.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Cảnh quay chậm tại vị trí vạch đích của cuộc đua xe đạp. Góc máy sát mặt đường bắt trọn khoảnh khắc về đích theo thứ tự nhất, nhì, ba lần lượt là 1 tay đua áo vàng quần đen, 1 tay đua áo xanh dương quần đen và 1 tay đua áo xanh dương quần đỏ",
+   "text_en": "Slow motion at the finish line of a bicycle race. A low camera angle close to the road surface captures the finish in order — first a rider in a yellow jersey and black shorts, second a rider in a blue jersey and black shorts, third a rider in a blue jersey and red shorts.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Cảnh quay một nhóm hơn 5 người xếp thành hàng tập thể dục, cùng thực hiện động tác hai tay chạm mũi chân. Trong nhóm chỉ có một người đeo kính và ba người đội nón có màu đỏ.",
+   "text_en": "Footage of a group of more than five people lined up doing exercises, all bending to touch their toes with both hands. Only one person in the group wears glasses and three wear red hats.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Cảnh trong vườn thú: con lừa hoang trưởng thành cúi xuống gặm cỏ, sau đó con lừa con bước đi dọc hàng rào gỗ",
+   "text_en": "Scene at the zoo: adult wild ass bent down to graze, then young donkey walking along the wooden fence",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Hai bạn học sinh mặc đồng phục áo trắng, quần xanh, quàng khăn đỏ đang làm MC trên một sân khấu tại trường học, phía sau là một bộ trống cơ màu đỏ và một cây đàn piano.",
+   "text_en": "Two students in white uniform shirts, blue trousers and red neckerchiefs are hosting on a stage at a school, with a red drum kit and a piano behind them.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Hành động cắt chùm nho bằng kéo từ giàn nho bằng một chiếc kéo màu đen. Có thể thấy có một sợi dây màu xanh dương được buộc vào cuống của chùm nho này trước khi nó được cắt.",
+   "text_en": "The action of cutting the grapes with scissors from the vine with a black pair of scissors. It is possible to see that there is a blue string tied to the stem of this grape before it is cut.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Hình ảnh giáo viên nam mặc sơ mi trắng, thắt cà vạt tối màu, nổi bật trên phông nền xanh dương đậm có hoa văn mờ.\n\nSlide bài giảng Nền trắng với khung viền màu hồng tím, phía trên có thanh tiêu đề xanh dương chứa họa tiết địa cầu và mũi tên vàng/xanh ngọc. Bên dưới là sơ đồ 3 tầng được liên kết bởi các mũi tên xanh ngọc trỏ xuống:\n\nTầng 1: 2 khối hộp được bao bởi 1 khối hộp cam.\n\nTầng 2: 1 khối hộp lớn màu xanh dương đậm ở chính giữa.\n\nTầng 3: 2 khối hộp được bao bởi 1 khối hộp xanh lá cây.",
+   "text_en": "A male teacher in a white shirt and a dark tie stands out against a deep blue background with a faint pattern. A lecture slide: white background with a pink-purple border, and a blue title bar at the top carrying a globe motif and yellow and turquoise arrows. Below is a three-level diagram linked by turquoise arrows pointing downward. Level 1: two boxes enclosed by one orange box. Level 2: one large deep blue box in the middle. Level 3: two boxes enclosed by one green box.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Hình ảnh một con cá được đặt lên cân, sau đó có cảnh một con cá khác cùng loại bị một người cầm đuôi. Con số hiển thị cuối cùng trên cân là bao nhiêu?",
+   "text_en": "A fish is placed on a weighing scale, then another fish of the same kind is held up by its tail by a person. What is the final number shown on the scale?",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Khoảng khắc miếng măng tây cuối cùng rời chảo dầu và nằm hoàn toàn trên dĩa.",
+   "text_en": "The last instant of asparagus leaves the oil and lies entirely on the plate.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Khoảnh khắc miếng măng tây đầu tiên rời khỏi chảo dầu.",
+   "text_en": "The moment the first piece of asparagus leaves the oil.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Khoảnh khắc đầu tiên bột được bỏ vào tô măng tây.",
+   "text_en": "The first moment the dough is put into the bowl.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Khoảnh khắc đầu tiên thấy miến măng tây đầu tiên tiếp xúc với dầu trong chảo.",
+   "text_en": "The first moment of asparagus is when it first comes into contact with oil in the pan.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Lá cờ treo trên nóc toà nhà ngân hàng trung ương trong bản tin là cờ nước nào?",
+   "text_en": "Which country's flag hangs on the roof of the central bank in the news?",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Mẩu tin bắt đầu với hình ảnh nột người đàn ông mặc vest xanh đậm, sơ mi trắng và cà vạt, đang ngồi trên một chiếc ghế lớn. Ông cầm bằng hai tay một khối đá quý thô khá lớn, đưa lên gần mặt để quan sát.\nBên phải là một phụ nữ mặc trang phục công sở màu đen và khăn trùm đầu màu hồng tím, đang đứng cạnh và mỉm cười. Tiếp theo có hình ảnh toàn cảnh từ trên cao của một mỏ đá quý lộ thiên quy mô lớn với hố khai thác sâu nhiều tầng và hệ thống đường vận chuyển bao quanh.",
+   "text_en": "The story began with a man in a dark blue suit, white shirt, and tie, sitting on a large chair. He was holding a large block of rough gemstone in both hands, and he was holding it up close to his face for observation. To his right was a woman in black business attire and a purple turban, standing by, smiling. Next came a high-altitude panoramic view of a large-scale open-air gem mine with a multilevel deep shaft and a system of shipping lanes surrounding it.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Mẩu tin giới thiệu về đàn hổ tại một địa phương ở miền Nam vừa có thêm khoảng 3-6 con hổ con. Đây là một giống hổ quý hiếm",
+   "text_en": "This piece of information introduces the tiger herd in a local area in the South that has just added about three to six cubs.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Một con lừa hoang con lông vàng nhạt đang bước đi cạnh hàng rào gỗ trong vườn thú",
+   "text_en": "A pale yellow wild ass walking by the wooden fence in the zoo",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Một người đứng dưới nước và rọi đèn. Tiếp theo là cảnh người này kéo lưới cá lúc bình minh, sau đó được một nhóm người khác tiến đến dùng máy quay ghi hình.",
+   "text_en": "A man standing in the water and shining a light. This was followed by a scene of him pulling a fishing net at dawn, then followed by another group of men who came to capture the scene with a camera.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Một đàn sư tử đang nghỉ ngơi và leo trèo trên các bục gỗ trong khu nuôi dưỡng, phía trước có bảng thông tin của London Zoo phục vụ công tác theo dõi và bảo tồn động vật.. Sau đó có cảnh hai nhân viên mặc áo xanh lá đang cân và ghi nhận số liệu của một con vật trong khuôn viên sở thú.",
+   "text_en": "A pride of lions resting and climbing on wooden platforms in a zoo enclosure, with a London Zoo information board in front for animal monitoring and conservation. Then two staff in green shirts weigh an animal and record the data inside the zoo grounds.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Người phụ nữ mặc áo dài màu hồng, đeo kính đang giảng giải về các trường hợp sử dụng khác nhau của động từ 'remember' dựa trên mốc thời gian của hành động được nhắc tới.",
+   "text_en": "The woman in the pink gown, wearing glasses, was explaining the different uses of the verb \"remember\" based on the time of the action being referred to.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Người đầu bếp lần lượt đặt các miếng nguyên liệu dạng thanh và những lát cắt hình hoa vào một đĩa đang được hấp trong nồi.\nCác nguyên liệu được dùng đũa sắp xếp xen kẽ xung quanh phần thức ăn đã có sẵn trên đĩa.\nSau đó, đầu bếp dùng muỗng lấy thêm một loại nguyên liệu mềm từ tô thủy tinh.\nPhần nguyên liệu này được đặt vào giữa đĩa, xung quanh là các miếng dạng thanh và hình hoa đã được sắp xếp trước đó.",
+   "text_en": "The cook in turn places the bar pieces and the flower-shaped slices on a plate steaming in the pot. The ingredients are arranged alternately around the food already on the plate with chopsticks. Then the cook takes another soft-bottomed ingredient from the glass bowl with a spoon. This part of the ingredients is placed in the middle of the plate, surrounded by the previously arranged bar and flower-shaped pieces.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Nhóm cán bộ đội mũ bảo hộ trắng và mũ tai bèo đứng chụm lại xem hiện trường sạt lở bờ sông",
+   "text_en": "A group of officers wearing white helmets and straw hats gathered around the riverbank to watch the scene of the river landslide.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Phóng sự về tiền tệ: cận cảnh tờ tiền chưa cắt trên dây chuyền in, sau đó là toàn cảnh toà nhà ngân hàng trung ương",
+   "text_en": "Money story: close - up of the uncut note on the print line, then a panoramic view of the central bank building",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Theo băng rôn dưới màn hình, Cần Thơ thiệt hại bao nhiêu tiền do sạt lở bờ sông?",
+   "text_en": "According to the banner below, how much money did Can Tho lose due to a riverbank landslide?",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Toà nhà cổ điển châu Âu có hàng cột đá lớn và lá cờ Anh treo trên nóc, bầu trời nhiều mây xám",
+   "text_en": "The European classicist building has a row of large stone columns and the British flag hangs on the roof, the sky is gray with clouds",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Trong đoạn clip có là một chàng trai đội mũ lưỡi trai đen, mặc áo thun trắng có dòng chữ tiếng Anh, đang ngồi cạnh một chiếc hộp. Trên hộp, anh sắp xếp nhiều mảnh bìa cắt rời với hình thù ngẫu nhiên.\nNhờ ánh sáng chiếu từ một phía, các mảnh bìa đó đổ bóng lên tường, tạo thành hình chân dung một người đàn ông với khuôn mặt rõ nét, tóc vuốt gọn và mặc vest.",
+   "text_en": "The clip shows a man in a black baseball cap and a white T-shirt with English letters sitting next to a box. On the box he has arranged several random-looking cardboard pieces. Illuminated by light on one side, the pieces cast shadows on the wall, creating a portrait of a man with a distinct face, neat hair, and a suit.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Trong đoạn video có 2 câu thơ của một nhà thơ ca ngợi anh hùng Nguyễn Trung Trực trong đình thần Nguyễn Trung Trực tại Kiên Giang. Hai câu thơ đó là gì?",
+   "text_en": "In the video, there are two verses of a poet praising the hero Nguyen Trung Truc in the Nguyen Trung Truc deity's family in Kien Giang. What are those two verses?",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Trong đoạn video nấu ăn một món ăn về nấm, gồm các khoảnh khắc sơ chế: Khoảnh khắc chảo đặt lên bếp, đầu bếp mở lửa và thấy lửa bắt đầu xuất hiện",
+   "text_en": "In a video of a mushroom dish, there are moments of preparation: The moment the pan is on the stove, the cook turns on the stove and sees the fire begin to appear",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Trong đoạn video nấu ăn một món ăn về nấm, gồm các khoảnh khắc sơ chế: Khoảnh khắc đầu tiên cắt củ năng.",
+   "text_en": "In the video of a mushroom dish, there are moments of preparation: The first moment of cutting the tuber.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Trong đoạn video nấu ăn một món ăn về nấm, gồm các khoảnh khắc sơ chế: Khoảnh khắc đầu tiên cắt đậu hủ.",
+   "text_en": "In the video of a mushroom dish, there are moments of preparation: The first moment of cutting tofu.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Trong đoạn video nấu ăn một món ăn về nấm, gồm các khoảnh khắc sơ chế: Khoảnh khắc đầu tiên thấy cắt nấm.",
+   "text_en": "In the video of a mushroom dish, there are moments of preparation: The first moment of seeing a mushroom cut.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Trên đĩa tròn màu trắng có 1 ly panna cotta. Có một bàn tay lần lượt đặt thêm 2 ly panna cotta nữa vào đĩa.\nMỗi ly panna cotta có lớp kem mịn màu trắng ngà, bên trên trang trí vài lát nho đỏ, thêm lá bạc hà xanh tạo điểm nhấn tươi mát.\nBên cạnh trên đĩa còn có hai bông hoa ăn được (màu đỏ và vàng) để tăng phần đẹp mắt.",
+   "text_en": "On the white round plate there is a glass of panna cotta. There is one hand which puts two more panna cotta in turn on the plate. Each panna cotta has a creamy ivory white layer, on top of which are decorated with some slices of red grapes, with green mint leaves for a fresh accent. Besides on the plate are two edible flowers (red and yellow) to enhance the beauty.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Tìm chính xác đoạn clip ngắn có ba người (hai phụ nữ và một nam giới) đang ngồi cạnh nhau, tập trung chơi nhạc cụ kim loại có dạng tròn, rỗng, với các vết lõm để tạo ra âm thanh khi gõ tay. Có 1 người mặc áo trắng ngồi giữa 2 người mặc áo đen. Bối cảnh phía sau là một kệ sách nhiều ngăn, xếp đầy sách với nhiều màu sắc",
+   "text_en": "Find the exact clip of three people (two women and one man) sitting side by side, focusing on playing a round, hollow metal instrument with indentations to create a tapping sound. There is a white person sitting between two black people. The background is a multicompartment bookcase, filled with books of various colors.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Tìm một đoạn video đua xe đạp, góc quay từ flycam trên cao, một vận động viên mặc áo xanh dương, trắng đang vượt ba vận động viên khác và lên vị trí dẫn đầu. Biết sau đó vận động viên này dẫn đầu suốt đoạn đường còn lại đến đích.",
+   "text_en": "Looking for a video of a race, shot from an overhead flycam, of a blue-and-white-shirted athlete crossing over three other athletes and taking the lead. Knowing that the athlete is leading the rest of the way to the finish line, the driver is the one who gets to the top.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đoàn cán bộ khảo sát điểm sạt lở bờ sông: đứng xem hiện trường, xem bản vẽ thiết kế, rồi tới bờ kè bê tông đã sập xuống sông",
+   "text_en": "The survey team shall observe the site, the design drawing and the concrete embankment that has collapsed into the river.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đoạn clip bắt đầu bằng cảnh cà rốt cắt hình ngôi sao đang được luộc trong nồi nước sôi, đặt trong rổ lưới kim loại và được đảo bằng đôi đũa gỗ. \nĐoạn clip kết thúc bằng hình ảnh đĩa rau củ luộc và đồ chiên được trình bày đẹp mắt, gồm đậu bắp, súp lơ, cà rốt hình ngôi sao, bí xanh, chén nước chấm màu hồng ở giữa và đôi đũa màu hồng nhạt đặt bên phải",
+   "text_en": "The clip begins with a star-cut carrot being boiled in a pot of boiling water, placed in a metal mesh basket, and flipped with wooden chopsticks. The clip ends with a beautifully presented plate of boiled vegetables and fried food, including okra, cauliflower, star-shaped carrots, zucchini, a pink dip in the middle, and a pale pink chopstick on the right.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đoạn clip bắt đầu bằng việc đậu hà lan được bỏ vào với mực đang được xào trên chảo, bên cạnh là đĩa hành tây và ớt đỏ thái lát chuẩn bị cho vào món ăn. Đoạn clip kết thúc với khung quay chậm (slow motion) cảnh lắc chảo trên bếp lửa.",
+   "text_en": "The clip begins with the peas being added with the squid being stir-fried on the pan, next to a plate of onion and red pepper slices prepared for the dish. The clip ends with a slow motion shot of the frying pan shaking on the stove.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đoạn clip bắt đầu với cảnh một tác phẩm điêu khắc cát hoành tráng tại Lễ hội điêu khắc trên cát. Tác phẩm mô tả cảnh những thanh niên chơi thể thao đường phố: một người trượt patin, hai người trượt ván\nNền phía sau là họa tiết vòm cong lớn và có khắc chữ.\nTiếp theo có cảnh nhiều tác phẩm khác bằng cát, và có 2 cột khói màu hồng",
+   "text_en": "The clip begins with a scene of a monumental sand sculpture at the Sand Sculpture Festival. The sculpture depicts young people playing street sport: a roller skater, two skaters. The background is a large arch pattern and text is carved. It is followed by scenes of many other sand sculptures, and there are two pink smoke columns.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đoạn clip cần tìm bắt đầu bằng cảnh 1 người đầu bếp đặt đang đặt món gỏi cuốn chay bày trên đĩa, nhân gồm rau xanh cuộn tròn và đậu hũ, gói trong bánh tráng màu vàng và tím. Đĩa được trang trí thêm lá xanh và hoa pansy tím-vàng, tạo cảm giác thanh mát và tinh tế.",
+   "text_en": "The video begins with a chef ordering vegetarian spring rolls on a plate, filled with rolled green vegetables and tofu wrapped in yellow and purple rice paper. The plate is decorated with green leaves and purple-yellow pansy flowers, which give it a cool, delicate feel.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đoạn clip cần tìm là cảnh hai người phụ nữ đang cho dê ăn: một người mặc áo thun trắng quàng áo đỏ trên vai, người kia mặc áo dài tay kẻ sọc tím truyền thống. Cả hai đều mỉm cười, tỏ vẻ thích thú.\nKhông gian trại rộng rãi, có mái che bằng tôn và hàng rào gỗ chia thành nhiều dãy chuồng, trong đó có hàng dài dê được nuôi nhốt.",
+   "text_en": "The video was about two women feeding goats: one wore a white T-shirt with a red shirt over her shoulder, the other wore a long-sleeved traditional purple striped shirt. Both women smiled, amused. The farm was spacious, with a metal roof and wooden fence, and it was divided into rows of cages, including long rows of captive goats.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đoạn clip cần tìm là cảnh quay trong một khu rừng, dưới gốc cây to với nhiều lá khô phủ đầy mặt đất. Nổi bật ở cận cảnh là một chú chim có bộ lông đen ánh xanh ở đầu và thân trên, còn cánh và lưng màu nâu đỏ. Đôi mắt chim đỏ rực, tạo điểm nhấn rõ ràng. Đây là loài chim thường thấy ở vùng Nam Bộ Việt Nam.",
+   "text_en": "The video clip to be found was shot in a forest, under a large tree with many dry leaves covering the ground. Featured in the close-up is a bird with a blue-black plumage at the head and upper body, and reddish-brown wings and back. The bird's eyes are bright red, giving a clear accent. This is a bird commonly found in the southern part of Vietnam.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đoạn clip là cảnh thu hoạch dứa ở miền Tây: một bà cụ ngồi bên giỏ dứa trò chuyện với cô gái mặc áo hồng quàng khăn rằn; xung quanh chất đầy dứa, phía sau có người phụ nữ đội nón lá cầm trái dứa và một chiếc ghe xanh đậu cạnh bờ, tạo không khí nông thôn mộc mạc, yên bình.",
+   "text_en": "The clip is a western harvest of pineapples: an old woman sitting by a basket of pineapples talks to a girl in a pink shirt and bandana; the area is filled with pineapples, behind which a woman in a leaf cap carries pineapples and a blue boat perches by the shore, creating a quiet, rustic countryside.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đoạn clip mô tả hậu quả của hiện tượng sạt lở đất nghiêm trọng, đất đá tràn xuống gây tắc nghẽn hoàn toàn một đoạn đường đèo. Trong một cảnh quay cận, có thể thấy một cột mốc đường bộ với phần đỉnh màu đỏ chỉ còn lộ ra phần trên, phần lớn đã bị đất đá vùi lấp. Ở cảnh quay cuối, một người đi xe máy đang vật lộn để điều khiển phương tiện vượt qua khu vực bùn lầy, trên chiếc xe máy có treo một vật màu xanh lá. Tên của con đèo là gì?",
+   "text_en": "The clip depicts the aftermath of a catastrophic landslide, with the land and rocks flooding, completely clogging a section of the pass. In one close-up shot, a road marker with a red top showing only the top, was largely buried by the rocks. In the final shot, a motorcyclist is struggling to steer his vehicle through the muddy area, with a green object hanging from his motorcycle. What's the name of the pass?",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đoạn clip về 1 thị trấn ven biển thu hút du khách hiếu kỳ nhờ 1 loài động vật biển nguy hiểm. Loài động vật này nổi tiếng trong 1 bộ phim của đạo diễn Steven Spielberg được sản xuất vào năm 1975",
+   "text_en": "Video of a seaside town that fascinated tourists because of a dangerous marine animal. The animal was famously featured in a 1975 film directed by Steven Spielberg.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đoạn clip được cắt từ một phóng sự về một nhóm các nghệ nhân làm nghề đan lát các sản phẩm thủ công từ cây lục bình. Đầu tiên là một cảnh lia cam duy nhất từ trái sang phải, theo thứ tự ta thấy 4 sản phẩm: túi xách, chậu hoa, bộ ấm tách trà và túi xách. Ngay sau cảnh này, người phụ nữ bên trái lấy một tách trà trong bộ ấm tách và nâng niu trong khi nghe người phụ nữ bên phải trò chuyện.",
+   "text_en": "A clip from a report about a group of artisans weaving handicrafts from water hyacinth. It opens with a single camera pan from left to right, showing four products in order: a handbag, a flower pot, a tea set, and a handbag. Right after this shot, the woman on the left picks up a teacup from the tea set and holds it carefully while listening to the woman on the right talking.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đoạn phim bắt đầu bằng một bản đồ, trên đó một loại công trình thủy lợi lần lượt xuất hiện bốn lần. Sau đó chuyển sang cảnh một con đập được quay từ trên cao, tiếp đến là cảnh cận con đập dưới trời mưa.",
+   "text_en": "The video begins with a map, on which a type of irrigation works appear four times in turn. Then it moves to a dam shot from above, followed by a close-up of the dam in the rain.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đoạn phim ghi lại cảnh những chiếc xe ô tô lội nước, chiếc xe màu vàng, màu đỏ và màu đen lần lượt chuẩn bị đi qua cầu. Con số được ghi trên biển báo bên trái của cây cầu là bao nhiêu?",
+   "text_en": "Footage of cars driving through floodwater; a yellow car, a red car and a black car each prepare to cross a bridge in turn. What is the number written on the sign to the left of the bridge?",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đoạn video bắt đầu bằng ảnh cận đầu một con lân trắng, mũi đỏ, bên cạnh lá cờ trắng viền đỏ. Khoảnh khắc đầu tiên con lân hoàn tất cú xoay người trên các thanh trụ (thời điểm đâu tiên các chân của lân đặt trên trụ sau khi xoay).",
+   "text_en": "The video begins with a close-up of the head of a white lion dance costume with a red nose, next to a white flag with a red border. The first moment the lion dancer completes a spin on top of the poles — the first instant its feet land back on the pole after turning.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đoạn video bắt đầu bằng ảnh cận đầu một con lân trắng, mũi đỏ, bên cạnh lá cờ trắng viền đỏ. Khoảnh khắc đầu tiên dùi chạm vào kẻng đồng múa lân.",
+   "text_en": "The video begins with a close-up of the head of a white lion dance costume with a red nose, next to a white flag with a red border. The first moment the drumstick strikes the bronze gong of the lion dance.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đoạn video bắt đầu bằng ảnh cận đầu một con lân trắng, mũi đỏ, bên cạnh lá cờ trắng viền đỏ. Khoảnh khắc đầu tiên xuất hiện đầy đủ hai con rồng vàng đang xoay vòng.",
+   "text_en": "The video begins with a close-up of the head of a white lion dance costume with a red nose, next to a white flag with a red border. The first moment two golden dragons appear fully in frame, spinning.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đoạn video mô tả cảnh trang trí bánh rán. Phân cảnh bắt đầu là một chiếc đĩa sứ màu trắng nằm trên một khay gỗ hình chữ nhật. Bên cạnh chiếc đĩa sứ là một chén đựng một vài trái dâu, nhưng có 2 trái bị rơi ra ngoài. Ngoài ra, bên cạnh đĩa sứ còn có một chén sứ nhỏ màu trắng đựng chuối đã được cắt sẵn và một cái thìa nhỏ màu nâu. Phân cảnh tiếp theo cho thấy đầu bếp đặt 2 chiếc bánh rán lên đĩa sứ và bắt đầu trang trí. Bước đầu tiên là việc rưới chocolate lên trên mặt bánh. Sau đó, đầu bếp đặt các lát chuối lên trên một chiếc bánh rán, chiếc còn lại được đặt các lát dâu tây lên.",
+   "text_en": "The video depicts the doughnut decoration scene. The scene begins with a white ceramic plate resting on a rectangular wooden tray. Next to the ceramic plate is a bowl containing some strawberries, but two of them fall out. In addition, next to the ceramic plate is a small white ceramic bowl containing pre-cut bananas and a small brown spoon. The next scene shows the cook placing two doughnuts on the ceramic plate and starting the decoration. The first step is to drizzle chocolate on top of the doughnuts. Then, the cook places the slices of bananas on top of one doughnut, the other one is placed with the",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đoạn video mô tả một người ngồi vệ sinh máy ảnh. Công đoạn này bắt đầu bằng việc tháo rời máy ảnh. Tiếp theo, chiếc ống kính đã được tháo rời và được đặt ngay ngắn trên một chiếc khăn màu tím hồng. Phân cảnh cuối cùng là vệ sinh ống kính (lens) bằng một chiếc tăm bông.",
+   "text_en": "The video shows a person cleaning a camera. This begins with the removal of the camera. Next, the lens is removed and placed on a pinkish-purple towel. The final scene is cleaning the lens with a cotton swab.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đoạn video múa lân một con lân màu vàng đen trắng, tìm các sự kiện sau: Khoảnh khắc 4 chân hoàn toàn chạm đất đầu tiên.",
+   "text_en": "The video of a yellow-and-white phosphor dance, finds the following events: The first full-foot landing moment.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đoạn video múa lân một con lân màu vàng đen trắng, tìm các sự kiện sau: Khoảnh khắc đầu tiên 2 người biểu diễn lân cuối chào ban giám khảo.",
+   "text_en": "The video of the phosphor dance, a yellow and black phosphor, finds the following events: The first moment the last two phosphor performers greet the judges.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đoạn video múa lân một con lân màu vàng đen trắng, tìm các sự kiện sau: Lân quay vòng trên cột số 4 bằng 2 chân trước rồi tiếp đất. Khoảnh khắc đầu tiên mà lân bắt đầu xoay vòng.",
+   "text_en": "Video of a phosphor dance, a yellow and black and white phosphor, looking for the following events: The phosphor spins on column four on its front legs and lands. The first moment the phosphor starts to spin.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đoạn video múa lân một con lân màu vàng đen trắng, tìm các sự kiện sau: Sau đó lân tiến lại chào một con rồng. Khoảnh khắc đầu tiên con rồng cử động đầu.",
+   "text_en": "The video of a yellow-and-white phosphor dancing, finds the following events: Then the phosphor approaches to greet a dragon. The first moment the dragon moves its head.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đoạn video trong buổi trao quà từ thiện diễn ra tại 1 bệnh viện trong dịp Xuân 2024. Trong cảnh có hai người đàn ông (mặc áo sơ mi hồng và sơ mi trắng) đứng hai bên, đại diện ban tổ chức. Ở giữa là bốn em nhỏ và thiếu niên, trong đó có em mặc áo đỏ, em mặc áo trắng, em mặc váy hồng và em mặc áo xanh. Các em được trao bảng tượng trưng với nội dung “Chương trình: Trao kinh phí hỗ trợ cho trẻ em mồ côi do dịch COVID-19”. Trước mặt mỗi em là túi quà lớn mang logo y tế. Phía sau là phông nền màu đỏ với khẩu hiệu đón xuân và thông tin sự kiện.",
+   "text_en": "Video of a gift giving taking place at a hospital during Spring 2024. In the scene, two men (wearing pink shirts and white shirts) stand on either side, representing the organizing committee. In the middle are four children and teenagers, including one in red shirt, one in white shirt, one in pink skirt and one in blue shirt. They are given a symbolic sign with the content \"Program: Offering financial support to orphans due to COVID-19\". In front of each child is a large gift bag bearing the medical logo. Behind is a red background with a",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đoạn video về một chương trình từ thiện của một câu lạc bộ tên là FANA. Trong đoạn video có thể thấy câu lạc bộ này đang đi trao quà tại một xã thuộc tỉnh Khánh Hòa. Hỏi xã này có tên là gì? (tại thời điểm đó)",
+   "text_en": "Video of a charity program by a club called FANA. In the video can be seen the club is going to give gifts in a commune in Khanh Hoa province. Ask what is the name of this commune (at that time).",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đoạn video về một lễ hội ẩm thực Nhật Bản lớn nhất thế giới. Hãy tìm chính xác phân cảnh một cô bé đeo một con bạch tuộc / con mực màu đỏ phía trước ngực. Trên tay cô bé có cầm một chiếc túi giấy.",
+   "text_en": "Video of the world's largest Japanese food festival. Find the exact scene of a little girl wearing a red octopus / squid on her chest. In her hand she carries a paper bag.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đoạn video về một người phụ nữ dạy nấu ăn cho những người khác. Trong đoạn video có thể thấy một người đang cầm công thức món ăn với nguyên liệu chính là 200g thịt nạc xay. Hỏi tiêu đề của công thức nấu ăn (tên món ăn) này là gì?",
+   "text_en": "Video of a woman teaching cooking to others. In the video one can see holding a recipe with 200g of lean ground meat as the main ingredient. What is the title of the recipe (the recipe name)?",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đoạn video về tường thuật một cuộc đua xe đạp. Tìm phân cảnh với góc quay trực diện từ trên cao xuống dõi theo các tay đua. Trong khung hình gồm có 3 tay đua đang đạp thành một đường thẳng. Cả 3 tay đua đều đến từ cùng một đội, với đồng phục áo trắng quần vàng xanh. Tay đua đầu tiên đội nón trắng, tay đua thứ hai đội nón đỏ và tay đua cuối cùng đội nón đen.",
+   "text_en": "The video is about a bicycle race. Find the scene from the top of the screen and watch the riders. The frame features three riders who are riding in a straight line. All three riders are from the same team, wearing white uniforms and blue yellow pants. The first rider wears a white hat, the second rider wears a red hat and the last rider wears a black hat.",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đoạn video vể nghiên cứu tại 1 Đại học ở thành phố Lausanne về việc nghiên cứu cơ chế bay của bọ để chế tạo robot",
+   "text_en": "Video of research done at a university in Lausanne on the fly mechanism of bugs to build robots",
+   "tier": "mt"
+  },
+  {
+   "model": "VietAI/envit5-translation|beams=1|max_new=128",
+   "text": "Đây là phần giới thiệu việc phóng tàu vũ trụ tư nhân. Đoạn clip bắt đầu với hình ảnh 4 phi hành gia mặc áo đen. Một trong những nhiệm vụ dự kiến của tàu vũ trụ là nghiên cứu ánh sáng cực quang ở vùng cực",
+   "text_en": "This is a preview of the private launch of a spacecraft. The clip begins with an image of four black-clad astronauts. One of the spacecraft's planned missions is to study the aurora luminescence in the polar region.",
+   "tier": "mt"
+  }
+ ],
+ "version": 1
 }
