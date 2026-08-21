@@ -48,6 +48,19 @@ def _no_dense_store(collection: str, dimension: int):
     raise RuntimeError("Milvus not configured (set MFE_MILVUS_URI)")
 
 
+def _load_vector_index(config: Any):
+    """Mo Faiss index. Import o TRONG ham: `faiss` chi can khi that su dung kho."""
+    from mfe.stores.vector.index import VectorIndex
+
+    return VectorIndex.load(config.paths.vector_store, config.retrieval.embed_dim)
+
+
+def _load_inverted_index(config: Any):
+    from mfe.stores.inverted.index import InvertedIndex
+
+    return InvertedIndex.load(config.paths.inverted_store)
+
+
 def _milvus_store_factory(collection: str, dimension: int):
     """Open one Milvus collection, verifying it matches what the arm expects."""
     from mfe.stores.production.config import MilvusConfig
@@ -116,9 +129,13 @@ class Cascade:
         missing, rather than refusing at import time.
         """
         from mfe.online.encoder import DEFAULT_TEXT_CHECKPOINT, encode_query_text
-        from mfe.stores.inverted.index import InvertedIndex
-        from mfe.stores.vector.index import VectorIndex
 
+        # `VectorIndex` va `InvertedIndex` duoc import BEN TRONG `load()`, khong
+        # phai o day. `VectorIndex` keo theo `faiss`, va mot import o dau ham thi
+        # chay VO DIEU KIEN — ke ca khi nguoi goi da truyen `vector_index=None`
+        # vi ho khong dung kho local. Tren Kaggle (duong `flat_bundle`) do la
+        # `ModuleNotFoundError: No module named 'faiss'` cho mot doan ma khong ai
+        # dinh chay: phu thuoc 100 MB bat buoc cho mot nhanh bi bo qua.
         text_checkpoint = getattr(
             getattr(config, "retrieval", None), "clip_text_checkpoint", DEFAULT_TEXT_CHECKPOINT
         )
@@ -134,19 +151,11 @@ class Cascade:
             config=config,
             vector_index=overrides.get(
                 "vector_index",
-                load(
-                    "vector index",
-                    lambda: VectorIndex.load(
-                        config.paths.vector_store, config.retrieval.embed_dim
-                    ),
-                ),
+                load("vector index", lambda: _load_vector_index(config)),
             ),
             inverted_index=overrides.get(
                 "inverted_index",
-                load(
-                    "inverted index",
-                    lambda: InvertedIndex.load(config.paths.inverted_store),
-                ),
+                load("inverted index", lambda: _load_inverted_index(config)),
             ),
             encode_query=overrides.get(
                 "encode_query",
