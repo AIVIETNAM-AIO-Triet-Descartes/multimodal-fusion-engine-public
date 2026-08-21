@@ -83,6 +83,7 @@ class Cascade:
         text_store: Any = None,
         dense_store_factory: Any = None,
         translator: Any = None,
+        flat_bundle: Any = None,
     ) -> None:
         self.config = config
         self.vector_index = vector_index
@@ -90,6 +91,9 @@ class Cascade:
         self.encode_query = encode_query
         self.text_store = text_store
         self.dense_store_factory = dense_store_factory
+        #: `FlatBundle` da nap san -> chay KHONG can Elasticsearch/Milvus.
+        #: Dat truoc `self.arms` vi `_build_arms` doc no.
+        self.flat_bundle = flat_bundle
         #: Fills in `query_text_en` when the caller has none. None means the only
         #: English is hand-written, which is where the pilot started.
         self.translator = translator
@@ -453,19 +457,36 @@ class Cascade:
             )
         )
 
+        from mfe.online.dense_arms import DENSE_ARM_SPECS
+        from mfe.online.text_arms import TEXT_ARM_SPECS
+
+        arm_weights = {name: weight_of(name) for name in TEXT_ARM_SPECS}
+        dense_weights = {name: weight_of(name) for name in DENSE_ARM_SPECS}
+
+        if self.flat_bundle is not None:
+            # Đường KHÔNG KHO: đọc bản gộp trong RAM. Cùng tên arm, cùng
+            # `Candidate`, cùng `query_language` — nên fusion, dedup, DANTE và
+            # bảng arm phía sau không biết chúng đang chạy trên kho nào. Đó là
+            # điều kiện để so được kết quả hai đường; đổi tên arm là mất phép so.
+            from mfe.online.flat_arms import build_flat_dense_arms, build_flat_text_arms
+
+            for arm in build_flat_text_arms(self.flat_bundle, weights=arm_weights):
+                registry.register(arm)
+            for arm in build_flat_dense_arms(self.flat_bundle, weights=dense_weights):
+                registry.register(arm)
+            return registry
+
         # Elasticsearch-backed arms — one per `source` from SOTA_AIC's exports.
         # Registered even when the store is absent, marked unavailable with a
         # reason (mfe.online.text_arms).
-        from mfe.online.text_arms import TEXT_ARM_SPECS, build_text_arms
+        from mfe.online.text_arms import build_text_arms
 
-        arm_weights = {name: weight_of(name) for name in TEXT_ARM_SPECS}
         for arm in build_text_arms(self.text_store, weights=arm_weights):
             registry.register(arm)
 
         # Milvus-backed dense arms, one collection per embedding model.
-        from mfe.online.dense_arms import DENSE_ARM_SPECS, build_dense_arms
+        from mfe.online.dense_arms import build_dense_arms
 
-        dense_weights = {name: weight_of(name) for name in DENSE_ARM_SPECS}
         for arm in build_dense_arms(
             self.dense_store_factory or _no_dense_store, weights=dense_weights
         ):
