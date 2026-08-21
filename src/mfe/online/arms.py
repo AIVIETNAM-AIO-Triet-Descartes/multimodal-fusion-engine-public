@@ -157,6 +157,7 @@ class ArmRegistry:
         top_k: int,
         run_id: str,
         query_text_en: str | None = None,
+        ocr_keywords: str | None = None,
     ) -> dict[str, list[Candidate]]:
         """`run()` restricted to specific arms, ignoring their `enabled` flags.
 
@@ -166,7 +167,7 @@ class ArmRegistry:
         try:
             for name in saved:
                 self.set_enabled(name, name in names)
-            return self.run(query_text, top_k, run_id, query_text_en=query_text_en)
+            return self.run(query_text, top_k, run_id, query_text_en=query_text_en, ocr_keywords=ocr_keywords)
         finally:
             for name, was in saved.items():
                 self.set_enabled(name, was)
@@ -177,6 +178,7 @@ class ArmRegistry:
         top_k: int,
         run_id: str,
         query_text_en: str | None = None,
+        ocr_keywords: str | None = None,
     ) -> dict[str, list[Candidate]]:
         """Run every active arm. A failing arm is dropped with a warning, never
         raised: one broken arm must not take the whole query down.
@@ -197,6 +199,8 @@ class ArmRegistry:
                     )
                     continue
                 text = query_text_en
+            elif ocr_keywords and arm.name in ["bm25", "ocr", "subtitles", "objects", "blip"]:
+                text = ocr_keywords
             try:
                 hits = arm.search(text, top_k, run_id)  # type: ignore[misc]
             except ValueError as err:

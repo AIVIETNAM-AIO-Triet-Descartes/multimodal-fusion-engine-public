@@ -241,10 +241,10 @@ def render_timeline(kind: str) -> None:
     st.markdown("---")
 
 
-def run_search(query_text: str, top_k: int, run_id: str, text_en: str | None = None):
+def run_search(query_text: str, top_k: int, run_id: str, text_en: str | None = None, ocr_keywords: str | None = None):
     started = time.perf_counter()
     results = st.session_state["cascade"].search(
-        query_text=query_text, top_k=top_k, run_id=run_id, query_text_en=text_en or None
+        query_text=query_text, top_k=top_k, run_id=run_id, query_text_en=text_en or None, ocr_keywords=ocr_keywords
     )
     elapsed = (time.perf_counter() - started) * 1000
     st.toast(f"{len(results)} ứng viên trong {elapsed:.0f}ms", icon="⚡")
@@ -269,7 +269,19 @@ def tab_kis(top_k: int) -> None:
              "Bỏ trống thì những arm đó ngồi ngoài và ghi lý do vào log.",
     )
     if st.button("🔍 Tìm", type="primary", key="kis_go") and query.strip():
-        st.session_state["results_kis"] = run_search(query, top_k, "ui_kis", text_en)
+        search_query = query
+        search_en = text_en
+        
+        if st.session_state.get("use_quest"):
+            with st.spinner("QUEST đang mở rộng truy vấn KIS..."):
+                from mfe.online.quest import QuestKIS
+                try:
+                    search_en = QuestKIS().translate(query)
+                    st.info(f"✨ QUEST (PBR): **{search_en}**")
+                except Exception as e:
+                    st.error(f"QUEST lỗi: {e}")
+                    
+        st.session_state["results_kis"] = run_search(search_query, top_k, "ui_kis", search_en)
         st.session_state["timeline_kis"] = None
 
     results = st.session_state.get("results_kis", [])
@@ -311,8 +323,22 @@ def tab_qa(top_k: int) -> None:
              "hạng cao hơn hẳn — xem `QAQuery.retrieval_text`.",
     )
     if st.button("🔍 Tìm", type="primary", key="qa_go") and question.strip():
+        ocr_keywords = None
+        logic_question = question
+        search_hint = retrieval_text.strip() or question
+        
+        if st.session_state.get("use_quest"):
+            with st.spinner("QUEST đang phân rã câu hỏi VQA..."):
+                from mfe.online.quest import quest_decompose
+                quest_result = quest_decompose(question)
+                search_hint = quest_result.get("search_hint", search_hint)
+                ocr_keywords = quest_result.get("ocr_keywords", "")
+                logic_question = quest_result.get("logic_question", question)
+                st.info(f"✨ QUEST: **{search_hint}** | OCR: **{ocr_keywords}** | Hỏi: **{logic_question}**")
+        
+        st.session_state["qa_logic_question"] = logic_question
         st.session_state["results_qa"] = run_search(
-            retrieval_text.strip() or question, top_k, "ui_qa"
+            search_hint, top_k, "ui_qa", ocr_keywords=ocr_keywords
         )
         st.session_state["timeline_qa"] = None
 
@@ -330,7 +356,8 @@ def tab_qa(top_k: int) -> None:
     st.markdown("### ✍️ Câu trả lời")
     if results and st.session_state.get("reader") is not None:
         if st.button("🤖 Gemini đề xuất đáp án", key="qa_ask"):
-            _ask_reader(question, results)
+            logic_question = st.session_state.get("qa_logic_question", question)
+            _ask_reader(logic_question, results)
             st.rerun()
         proposal = st.session_state.get("qa_proposal")
         if proposal is not None:
@@ -638,6 +665,13 @@ def main() -> None:
         reader = st.session_state.get("reader")
         if reader is not None and reader.calls:
             st.caption(f"đã gọi {reader.calls} lần · bỏ cuộc {reader.bails}")
+
+        st.markdown("---")
+        st.markdown("**Phân tích truy vấn (Tầng 0)**")
+        st.session_state["use_quest"] = st.checkbox(
+            "Sử dụng QUEST (Llama-3.1-70B)", value=False,
+            help="Bật PBR (Personalize Before Retrieve). Dịch và mở rộng KIS, phân rã VQA."
+        )
 
         st.markdown("---")
         st.markdown("**Tầng truy hồi**")
