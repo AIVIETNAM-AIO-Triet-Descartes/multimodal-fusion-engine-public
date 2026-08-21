@@ -436,6 +436,7 @@ def stage_n2_subtitles(ctx: StageContext) -> dict:
 
     beam = ctx.params.get("beam_size", 5)
     window = ctx.params.get("window", "next_keyframe")
+    max_empty_ratio = float(ctx.params.get("max_empty_ratio", 0.30))
 
     with Stopwatch() as timer:
         model = cached_model(
@@ -473,14 +474,36 @@ def stage_n2_subtitles(ctx: StageContext) -> dict:
         if text.strip():
             mapping[build_keyframe_id(ctx.video_id, keyframe.frame_idx)] = text
 
-    empty_ratio = 1 - len(mapping) / max(1, len(ctx.keyframes))
-    if empty_ratio > 0.30 and spans:
-        # §4.5 stop condition. Raised, not warned: a video that transcribed but
-        # landed on almost no keyframes usually means the window or the audio
-        # track is wrong, and finishing the run would bury that in a manifest.
+    keyframes_total = len(ctx.keyframes)
+    keyframes_without_subtitle = keyframes_total - len(mapping)
+    empty_ratio = (
+        keyframes_without_subtitle / keyframes_total if keyframes_total else 0.0
+    )
+    if empty_ratio > max_empty_ratio and spans:
+        # §4.5 stop condition, và ngưỡng đọc từ `params` — Lead chốt 21-08-2026.
+        #
+        # Hai lý lẽ đều đúng, nên không bên nào được thắng bằng mặc định im lặng.
+        # Trọng đúng khi nói khoảng lặng, nhạc và chuyển cảnh sinh ra keyframe
+        # không có chữ một cách hợp lệ, và ném lỗi ở đây giết luôn `n3_audio`
+        # của video đó. §4.5 đúng khi nói một video phiên âm ra hàng chục đoạn
+        # mà rơi vào gần như không keyframe nào thì hoặc sai cửa sổ, hoặc sai
+        # kênh audio — và chạy tiếp sẽ chôn chuyện đó trong một manifest.
+        #
+        # Chuyện đó KHÔNG giả thuyết: 469 video của Quang đi lọt với 69–87%
+        # rỗng vì bản cài đặt của bạn ấy không có chốt này, và mất 60–70% ánh
+        # xạ subtitle cho tới khi `scripts/remap_subtitles.py` dựng lại.
+        #
+        # Nên mặc định vẫn NÉM, còn ai có bộ video thật sự nhiều khoảng lặng
+        # thì nâng ngưỡng **có chủ ý**. Con số đó đi vào `params`, tức
+        # `check_fingerprints` nhìn thấy nó: "nửa bundle này được phép thưa"
+        # trở thành một sự thật được ghi lại và so được giữa các mảnh, thay vì
+        # một dòng log không ai đọc. `max_empty_ratio=1.0` là tắt hẳn, và việc
+        # tắt đó cũng hiện ra ở đúng chỗ ấy.
         raise RuntimeError(
             f"{ctx.video_id}: {empty_ratio:.0%} keyframe khong co subtitle du "
-            f"Whisper ra {len(spans)} doan. Nghi sai cua so hoac sai kenh audio."
+            f"Whisper ra {len(spans)} doan (nguong {max_empty_ratio:.0%}). "
+            "Nghi sai cua so hoac sai kenh audio. Neu bo video nay that su "
+            "nhieu khoang lang, dat params['max_empty_ratio'] cao hon."
         )
 
     return ctx.writer.write_text_part(
@@ -506,6 +529,17 @@ def stage_n2_subtitles(ctx: StageContext) -> dict:
             "vad_filter": True,
             "min_silence_duration_ms": 500,
             "compute_type": "float16",
+            "max_empty_ratio": max_empty_ratio,
+        },
+        # Số đo của TỪNG video, nên phải là `facts` chứ không phải `params`:
+        # `check_fingerprints` so `params` giữa các mảnh, nên một con số đổi theo
+        # video mà nằm trong `params` sẽ khiến mọi video lệch mọi video.
+        facts={
+            "segments": len(spans),
+            "keyframes_total": keyframes_total,
+            "keyframes_with_subtitle": len(mapping),
+            "keyframes_without_subtitle": keyframes_without_subtitle,
+            "empty_ratio": round(empty_ratio, 6),
         },
         elapsed_s=timer.seconds,
     )

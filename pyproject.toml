@@ -92,3 +92,10 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# Prompt của LLM là DỮ LIỆU, không phải mã. Xuống dòng cho vừa 100 cột là đổi
+# đúng chuỗi ký tự model nhận được — và một prompt bị sửa vì lý do định dạng là
+# thứ không ai nghĩ tới khi đi tìm nguyên nhân kết quả đổi. Chỉ tha E501, mọi
+# luật khác vẫn áp dụng cho file này.
+"src/mfe/online/quest.py" = ["E501"]

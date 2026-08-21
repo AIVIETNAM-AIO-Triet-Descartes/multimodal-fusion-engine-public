@@ -112,7 +112,6 @@ class Cascade:
         missing, rather than refusing at import time.
         """
         from mfe.online.encoder import DEFAULT_TEXT_CHECKPOINT, encode_query_text
-        from mfe.online.translate import build_translator
         from mfe.stores.inverted.index import InvertedIndex
         from mfe.stores.vector.index import VectorIndex
 
@@ -163,7 +162,12 @@ class Cascade:
             translator=(
                 overrides["translator"]
                 if "translator" in overrides
-                else load("translator", lambda: _build_translator_with_quest(config))
+                # `cls.` — KHÔNG bỏ được. Thiếu nó thì đây là `NameError`, mà
+                # `load()` bắt mọi lỗi và trả `None`, nên hỏng này không nổ:
+                # translator = None, `resolve_english` không có bản tiếng Anh,
+                # và arm `siglip` tự tắt vì tháp text của nó chỉ hiểu tiếng Anh.
+                # Mất một arm mạnh nhất, dấu vết duy nhất là một dòng log.
+                else load("translator", lambda: cls._build_translator_with_quest(config))
             ),
         )
 
@@ -246,7 +250,10 @@ class Cascade:
         top_k = top_k or self._cfg("rerank_topk", 100)
         query_text_en = self.resolve_english(query_text, query_text_en)
 
-        coarse = self._coarse(query_text, run_id=run_id, query_text_en=query_text_en, ocr_keywords=ocr_keywords)
+        coarse = self._coarse(
+            query_text, run_id=run_id,
+            query_text_en=query_text_en, ocr_keywords=ocr_keywords,
+        )
         if not coarse:
             return []
 

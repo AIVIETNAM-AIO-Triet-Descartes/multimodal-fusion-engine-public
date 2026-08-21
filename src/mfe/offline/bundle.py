@@ -815,6 +815,11 @@ class BundleWriter:
 
     # -- manifest ----------------------------------------------------------
 
+    def _validate_existing_manifest(self, manifest: dict[str, Any]) -> None:
+        """Hook for fail-closed writers before a merged manifest is replaced."""
+
+        return None
+
     def write_part_manifest(
         self, video_id: str, markers: list[dict], keyframes: int, *, merge: bool = False
     ) -> dict:
@@ -851,6 +856,10 @@ class BundleWriter:
             try:
                 self.transport.get(self.layout.part_manifest(video_id), local)
                 previous = json.loads(local.read_text(encoding="utf-8"))
+                # Trọng's fail-closed hook runs FIRST: a worker that would
+                # overwrite a manifest it must not touch should stop before
+                # reading anything out of it, not after.
+                self._validate_existing_manifest(previous)
                 artifacts = previous.get("artifacts") or {}
                 # Manifests written before 20-08-2026 have no `stages`. They are
                 # NOT backfilled from their top-level `env`: that env belongs to

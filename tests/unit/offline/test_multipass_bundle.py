@@ -147,6 +147,8 @@ class TestThreePassesAgreeOnOwnership:
         "config/ingest_shards_batch1_btc.yaml",
         "config/ingest_shards_batch1_btc_images.yaml",
         "config/ingest_shards_batch1_btc_video.yaml",
+        # Lượt 4 — hai nguồn OCR thay chỗ `n5_ocr_qwen`.
+        "config/ingest_shards_batch1_btc_ocr2.yaml",
     ]
 
     def test_every_pass_assigns_the_same_videos_to_the_same_member(self):
@@ -160,12 +162,19 @@ class TestThreePassesAgreeOnOwnership:
         stages = [s for p in self.PLANS for s in load_shard_plan(p).stages]
         assert stages == [
             "n0_import_btc",
-            "n4_siglip", "n5_ocr_easyocr", "n5_ocr_qwen",
+            "n4_siglip", "n5_ocr_easyocr",
             "n2_subtitles", "n3_audio",
+            "n5_ocr_paddle", "n5_ocr_vietocr",
         ]
         # n4_objects: BTC ships them, imported by pass 1.
         # n6_recap / n6_bge_m3: deferred by the Lead.
         assert "n4_objects" not in stages
+        # `n5_ocr_qwen` BỎ HẲN 21-08-2026 — 10,8 giây/ảnh, ~532 giờ GPU cho
+        # batch 1. `n5_ocr_paddle` + `n5_ocr_vietocr` thay chỗ. Khẳng định ở đây
+        # chứ không chỉ xoá khỏi danh sách trên: `plan.stages` là hợp đồng mà
+        # `merge_bundle.py` đọc để đòi đủ mảnh, nên tầng lỡ quay lại yaml là
+        # merge lại đòi 873 mảnh `sviptr_ocr` không tồn tại.
+        assert "n5_ocr_qwen" not in stages
 
     def test_every_assigned_video_can_actually_be_fetched(self):
         """Pass `04` needs a Range entry per video, and it reads the assignment

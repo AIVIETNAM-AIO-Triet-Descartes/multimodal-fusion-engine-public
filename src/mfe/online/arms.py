@@ -167,7 +167,10 @@ class ArmRegistry:
         try:
             for name in saved:
                 self.set_enabled(name, name in names)
-            return self.run(query_text, top_k, run_id, query_text_en=query_text_en, ocr_keywords=ocr_keywords)
+            return self.run(
+                query_text, top_k, run_id,
+                query_text_en=query_text_en, ocr_keywords=ocr_keywords,
+            )
         finally:
             for name, was in saved.items():
                 self.set_enabled(name, was)

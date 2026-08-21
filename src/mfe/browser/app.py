@@ -241,10 +241,14 @@ def render_timeline(kind: str) -> None:
     st.markdown("---")
 
 
-def run_search(query_text: str, top_k: int, run_id: str, text_en: str | None = None, ocr_keywords: str | None = None):
+def run_search(
+    query_text: str, top_k: int, run_id: str,
+    text_en: str | None = None, ocr_keywords: str | None = None,
+):
     started = time.perf_counter()
     results = st.session_state["cascade"].search(
-        query_text=query_text, top_k=top_k, run_id=run_id, query_text_en=text_en or None, ocr_keywords=ocr_keywords
+        query_text=query_text, top_k=top_k, run_id=run_id,
+        query_text_en=text_en or None, ocr_keywords=ocr_keywords,
     )
     elapsed = (time.perf_counter() - started) * 1000
     st.toast(f"{len(results)} ứng viên trong {elapsed:.0f}ms", icon="⚡")
@@ -334,7 +338,10 @@ def tab_qa(top_k: int) -> None:
                 search_hint = quest_result.get("search_hint", search_hint)
                 ocr_keywords = quest_result.get("ocr_keywords", "")
                 logic_question = quest_result.get("logic_question", question)
-                st.info(f"✨ QUEST: **{search_hint}** | OCR: **{ocr_keywords}** | Hỏi: **{logic_question}**")
+                st.info(
+                    f"✨ QUEST: **{search_hint}** | OCR: **{ocr_keywords}** "
+                    f"| Hỏi: **{logic_question}**"
+                )
         
         st.session_state["qa_logic_question"] = logic_question
         st.session_state["results_qa"] = run_search(

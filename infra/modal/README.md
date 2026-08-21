@@ -1,4 +1,4 @@
-# infra/modal/ — STUB. Không kích hoạt Sprint 1.
+# infra/modal/ — production app đặc dụng + storage stub Sprint 1
 
 **Owner:** Vỹ Triết. **Spec:** `docs/01-lead-coordination-infra.md` §3.2.
 
@@ -14,9 +14,19 @@ Ba mảnh đã dựng sẵn để lúc đó diff nằm gọn:
 |---|---|---|
 | Storage backend | `src/mfe/core/backends/modal.py` | Stub — raise NOT_IMPLEMENTED |
 | Config | `config/modal.yaml` | Khung đủ, không active |
-| Deploy | `infra/modal/` (đây) | Trống |
+| Deploy storage chung | `infra/modal/` (đây) | Stub; chỉ có worker BTC OCR2 đặc dụng |
 
 Stub **fail to**, không âm thầm fallback về local. Fallback âm thầm khiến người ta tưởng đang test Modal trong khi không.
+
+## Ngoại lệ vận hành khẩn cấp: BTC OCR2
+
+`btc_ocr2.py` là worker GPU đặc dụng cho lượt PaddleOCR + VietOCR của Trọng. Nó
+không kích hoạt `src/mfe/core/backends/modal.py` và không thay đổi storage backend
+Sprint 1. App chỉ gắn Volume `keyframes-btc`, chạy đúng partition `trong/modal`
+được kiểm bằng `config/ingest_workers_batch1_btc_ocr2.yaml`, rồi ghi qua bundle
+protocol hiện có.
+
+Runbook: `docs/trong/btc-ocr2-parallel-kaggle-modal.md`.
 
 ## TODO khi scale — ghi ở đây, KHÔNG làm trong Sprint 1
 
