@@ -229,7 +229,7 @@ class MachineTranslator:
         """
         try:
             return auto_tokenizer.from_pretrained(self.checkpoint)
-        except (TypeError, ValueError) as err:
+        except Exception as err:  # noqa: BLE001 - moi loi deu roi ve tokenizer.json
             from transformers import PreTrainedTokenizerFast
 
             logger.info(
@@ -326,7 +326,15 @@ class QueryTranslator:
             try:
                 text_en = backend.translate(text).strip()
             except Exception as err:  # noqa: BLE001 — try the next tier, then abstain
-                logger.warning("translation tier %s failed (%s); trying the next", tier, err)
+                # Ghi ca KIEU loi, khong chi thong diep. Ngay 21-08-2026 tren
+                # Kaggle no in ra "translation tier mt failed (0)" — mot chuoi
+                # "0" khong noi duoc gi, va phai them mot vong len Kaggle nua
+                # moi biet do la KeyError hay IndexError hay gi khac. Mot dong
+                # log ve loi ma khong dinh danh duoc loi thi bang khong co.
+                logger.warning(
+                    "translation tier %s failed (%s: %s); trying the next",
+                    tier, type(err).__name__, err,
+                )
                 continue
             if not text_en:
                 logger.warning("translation tier %s returned an empty string", tier)
