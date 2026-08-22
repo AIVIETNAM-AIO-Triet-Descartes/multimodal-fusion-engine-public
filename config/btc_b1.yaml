@@ -75,9 +75,24 @@ retrieval:
   # một cách có hệ thống, và điểm thấp lúc đó không phân biệt được là do truy
   # hồi kém hay do thiếu dữ liệu.
   fusion_weights:
+    # siglip=2.0 — DO ĐƯỢC, không đoán. Coordinate ascent trên 42 câu
+    # `eval/dev/*`, kiểm chéo trên 15 câu `eval/heldout/*` chưa từng đụng tới:
+    #
+    #             Final        trúng      hạng trung bình
+    #   dev   0,5429 → 0,5810   32→34/42     13,2 → 11,0
+    #   held  0,5867 → 0,6400   12→12/15     15,8 →  6,1
+    #
+    # Ba arm văn bản đang DÌM siglip khi trọng số đều nhau: thêm hai arm phụ đề
+    # vào siglip làm R@5 tụt 0,429 → 0,286 trong khi R@100 tăng. Chúng tìm ra
+    # thêm 5 câu mà không arm nào khác thấy — vấn đề chỉ nằm ở chỗ chúng xếp ở
+    # đâu. Cho siglip đếm gấp đôi là đủ; không arm nào cần tắt.
+    #
+    # Lưới quét là (0 · 0,5 · 1 · 2 · 4) + OFF, và ascent dừng sau một thay đổi
+    # duy nhất — nên 2.0 là cực trị địa phương trên lưới đó, không phải giá trị
+    # tối ưu. Lưới mịn hơn chưa quét.
     clip: 1.0
     bm25: 1.0
-    siglip: 1.0
+    siglip: 2.0
     bge_m3: 1.0
     ocr_sviptr: 1.0
     subtitle_partial: 1.0
