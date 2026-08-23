@@ -102,6 +102,10 @@ retrieval:
     ocr_paddle: 1.0
     ocr_vietocr: 1.0
     object: 1.0
+    # CLAP nghe âm thanh. Trên bộ dev toàn mô tả thị giác nó đóng góp ~0, nên
+    # 1.0 ở đây là chỗ đứng chứ không phải giá trị đã đo — chưa có câu hỏi nào
+    # về tiếng động để đo bằng.
+    clap: 1.0
   rerank_budget_ms: 20000
   rerank_depth: 100
   temporal_window_frames: 640

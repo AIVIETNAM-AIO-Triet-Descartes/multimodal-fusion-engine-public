@@ -46,6 +46,20 @@ DENSE_ARM_SPECS: dict[str, tuple[str, int, str, str, str]] = {
         "en",
         "Ảnh qua SigLIP SO400M — tháp text CHỈ hiểu tiếng Anh",
     ),
+    # CLAP nghe ÂM THANH, không nhìn ảnh. Nó chỉ trả lời được truy vấn mô tả
+    # tiếng động ("tiếng trống", "tiếng còi xe"), và trên một bộ đề toàn mô tả
+    # thị giác nó sẽ đóng góp gần bằng không — đó không phải lỗi của arm.
+    #
+    # Vector vẫn đánh địa chỉ theo `keyframe_id` như mọi arm khác: cửa sổ âm
+    # thanh được gán về keyframe gần nhất lúc offline, nên hợp nhất không cần
+    # biết đây là tín hiệu khác loại.
+    "clap": (
+        "aic_keyframe_clap_v1",
+        512,
+        "laion/clap-htsat-unfused",
+        "en",
+        "Âm thanh qua CLAP — tháp text tiếng Anh, chỉ hợp truy vấn về tiếng động",
+    ),
 }
 
 

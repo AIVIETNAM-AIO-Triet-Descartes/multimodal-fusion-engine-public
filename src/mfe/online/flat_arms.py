@@ -74,7 +74,11 @@ SOURCE_FILE = {
 }
 
 #: Tên arm dense -> tên file phẳng.
-DENSE_FILE = {"siglip": "siglip_vectors.npz", "bge_m3": "dense_vectors.npz"}
+DENSE_FILE = {
+    "siglip": "siglip_vectors.npz",
+    "bge_m3": "dense_vectors.npz",
+    "clap": "audio_features.npz",
+}
 
 
 class FlatBundle:

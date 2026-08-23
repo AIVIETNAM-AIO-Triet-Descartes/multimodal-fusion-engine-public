@@ -57,6 +57,7 @@ DEFAULT_ROOT = "stores/flat"
 DEFAULT_CONFIG = "config/btc_b1.yaml"
 CACHE_DIR = Path(".cache/flat")
 SIGLIP_CHECKPOINT = "google/siglip-so400m-patch14-384"
+CLAP_CHECKPOINT = "laion/clap-htsat-unfused"
 
 #: Arm bật mặc định. `ocr_vietocr` chứ không `ocr`: đo trên 873 video, vietocr có
 #: 85,4% token nằm trong vốn từ tiếng Việt so với 75,7% của easyocr và 68,9% của
@@ -67,6 +68,7 @@ DEFAULT_ARMS = ("siglip", "ocr_vietocr", "subtitle", "subtitle_exact")
 #: một nguồn văn bản riêng: nó là cách tra KHÁC trên cùng `subtitles.json`.
 WEIGHT_KEY = {
     "siglip": "siglip",
+    "clap": "clap",
     "ocr": "ocr",
     "ocr_vietocr": "ocr_vietocr",
     "ocr_paddle": "ocr_paddle",
@@ -182,6 +184,30 @@ def encode_query_siglip(text_en: str) -> np.ndarray:
     return (vector / np.linalg.norm(vector, axis=1, keepdims=True))[0]
 
 
+def encode_query_clap(text_en: str) -> np.ndarray:
+    """Tháp text CLAP. Cùng checkpoint `n3_audio` dùng cho phía âm thanh.
+
+    CLAP **nghe**, không nhìn: truy vấn phải mô tả tiếng động ("tiếng trống",
+    "còi xe"), không phải cảnh. Đưa một mô tả thị giác vào đây vẫn ra kết quả,
+    xếp hạng vẫn trông hợp lý, và nó không có nghĩa gì.
+    """
+    import torch
+    from transformers import ClapModel, ClapProcessor
+
+    model = ClapModel.from_pretrained(CLAP_CHECKPOINT).eval()
+    processor = ClapProcessor.from_pretrained(CLAP_CHECKPOINT)
+    batch = processor(text=[text_en], return_tensors="pt", padding=True)
+    with torch.no_grad():
+        out = model.get_text_features(**batch)
+    pooled = getattr(out, "pooler_output", None)
+    vector = (pooled if pooled is not None else out).numpy()
+    return (vector / np.linalg.norm(vector, axis=1, keepdims=True))[0]
+
+
+#: Arm dense -> hàm mã hoá truy vấn. Cả hai đều cần tiếng Anh.
+DENSE_ENCODER = {"siglip": encode_query_siglip, "clap": encode_query_clap}
+
+
 def to_candidates(keys, arm: str) -> list[Candidate]:
     return [
         Candidate(keyframe_id=k, video_id=k.split("#")[0], score=1.0 / rank,
@@ -194,23 +220,23 @@ def run_arms(bundle, base, query_vi, query_en, arms, pool, use_cache, vectors=No
     """`{ten_arm: [Candidate]}`. Arm không chạy được thì vắng mặt, kèm log lý do."""
     runs: dict[str, list[Candidate]] = {}
 
+    vectors = vectors or {}
     for arm in arms:
-        if arm == "siglip":
-            if vectors is None:
-                logger.warning("siglip: khong nap duoc ma tran")
+        if arm in DENSE_ENCODER:
+            if arm not in vectors:
+                logger.warning("%s: khong nap duoc ma tran", arm)
                 continue
             if not query_en:
                 logger.warning(
-                    "siglip: khong co ban dich tieng Anh — arm ngoi ngoai. "
-                    "Dung --en de dua tay, hoac --translate de goi envit5."
+                    "%s: khong co ban dich tieng Anh — arm ngoi ngoai. "
+                    "Dung --en de dua tay, hoac --translate de goi envit5.", arm
                 )
                 continue
-            vec_ids, matrix = vectors
-            vector = encode_query_siglip(query_en)
+            vec_ids, matrix = vectors[arm]
+            vector = DENSE_ENCODER[arm](query_en)
             scores = np.asarray(matrix) @ vector
             order = np.argsort(-scores)[:pool]
-            keys = [vec_ids[i] for i in order]
-            runs["siglip"] = to_candidates(keys, "siglip")
+            runs[arm] = to_candidates([vec_ids[i] for i in order], arm)
             continue
 
         source = "subtitle" if arm == "subtitle_exact" else arm
@@ -274,15 +300,15 @@ def main() -> None:
     if not base.is_dir():
         raise SystemExit(f"{base} khong ton tai — kho phang nam o dau?")
 
-    sources = {("subtitle" if a == "subtitle_exact" else a) for a in arms} - {"siglip"}
-    models = {"siglip"} if "siglip" in arms else set()
+    models = {a for a in arms if a in DENSE_ENCODER}
+    sources = {("subtitle" if a == "subtitle_exact" else a) for a in arms} - models
 
     started = time.perf_counter()
     bundle = FlatBundle.load(root, sources=sources, models=set())
-    vectors = (
-        load_vectors(base, "siglip", use_cache=not args.no_cache)
-        if "siglip" in models else None
-    )
+    vectors = {
+        model: load_vectors(base, model, use_cache=not args.no_cache)
+        for model in sorted(models)
+    }
     logger.info("nap xong %.1fs · %s", time.perf_counter() - started, bundle.report())
 
     query_en = args.en
