@@ -28,7 +28,8 @@ bật một tầng hỏng **không bao giờ tệ hơn** tắt nó — và ngư�
 lý do thay vì nhìn một thứ hạng đổi mà không hiểu vì sao.
 
 Ba tầng này đều gọi dịch vụ ngoài hoặc tải model nặng, nên không cái nào bật mặc
-định.
+định — vì **chi phí và độ trễ**, không phải vì dữ liệu. BTC cho phép chia sẻ dữ
+liệu tự do (Lead xác nhận 23-08-2026).
 """
 
 from __future__ import annotations
@@ -380,8 +381,10 @@ class VlmTier:
     Bản của Bảo cũng vậy — cái tên "Llama-3.2-90B" trên giao diện của bạn ấy thực
     tế gần như không bao giờ chạy cho rerank.
 
-    **Ảnh keyframe của BTC rời khỏi máy khi tầng này chạy.** Đó là dữ liệu cuộc
-    thi gửi cho dịch vụ bên thứ ba. Không bật mặc định, và người bật cần biết.
+    Tầng này gửi ảnh keyframe ra dịch vụ ngoài. **BTC cho phép chia sẻ dữ liệu tự
+    do** (Lead xác nhận 23-08-2026), nên đó không phải rào cản. Lý do nó vẫn tắt
+    mặc định chỉ là **tiền và thời gian**: đo được 32 giây cho 12 ảnh, và mỗi lượt
+    là một lần gọi API tính phí.
     """
 
     name = "vlm"

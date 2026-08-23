@@ -18,8 +18,9 @@ Thứ tự là một lựa chọn: tầng sau ghi đè tầng trước ở phầ
 chạy trước, đắt và nông chạy sau, để cái đắt chỉ nói lời cuối trên phần đã được
 đẩy lên.
 
-Không tầng nào bật mặc định. Ba tầng của Bảo đều gọi ra ngoài — `vlm` **gửi ảnh
-keyframe của BTC cho dịch vụ bên thứ ba**, và đó là quyết định của người bật.
+Không tầng nào bật mặc định, vì **chi phí và độ trễ** — không phải vì dữ liệu.
+BTC cho phép chia sẻ dữ liệu tự do (Lead xác nhận 23-08-2026), nên `vlm` gửi ảnh
+ra ngoài là chuyện bình thường; nó chỉ chậm (32s cho 12 ảnh) và tính tiền.
 """
 
 from __future__ import annotations
