@@ -81,8 +81,8 @@ class FeaturesConfig(_Section):
 
     Sprint 1 uses `provided`: BTC ships `clip-features/*.npy` and `objects/*.json`
     already computed, so no checkpoint is loaded and `models.*` may stay null.
-    Switching to `model` is what turns `offline/features/*.py` on; that is a
-    later sprint, and `build_enabled_modules` is what enforces the
+    Switching to `model` is what turns the model-running stages on; that is a
+    later sprint, and `mfe.offline.stages` is what enforces the
     required/optional split at that point.
     """
 

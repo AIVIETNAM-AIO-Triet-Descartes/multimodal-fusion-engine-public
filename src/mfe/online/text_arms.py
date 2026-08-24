@@ -45,7 +45,6 @@ _MAX_TOP_K = 500
 TEXT_ARM_SPECS: dict[str, tuple[str, bool]] = {
     "subtitle_exact": ("subtitle", True),
     "subtitle_partial": ("subtitle", False),
-    "ocr_sviptr": ("ocr_sviptr", False),
     "ocr": ("ocr", False),
     "ocr_paddle": ("ocr_paddle", False),
     "ocr_vietocr": ("ocr_vietocr", False),
@@ -56,7 +55,6 @@ TEXT_ARM_SPECS: dict[str, tuple[str, bool]] = {
 _DESCRIPTIONS = {
     "subtitle_exact": "Khớp nguyên văn cụm trong phụ đề (match_phrase)",
     "subtitle_partial": "Chồng lấn từ khoá trong phụ đề (match)",
-    "ocr_sviptr": "OCR SVIPTR — đọc băng rôn, im lặng khi không có chữ",
     "ocr": "OCR easyocr — phủ mọi frame, lẫn nhiễu từ đồng hồ",
     "ocr_paddle": "OCR PaddleOCR — logo/đồng hồ sạch, RỤNG DẤU tiếng Việt",
     "ocr_vietocr": "OCR VietOCR trên vùng chữ của PaddleOCR — giữ dấu, lẫn ở logo",

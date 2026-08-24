@@ -194,7 +194,7 @@ def run(
         raise ContractError(
             ErrorCode.INVALID_ARGUMENT,
             f"features.source={config.features.source!r} needs the model path "
-            "(offline/features/*.py), which Sprint 1 does not implement. "
+            "(mfe.offline.stages), which this path does not run. "
             "Set features.source: provided.",
         )
 

@@ -66,7 +66,6 @@ logger = logging.getLogger(__name__)
 SOURCE_FILE = {
     "subtitle": "subtitles.json",
     "ocr": "ocr_text.json",
-    "ocr_sviptr": "sviptr_ocr.json",
     "ocr_paddle": "paddle_ocr.json",
     "ocr_vietocr": "viet_ocr.json",
     "object": "objects_text.json",

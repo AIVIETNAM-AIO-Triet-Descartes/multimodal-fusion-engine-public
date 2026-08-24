@@ -72,7 +72,6 @@ WEIGHT_KEY = {
     "ocr": "ocr",
     "ocr_vietocr": "ocr_vietocr",
     "ocr_paddle": "ocr_paddle",
-    "ocr_sviptr": "ocr_sviptr",
     "subtitle": "subtitle_partial",
     "subtitle_exact": "subtitle_exact",
     "object": "object",

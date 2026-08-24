@@ -39,6 +39,22 @@ __all__ = ("LABELS_VI", "missing_labels", "translate_labels")
 
 #: English OpenImages entity -> Vietnamese synonyms, most natural term first.
 LABELS_VI: dict[str, tuple[str, ...]] = {
+    # --- 12 nhãn thiếu, phát hiện 24-08-2026 khi dựng `objects_text` trên đủ
+    # 177.321 keyframe của batch 1. `missing_labels()` báo ra chúng.
+    # `Tiger` đáng chú ý: đề `bo-de-thu-nghiem/2-kis` hỏi thẳng về đàn hổ, và
+    # không có dòng này thì arm `object` không thể khớp câu đó.
+    "Tiger": ("hổ", "con hổ", "cọp"),
+    "Koala": ("gấu túi", "koala"),
+    "Raccoon": ("gấu mèo", "gấu trúc Mỹ", "raccoon"),
+    "Remote control": ("điều khiển từ xa", "remote", "điều khiển"),
+    "Measuring cup": ("cốc đong", "ca đong", "cốc chia vạch"),
+    "Syringe": ("ống tiêm", "kim tiêm", "xi lanh"),
+    "Brassiere": ("áo ngực", "áo lót"),
+    "Tiara": ("vương miện", "mũ miện"),
+    "Horn": ("sừng", "kèn"),
+    "Artichoke": ("atisô", "hoa atisô"),
+    "Bagel": ("bánh vòng", "bánh bagel"),
+    "Pretzel": ("bánh quy xoắn", "bánh pretzel"),
     # --- người và bộ phận cơ thể -------------------------------------------
     "Person": ("người", "con người"),
     "Man": ("người đàn ông", "nam", "chú", "anh"),

@@ -94,7 +94,6 @@ retrieval:
     bm25: 1.0
     siglip: 2.0
     bge_m3: 1.0
-    ocr_sviptr: 1.0
     subtitle_partial: 1.0
     subtitle_exact: 1.0
     caption: 1.0

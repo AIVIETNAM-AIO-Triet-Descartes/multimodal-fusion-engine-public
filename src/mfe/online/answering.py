@@ -23,7 +23,7 @@ một câu trả lời đúng cho tới lúc chấm điểm, và §9.1 nói rõ 
 Bằng chứng gom từ ĐÂU
 ----------------------
 Từ text store, đúng những nguồn đã ingest — hiện là 7: `subtitle`, `ocr`,
-`ocr_sviptr`, `ocr_paddle`, `ocr_vietocr`, `object`, `caption`. Không phải từ
+`ocr_paddle`, `ocr_vietocr`, `object`, `caption`. Không phải từ
 ảnh: đọc lại ảnh bằng một model nữa ở thời điểm truy vấn là trả lại chi phí của
 cả tầng offline, ngay trong 5 phút đồng hồ của một lượt thi.
 
@@ -52,7 +52,6 @@ logger = logging.getLogger(__name__)
 SOURCE_ORDER: tuple[str, ...] = (
     "ocr_vietocr",
     "ocr_paddle",
-    "ocr_sviptr",
     "ocr",
     "subtitle",
     "object",

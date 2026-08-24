@@ -9,9 +9,9 @@ release already contains, per video:
     objects/{video_id}/{n:03d}.json     object detection output
     media-info/{video_id}.json          title / keywords / author / length
 
-So `offline/features/*.py` (which loads models) stays untouched and this module
-supplies the same signals by reading files. `config.features.source` selects
-between the two; see `mfe.offline.features.base.build_enabled_modules`.
+Nothing here loads a checkpoint: the signals are read off disk. The stage that
+*does* run models is `mfe.offline.stages`, and it addresses keyframes the same
+way, so the two paths produce comparable artifacts.
 
 Everything here is deliberately dependency-light — numpy for the .npy, stdlib
 for the rest, including a small JPEG header parser so that reading an image's

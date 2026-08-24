@@ -28,7 +28,6 @@ docs/02 §1 nói thẳng: giai đoạn này **không** để đạt độ chính
 | `ingest.py` | entrypoint | orchestrate 1→4 |
 | `probe.py` | [1] | **fps vào hệ thống ở đây** — đọc từng video, không đoán |
 | `keyframes.py` | [2] | sinh 1 lúc 2 record: Asset + Relational |
-| `features/` | [3] | cắm-rút qua config (docs/02 §3) |
 | `writers.py` | [4] | seam Quốc Đạt→Công Quang/Nhật Bảo |
 | `throughput.py` | ngang [1-4] | đo để ước lượng scale (docs/02 §5) |
 
@@ -46,4 +45,12 @@ docs/02 §1 nói thẳng: giai đoạn này **không** để đạt độ chính
 
 ## Thêm modality mới (ASR, ...)
 
-Một file mới trong `features/`, một key mới trong `config/*.yaml` dưới `models:`. Không đụng chỗ khác — đó là điểm của `features/base.py`.
+Một tầng mới trong `mfe/offline/stages.py` + một mục trong `STAGES`, rồi khai nó
+trong `plan.stages` của file shard yaml. `plan.stages` là **hợp đồng của bundle**:
+`merge` đòi đủ mảnh cho mọi tầng nằm trong đó, nên thêm/bớt ở đây mới là thêm/bớt
+thật.
+
+> `features/` (registry cắm-rút cho các module chạy model) **đã bị xoá 24-08-2026**.
+> Không nơi nào gọi `build_enabled_modules`, và bốn module trong đó là stub
+> `NotImplementedError` — đường chạy thật luôn là `features.source: provided` cộng
+> `stages.py`. Một stub sống lâu trông như việc đang dở.
