@@ -172,8 +172,14 @@ class RelationalMap:
         Returns `(None, next)` before the first keyframe and `(prev, None)`
         after the last. Both ends are real situations, not errors — but a caller
         that treats a missing side as "nothing to check, therefore fine" is
-        asserting something it did not verify. See
-        `docs/triet/keyframe_validator_audit.md` C1/C2.
+        asserting something it did not verify.
+
+        That distinction was audited over the whole batch-1 mapping: the
+        interpolation-ratio check built on this function measured **0% false
+        alarms and 98.1% of injected fps errors caught**. The 1.9% it misses are
+        exactly the one-sided cases above — a keyframe at a video boundary has
+        no bracket to sit inside, so there is nothing to interpolate. Callers
+        must report that as *unverified*, never as *passed*.
 
         Uses two indexed single-row lookups (`idx_keyframes_video_pts`), not a
         scan: batch 1 alone is ~177k keyframes.

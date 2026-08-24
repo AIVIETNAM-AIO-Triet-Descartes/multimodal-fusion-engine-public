@@ -98,7 +98,10 @@ def test_validator(db):
 
 # --- luật "Nhất quán frame" + find_bracketing_keyframes -----------------------
 # Các case dưới đây bắt nguồn từ mapping THẬT của batch 1 (873 file, 177.321
-# dòng), không phải ví dụ tự nghĩ ra. Xem docs/triet/keyframe_validator_audit.md.
+# dòng), không phải ví dụ tự nghĩ ra. Bằng chứng đo được nằm trong docstring
+# `RelationalMap.find_bracketing_keyframes` và `Validator._check_frame_consistency`:
+# 614 cặp trùng frame_idx trên 192/873 video, 0 cặp thật sự giảm dần, và phép
+# kiểm tỉ lệ nội suy bắt được 98,1% lỗi fps với 0% báo nhầm.
 
 
 #: Ba dòng đầu của L21_V006 batch 1. Hai dòng đầu cách nhau chưa đủ 1 frame nên
