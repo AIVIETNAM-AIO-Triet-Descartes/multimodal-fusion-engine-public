@@ -29,3 +29,14 @@ paddleocr>=2.7
 # Chỉ nhận dạng dòng chữ, KHÔNG phát hiện vùng chữ. Nó được ghép với bộ phát
 # hiện của PaddleOCR — xem `stage_n5_ocr_vietocr`.
 vietocr>=0.3.8
+
+# --- Đẩy part lên Modal Volume -------------------------------------------
+# BẮT BUỘC, và nó đã từng bị quên: `mfe.offline.transport.build_transport`
+# `import modal` bên trong `ModalVolumeTransport.__init__`, nên thiếu gói này thì
+# ô Step 0b chết bằng `ModuleNotFoundError: No module named 'modal'` — SAU khi đã
+# clone repo và cài xong mọi thứ nặng.
+#
+# `>=1.0` cho khớp bốn file requirements kia. `modal` nằm trong `OTHER_PACKAGES`
+# (xuất xứ, không phải con số) nên lệch bản không làm hỏng bundle — nhưng lệch
+# bản API thì hỏng lượt chạy.
+modal>=1.0

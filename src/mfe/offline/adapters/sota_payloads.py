@@ -51,6 +51,17 @@ SOURCE_FILES: dict[str, str] = {
     "ocr": "ocr_text.json",
     "ocr_sviptr": "sviptr_ocr.json",
     "object": "objects_text.json",
+    # `caption` KHONG con artifact nao cua ta sinh ra: `n6_recap` (ReCap qua
+    # Gemini/Qwen2-VL) da bi xoa 25-08-2026, nhom doi han sang `caption_qwen`.
+    #
+    # DONG NAY VAN PHAI O LAI, va no khong phai dau vet sot. `dense_captions.json`
+    # la file **Bao xuat ra** (xem `SOTA_SOURCES` ngay duoi va
+    # `notebooks/reference/dense_captions_qwen.json`); go no di la mat kha nang
+    # doc bundle cua Bao, chu khong phai don mot nhanh chet.
+    #
+    # Vi the `caption` la source DUY NHAT o day khong co `Artifact` doi ung —
+    # `_assert_registries_agree` chi soi chieu THEO HUONG artifact -> source, nen
+    # tinh trang do hop le va co chu y.
     "caption": "dense_captions.json",
     "ocr_paddle": "paddle_ocr.json",
     "ocr_vietocr": "viet_ocr.json",

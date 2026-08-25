@@ -852,8 +852,9 @@ def stage_n5_ocr_qwen(ctx: StageContext) -> dict:
 
     Chay theo LO, va do la mot sua loi hieu nang chu khong phai doi model. Do
     duoc tren `L21_V001`: mot anh mot lan `generate()` cho **10,8 giay/anh**, tuc
-    **~532 gio GPU cho batch 1**. Trong cung repo nay `build_qwen_generate()` da
-    gop lo cho ReCap; tang nay thi khong, khong vi ly do nao.
+    **~532 gio GPU cho batch 1**. Luc do trong repo con `build_qwen_generate()` da
+    gop lo san cho ReCap, con tang nay thi khong — khong vi ly do nao.
+    (`build_qwen_generate` da bi xoa 25-08-2026 cung `n6_recap`.)
     """
     import torch  # noqa: PLC0415
     from PIL import Image  # noqa: PLC0415
@@ -868,7 +869,7 @@ def stage_n5_ocr_qwen(ctx: StageContext) -> dict:
         processor = AutoProcessor.from_pretrained(checkpoint)
         # Sinh theo lo thi PHAI dem trai. Dem phai day token dem vao GIUA prompt
         # va cho model viet tiep, nen no sinh tu sau mot chuoi dem — output rac
-        # ma khong ném loi. `build_qwen_generate()` cung dat dong nay.
+        # ma khong ném loi.
         processor.tokenizer.padding_side = "left"
         model = Qwen2VL.from_pretrained(
             checkpoint,
@@ -1543,137 +1544,6 @@ def stage_n5_ocr_vietocr(ctx: StageContext) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# N6 — ReCap captions, then BGE-M3
-# ---------------------------------------------------------------------------
-
-
-def group_shots(
-    keyframes: list[Keyframe],
-    gap_seconds: float = 2.0,
-    *,
-    max_keyframes: int = 8,
-    max_duration_s: float = 20.0,
-) -> list[list[int]]:
-    """Group adjacent keyframes into shots. Gap-based, but **bounded**.
-
-    An approximation of the paper, which segments with AutoShot; installing a deep
-    model purely to cut shots would drag one back into the place DAKE just removed
-    it from. It goes in the manifest, and it is the first suspect if captions come
-    out poor — before the prompt is blamed (§4.6).
-
-    **The bounds are not decoration; without them the gap rule collapses.** Cutting
-    only on `gap > threshold` is single-linkage chaining: one long chain absorbs
-    everything. Measured on the 16-video BTC set, the threshold has a cliff rather
-    than a slope — 2.0s gives 2537 shots, 6.0s gives 259, and 8.0s gives **16**,
-    one per video, because BTC's largest keyframe gap is 8.4s.
-
-    Worse, the cliff sits on the wrong side for the pass this is built for. DAKE
-    *guarantees* every gap is at most 2.0s, so the 2.0s threshold §4.6 proposed —
-    chosen precisely to match that guarantee — never fires at all: a 400-keyframe
-    DAKE video becomes one shot. The plan's own density promise defeats the plan's
-    own shot rule.
-
-    Capping length removes the cliff and makes the Gemini bill predictable, which
-    matters more here than shot purity: an over-cut shot costs one extra call, an
-    under-cut one costs the whole video's caption quality.
-    """
-    shots: list[list[int]] = []
-    current: list[int] = []
-    for index, keyframe in enumerate(keyframes):
-        if current:
-            previous = keyframes[current[-1]]
-            too_far = keyframe.pts_time - previous.pts_time > gap_seconds
-            too_many = len(current) >= max_keyframes
-            too_long = keyframe.pts_time - keyframes[current[0]].pts_time > max_duration_s
-            if too_far or too_many or too_long:
-                shots.append(current)
-                current = []
-        current.append(index)
-    if current:
-        shots.append(current)
-    return shots
-
-
-def build_qwen_generate(checkpoint: str = "Qwen/Qwen2-VL-7B-Instruct", **kwargs):
-    """A `generate(prompts) -> list[str]` backed by a local Qwen2-VL.
-
-    Loaded once and reused across every batch — the model is 5 GB in 4-bit and
-    reloading it per video would dwarf the work. Batch size is set by the caller
-    because it is VRAM-bound, not compute-bound: 7B weights plus KV cache for N
-    sequences of ~5k tokens against a 15 GB T4 is tight, and the working value has
-    to be measured rather than assumed.
-    """
-    import torch  # noqa: PLC0415
-    from PIL import Image  # noqa: PLC0415
-    from transformers import AutoProcessor, BitsAndBytesConfig  # noqa: PLC0415
-    from transformers import Qwen2VLForConditionalGeneration as Qwen2VL  # noqa: PLC0415
-
-    processor = AutoProcessor.from_pretrained(checkpoint)
-    processor.tokenizer.padding_side = "left"   # bat buoc khi generate theo lo
-    model = Qwen2VL.from_pretrained(
-        checkpoint,
-        quantization_config=BitsAndBytesConfig(load_in_4bit=True),
-        device_map="auto",
-        **kwargs,
-    ).eval()
-
-    def generate(prompts):
-        texts, images = [], []
-        for prompt in prompts:
-            content = [{"type": "image"} for _ in prompt.images]
-            content.append({"type": "text", "text": prompt.text})
-            texts.append(
-                processor.apply_chat_template(
-                    [{"role": "user", "content": content}], add_generation_prompt=True
-                )
-            )
-            images.append([Image.open(path).convert("RGB") for path in prompt.images])
-
-        inputs = processor(
-            text=texts, images=images, padding=True, return_tensors="pt"
-        ).to(model.device)
-        with torch.no_grad():
-            generated = model.generate(**inputs, max_new_tokens=400, do_sample=False)
-        return processor.batch_decode(
-            generated[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True
-        )
-
-    return generate
-
-
-def build_gemini_generate(model_name: str = "gemini-3.6-flash"):
-    """A `generate(prompts) -> list[str]` backed by the Gemini API, one call each.
-
-    Kept alongside the local backend so the two can be compared on the same data,
-    the same prompt and the same failure counting — otherwise "which is better"
-    turns into comparing two runs that differ in more than the model.
-    """
-    from google import genai  # noqa: PLC0415
-
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        raise RuntimeError(
-            "thieu GEMINI_API_KEY — dat trong Kaggle Secrets, khong trong o notebook"
-        )
-    client = genai.Client(api_key=api_key)
-
-    def generate(prompts):
-        answers = []
-        for prompt in prompts:
-            parts = [
-                genai.types.Part.from_bytes(data=path.read_bytes(), mime_type="image/jpeg")
-                for path in prompt.images
-            ]
-            response = client.models.generate_content(
-                model=model_name, contents=[*parts, prompt.text]
-            )
-            answers.append(response.text or "")
-        return answers
-
-    return generate
-
-
-# ---------------------------------------------------------------------------
 # N6 — Qwen2.5-VL qua vLLM: caption + chu tren man hinh, MOT lan sinh
 # ---------------------------------------------------------------------------
 
@@ -2034,152 +1904,61 @@ def stage_n6_ocr_qwen25(ctx: StageContext) -> dict:
     )
 
 
-def stage_n6_recap(ctx: StageContext) -> dict:
-    """Recurrence captioning for ONE video. See `mfe.offline.recap` for batching.
-
-        (C_t, M_t) = LVLM(S_t, M_{t-1})
-
-    This entry point exists for the per-video path (a handful of videos, or a
-    Gemini run where the rate limit makes batching pointless). At batch-1 scale
-    the local model has to run `recap.run_recap` over many videos at once — the
-    recurrence serialises one video, and one video at a time leaves the GPU idle
-    between short decodes (§4.6b).
-
-    Checkpointed **per shot**: this stage is not reproducible, so a lost round is
-    not re-doable work, it is different data.
-    """
-    from mfe.offline.recap import (  # noqa: PLC0415
-        VideoState,
-        run_recap,
-        summarise,
-    )
-
-    backend = ctx.params.get("recap_backend", "qwen")
-    language = ctx.params.get("caption_language", "vi")
-    gap = ctx.params.get("shot_gap_seconds", 2.0)
-
-    shots = build_shots(ctx, gap)
-    checkpoint_path = ctx.workdir / f"recap_{ctx.video_id}.json"
-    saved = (
-        json.loads(checkpoint_path.read_text(encoding="utf-8"))
-        if checkpoint_path.is_file()
-        else None
-    )
-    state = VideoState.resume(ctx.video_id, shots, saved)
-
-    generate = ctx.params.get("generate")
-    if generate is None:
-        generate = (
-            build_qwen_generate(ctx.params.get("qwen_checkpoint", "Qwen/Qwen2-VL-7B-Instruct"))
-            if backend == "qwen"
-            else build_gemini_generate(ctx.params.get("gemini_model", "gemini-3.6-flash"))
-        )
-
-    def save(current: VideoState) -> None:
-        checkpoint_path.write_text(
-            json.dumps(current.to_checkpoint(), ensure_ascii=False), encoding="utf-8"
-        )
-
-    with Stopwatch() as timer:
-        run_recap([state], generate, language=language, batch_videos=1, on_shot=save)
-
-    ctx.writer.write_file(checkpoint_path, ctx.layout.recap_memory(ctx.video_id))
-    report = summarise([state])
-    return ctx.writer.write_text_part(
-        "dense_captions",
-        ctx.video_id,
-        state.captions,
-        model=(
-            ctx.params.get("qwen_checkpoint", "Qwen/Qwen2-VL-7B-Instruct")
-            if backend == "qwen"
-            else ctx.params.get("gemini_model", "gemini-3.6-flash")
-        ),
-        params={
-            "backend": backend,
-            "language": language,
-            "shots": report["shots"],
-            "shot_segmentation": f"keyframe gap <= {gap}s (xap xi AutoShot)",
-            "context_images_per_shot": 4,
-            # The number that says whether a 7B model can hold this together.
-            "parse_failures": report["parse_failures"],
-            "parse_failure_rate": report["parse_failure_rate"],
-            "empty_captions": report["empty_captions"],
-        },
-        elapsed_s=timer.seconds,
-    )
+# ---------------------------------------------------------------------------
+# N6 — nhung caption bang BGE-M3
+# ---------------------------------------------------------------------------
+#
+# GO 25-08-2026: `stage_n6_recap`, `group_shots`, `build_shots`,
+# `build_qwen_generate`, `build_gemini_generate` va ca module `mfe.offline.recap`
+# da bi xoa. Nhom doi sang Qwen2.5-VL-7B-Instruct qua vLLM (`n6_caption_qwen` +
+# `n6_ocr_qwen25`), nen duong ReCap (Gemini/Qwen2-VL, co bo nho theo chuoi shot)
+# khong con nguoi dung nao. Chi tiet + so do giu lai o handoff §C.1.
+#
+# Hai con so tu doan da xoa, giu lai vi chung do duoc va se can neu ai do quay
+# lai chuyen cat shot cho KIS (57% de hoi thu tu canh):
+#
+#   * Cat shot chi bang `gap > nguong` la lien ket don: mot chuoi dai nuot het.
+#     Do tren 16 video BTC, nguong co VACH DUNG chu khong phai doc thoai:
+#     2,0s -> 2537 shot · 6,0s -> 259 · 8,0s -> **16** (dung mot shot moi video,
+#     vi khoang cach keyframe lon nhat cua BTC la 8,4s).
+#   * Vach do nam SAI PHIA voi DAKE: DAKE bao dam moi khoang cach <= 2,0s, nen
+#     nguong 2,0s khong bao gio kich hoat — mot video DAKE 400 keyframe thanh
+#     MOT shot. Muon dung lai thi phai chan do dai, khong chi chan khoang cach.
 
 
-def build_shots(ctx: StageContext, gap_seconds: float = 2.0) -> list:
-    """Group this video's keyframes into shots and attach the speech they cover."""
-    from mfe.offline.recap import Shot  # noqa: PLC0415
-
-    segments_path = ctx.workdir / f"segments_{ctx.video_id}.json"
-    spans = (
-        json.loads(segments_path.read_text(encoding="utf-8"))["segments"]
-        if segments_path.is_file()
-        else []
-    )
-    shots = []
-    for index, members in enumerate(group_shots(ctx.keyframes, gap_seconds)):
-        start = ctx.keyframes[members[0]].pts_time
-        end = ctx.keyframes[members[-1]].pts_time
-        shots.append(
-            Shot(
-                index=index,
-                keyframe_ids=[
-                    build_keyframe_id(ctx.video_id, ctx.keyframes[i].frame_idx)
-                    for i in members
-                ],
-                image_paths=[ctx.keyframes[i].image for i in members],
-                speech=" ".join(
-                    s["text"] for s in spans if s["end"] > start and s["start"] <= end + gap_seconds
-                ),
-                start=start,
-                end=end,
-            )
-        )
-    return shots
-
-
-#: Tang nao sinh ra caption cho `n6_bge_m3` an. Khoa = gia tri `params.source`.
-_BGE_M3_SOURCES = {
-    "dense_captions": "n6_recap",
-    "qwen_captions": "n6_caption_qwen",
-}
+#: Artifact chua caption ma `n6_bge_m3` nhung. MOT nguon, khong phai tham so.
+#:
+#: Truoc 25-08-2026 day la `dense_captions` (cua `n6_recap`, Gemini/ReCap). Tang do
+#: da bi xoa, nen mot tham so `source` o day chi con dung mot gia tri — tuc la mot
+#: nhanh chet cho ai do doc nham thanh "co the doi duoc".
+_BGE_M3_SOURCE = "qwen_captions"
 
 
 def stage_n6_bge_m3(ctx: StageContext) -> dict:
-    """Captions -> BGE-M3. Separate from the generation call so re-embedding is free.
+    """Caption -> BGE-M3. Tach khoi lan sinh caption, nen nhung lai la mien phi.
 
-    `params.source` chon caption nao de nhung, va mac dinh `dense_captions` giu
-    nguyen hanh vi cu cua bundle `aic_btc_v1`.
+    Doc part `qwen_captions` **tu Volume** chu khong nhan qua `ctx`: tang nay
+    khong can anh, khong can map-keyframes, khong can GPU sinh. Do la ly do no
+    chay o mot LUOT RIENG chu khong noi duoi `n6_caption_qwen` — vLLM giu
+    `gpu_memory_utilization=0.9` nen nap them BGE-M3 trong cung vong lap la OOM,
+    con thao/nap model theo tung video thi ton hon ca phan viec no lam.
 
-    Vi sao la tham so chu khong phai sua cung: tu 25-08-2026 caption cua bundle
-    BTC den tu `n6_caption_qwen` (Qwen2.5-VL, TIENG ANH) chu khong tu `n6_recap`
-    (Gemini). Nhung `n6_recap` van nam trong `config/ingest_shards.yaml`, va doi
-    cung dia chi o day la lam ke hoach do sinh ra mot tang khong doc duoc gi.
-
-    `source` di vao `params`, nen `check_fingerprints` so no giua cac shard: hai
-    nguoi nhung hai nguon caption khac nhau vao CUNG mot artifact `dense_vectors`
-    se bi tu choi o buoc gop — dung cho no phai bi tu choi.
+    Caption viet TIENG ANH (§4 CLAUDE.md) va BGE-M3 la mo hinh **da ngu**, nen
+    truy van tieng Viet khop thang khong qua buoc dich nao.
     """
     from sentence_transformers import SentenceTransformer  # noqa: PLC0415
 
     checkpoint = "BAAI/bge-m3"
-    source = ctx.params.get("source", "dense_captions")
-    if source not in _BGE_M3_SOURCES:
-        raise ValueError(
-            f"n6_bge_m3: source={source!r} khong hop le; "
-            f"chon mot trong {sorted(_BGE_M3_SOURCES)}"
-        )
-    local = ctx.workdir / f"{source}_{ctx.video_id}.json"
-    ctx.writer.transport.get(ctx.layout.part(source, ctx.video_id), local)
+    local = ctx.workdir / f"{_BGE_M3_SOURCE}_{ctx.video_id}.json"
+    ctx.writer.transport.get(ctx.layout.part(_BGE_M3_SOURCE, ctx.video_id), local)
     captions = json.loads(local.read_text(encoding="utf-8"))
     if not captions:
         raise RuntimeError(
-            f"{ctx.video_id}: chua co {source} — chay {_BGE_M3_SOURCES[source]} truoc"
+            f"{ctx.video_id}: chua co {_BGE_M3_SOURCE} — chay n6_caption_qwen truoc"
         )
 
+    # `sorted` chu khong phai thu tu file: `write_vector_part` gan `ids` voi
+    # `vectors` theo VI TRI, nen hai lan chay phai duyet cung mot thu tu.
     keys = sorted(captions)
     with Stopwatch() as timer:
         model = SentenceTransformer(checkpoint)
@@ -2196,7 +1975,7 @@ def stage_n6_bge_m3(ctx: StageContext) -> dict:
         keys,
         np.asarray(vectors, dtype=np.float32),
         model=checkpoint,
-        params={"normalize": True, "source": source},
+        params={"normalize": True, "source": _BGE_M3_SOURCE},
         elapsed_s=timer.seconds,
     )
 
@@ -2214,7 +1993,6 @@ STAGES = {
     "n5_ocr_vietocr": stage_n5_ocr_vietocr,
     "n6_caption_qwen": stage_n6_caption_qwen,
     "n6_ocr_qwen25": stage_n6_ocr_qwen25,
-    "n6_recap": stage_n6_recap,
     "n6_bge_m3": stage_n6_bge_m3,
 }
 

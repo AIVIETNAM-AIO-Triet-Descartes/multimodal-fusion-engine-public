@@ -466,13 +466,14 @@ class TestFactsMoi:
 class TestBgeM3DocDungNguonCaption:
     """`n6_bge_m3` là đích đến của caption — và nó từng đọc nhầm địa chỉ.
 
-    Tầng này đọc part `dense_captions` (của `n6_recap`, Gemini). Từ 25-08-2026
-    caption của bundle BTC đến từ `n6_caption_qwen` và nằm ở `qwen_captions`, nên
-    tầng phải nhận được nguồn qua `params.source`.
+    Tầng này vốn đọc part `dense_captions` (của `n6_recap`, ReCap qua Gemini).
+    `n6_recap` đã bị **xoá** ngày 25-08-2026 khi nhóm đổi hẳn sang Qwen2.5-VL, nên
+    nguồn giờ là `qwen_captions` và nó **cứng**, không phải tham số: một tham số
+    chỉ còn một giá trị hợp lệ là một nhánh chết mời người sau đọc nhầm thành
+    "đổi được".
 
-    Sửa cứng thay vì thêm tham số là làm `n6_recap` trong `config/ingest_shards.yaml`
-    sinh ra một tầng không ai đọc — im lặng, và chỉ lộ ra khi arm `bge_m3` trả về
-    rỗng trên nửa số video.
+    Địa chỉ sai ở đây **không ném lỗi ồn ào** — nó tải về một part không tồn tại
+    và arm `bge_m3` tối trên toàn bộ video. Nên nó phải bị khoá bằng test.
     """
 
     class _Layout:
@@ -524,22 +525,48 @@ class TestBgeM3DocDungNguonCaption:
         stages.stage_n6_bge_m3(ctx)
         return transport, ctx.writer
 
-    def test_mac_dinh_GIU_NGUYEN_dense_captions(self, tmp_path, fake_st):
-        """Mặc định cũ phải sống sót: `n6_recap` vẫn nằm trong `ingest_shards.yaml`."""
+    def test_doc_part_qwen_captions(self, tmp_path, fake_st):
         transport, _ = self._run(tmp_path, fake_st)
-        assert transport.asked == ["parts/dense_captions/L21_V001.json"]
-
-    def test_source_qwen_captions_thi_doc_dung_part_do(self, tmp_path, fake_st):
-        transport, _ = self._run(tmp_path, fake_st, source="qwen_captions")
         assert transport.asked == ["parts/qwen_captions/L21_V001.json"]
 
     def test_source_di_vao_params_de_check_fingerprints_thay(self, tmp_path, fake_st):
-        """Hai người nhúng hai nguồn khác nhau vào CÙNG `dense_vectors` phải bị
-        từ chối ở bước gộp — nên `source` thuộc `params`, không thuộc `facts`."""
-        _, writer = self._run(tmp_path, fake_st, source="qwen_captions")
+        """Nguồn caption nằm trong `params`, không phải `facts`.
+
+        Nó là một sự thật của BUNDLE, không phải của máy: hai người nhúng hai
+        nguồn khác nhau vào cùng `dense_vectors` phải bị từ chối ở bước gộp.
+        """
+        _, writer = self._run(tmp_path, fake_st)
         _, kwargs = writer.written["dense_vectors"]
         assert kwargs["params"]["source"] == "qwen_captions"
 
-    def test_source_la_thi_NEM_chu_khong_am_tham_doc_nham(self, tmp_path, fake_st):
-        with pytest.raises(ValueError, match="source"):
-            self._run(tmp_path, fake_st, source="captions")
+    def test_part_RONG_thi_nem_chu_khong_ghi_vector_rong(self, tmp_path, fake_st):
+        """Ghi một part 0 dòng vẫn cắm marker — tức video đó bị coi là XONG.
+
+        Đó là cách một video mất caption đi lọt tới tận bước gộp mà không dòng
+        log nào nói ra.
+        """
+        transport = self._Transport({})
+        ctx = _ctx(tmp_path, n_frames=1)
+        ctx.writer = self._Writer(transport)
+        ctx.layout = self._Layout()
+        with pytest.raises(RuntimeError, match="n6_caption_qwen"):
+            stages.stage_n6_bge_m3(ctx)
+
+    def test_thu_tu_khoa_TAT_DINH(self, tmp_path, fake_st):
+        """`write_vector_part` gán `ids` với `vectors` theo VỊ TRÍ.
+
+        Duyệt theo thứ tự file JSON thay vì `sorted` thì hai lượt chạy lại của
+        cùng một video có thể gán vector cho khoá khác — và mọi thứ vẫn chạy.
+        """
+        payload = {
+            "L21_V001#000300": "c",
+            "L21_V001#000100": "a",
+            "L21_V001#000200": "b",
+        }
+        transport = self._Transport(payload)
+        ctx = _ctx(tmp_path, n_frames=1)
+        ctx.writer = self._Writer(transport)
+        ctx.layout = self._Layout()
+        stages.stage_n6_bge_m3(ctx)
+        keys, _ = ctx.writer.written["dense_vectors"]
+        assert keys == sorted(payload)

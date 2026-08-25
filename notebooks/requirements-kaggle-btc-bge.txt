@@ -1,0 +1,33 @@
+# Môi trường cho BGE-M3 — notebook 09 (nhúng caption thành vector)
+# config/ingest_shards_batch1_btc_bge.yaml
+#
+# File này CỐ Ý ngắn, và sự ngắn đó là một quyết định:
+#
+#   Lượt 6 không đọc ảnh. Nó tải một file JSON caption cho mỗi video rồi nhúng
+#   văn bản. Nên **không** cần `opencv`, `pillow`, `qwen-vl-utils`, và tuyệt đối
+#   không cần `vllm`.
+#
+# ⚠️ KHÔNG cài `vllm` vào phiên này. vLLM ghim `torch` rất chặt và sẽ kéo torch
+# sang phiên bản khác — mà `torch` nằm trong `NUMERIC_PACKAGES` và
+# `STAGE_PACKAGES["n6_bge_m3"]`. Đổi torch dưới chân tầng này là đổi vector nó
+# sinh ra, và `merge_bundle.py` sẽ từ chối bundle ở bước gộp, sau nhiều giờ.
+#
+# Cùng lý do: **notebook 09 không chạy chung phiên với 03 / 06 / 08.**
+#
+# ⚠️ `torch` KHÔNG khai ở đây. Image Kaggle đã có sẵn một bản torch dùng được;
+# ghim thêm một dải ở đây chỉ tạo ra một lượt giải phụ thuộc vô nghiệm.
+
+# --- Bộ nhúng -------------------------------------------------------------
+# `sentence-transformers` NẰM TRONG `NUMERIC_PACKAGES` và trong
+# `STAGE_PACKAGES["n6_bge_m3"]`: nó quyết định phép gộp token (pooling) và phép
+# chuẩn hoá, tức quyết định chính con số trong vector. Hai người chạy hai bản là
+# một bundle trộn hai phép đo, và cosine vẫn trông hợp lý suốt — nên không ai
+# nhận ra. Ô Step 0a IN RA phiên bản thật; chép cho người chạy phần còn lại.
+#
+# Không ghim cứng như `vllm==0.27.1` được: ở đây ta chưa có một lượt chạy nào để
+# lấy làm mốc. Người chạy ĐẦU TIÊN chép con số ô Step 0a in ra vào đây, rồi
+# commit — từ lúc đó nó là bản ghim của cả nhóm.
+sentence-transformers>=3.0
+
+# --- Modal (đẩy part lên Volume) ------------------------------------------
+modal>=1.0
