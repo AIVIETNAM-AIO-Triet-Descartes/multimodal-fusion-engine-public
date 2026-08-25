@@ -100,6 +100,9 @@ RULES FOR [CAPTION] — five things you MUST state whenever the frame shows them
 
 1. WHAT THE PEOPLE AND OBJECTS ARE DOING WITH EACH OTHER. Never list things side by side;
    join them with a verb that says what is happening.
+   **Your FIRST sentence must be the action.** Say what is happening, then spend the rest of
+   the caption on who and what: colours, counts, positions. A caption that opens by listing
+   what is present has already used its best sentence on the least useful thing.
    GOOD: "a man in a blue shirt waters a row of potted plants with a green hose"
    GOOD: "an adult in a white shirt points at an open notebook while a boy in a red shirt
          follows the page with his finger"
@@ -116,7 +119,9 @@ RULES FOR [CAPTION] — five things you MUST state whenever the frame shows them
    stools". Count what you can see; write "several" only when they are too many to count.
 4. WHERE things are, relative to each other: on the left / in the middle / on the right /
    in front of / behind. Do not settle for "in the background".
-5. CAMERA ANGLE when it is obvious: close-up, wide shot, overhead or aerial view, low angle.
+5. CAMERA ANGLE only when it is UNUSUAL: a close-up, an overhead or aerial view, a low angle
+   looking up. An ordinary eye-level shot is the default — say nothing about it. Never end a
+   caption with a stock phrase about the shot.
 
 FORBIDDEN in [CAPTION]:
 - Guessing what you cannot see: place names, personal names, the topic of the news story,
@@ -159,14 +164,14 @@ _QWEN25_FEWSHOT_AIC = """Here are three examples of the correct output FORMAT (f
 Learn the shape of the answer; do not copy the content.
 
 ### Example 1
-[CAPTION] Two presenters stand behind a curved white desk and speak toward the camera. The man on the left wears glasses, a dark navy shirt and a pale tie; the woman on the right has long hair and wears a light blue blouse. Both hold a red folder, and the man rests his free hand on the desk. Behind them a wide city skyline glows orange at sunset.
+[CAPTION] Two presenters read from a red folder and speak toward the camera from behind a curved white desk. The man on the left wears glasses, a dark navy shirt and a pale tie; the woman on the right has long hair and wears a light blue blouse. The man rests his free hand on the desk while the woman turns a page. Behind them a wide city skyline glows orange at sunset.
 [TEXT] HTV9 HD
 06:31:14
 TIN CHÍNH
 Đợt mưa lũ vừa qua khiến 3 người thiệt mạng
 
 ### Example 2
-[CAPTION] Five people sit on low plastic stools around a heap of half-peeled bamboo shoots on a concrete yard. The woman on the far left, in a red and white checked shirt and yellow trousers, strips the husk from a shoot; the person in the middle in a green t-shirt passes a peeled shoot toward her; the man on the far right in camouflage-patterned clothing sorts the shoots into a yellow plastic basket. A row of blue plastic drums stands behind them. Wide shot at eye level.
+[CAPTION] Five people peel bamboo shoots together on a concrete yard, sitting on low plastic stools around the heap. The woman on the far left, in a red and white checked shirt and yellow trousers, strips the husk from a shoot; the person in the middle in a green t-shirt passes a peeled shoot toward her; the man on the far right in camouflage-patterned clothing sorts the shoots into a yellow plastic basket. A row of blue plastic drums stands behind them.
 [TEXT]
 
 ### Example 3

@@ -225,3 +225,48 @@ class TestBangTongHop:
         # Nua `[TEXT]` thi NGUOC LAI: no chep chu tren man hinh, phan lon tieng Viet.
         assert report["co_chu"] > 0.90
         assert report["ocr_nhieu_dong"] > 0.90
+
+
+class TestBangTuChiRaChoBaoHoa:
+    """Một năng lực ở gần 100% là stopword, không phải thành tích.
+
+    Lượt probe 25-08-2026 in ra `góc máy 96,4%` cạnh `49 đề có 16,3%`, và bảng
+    thô lúc đó **trông như thắng lớn**. Thật ra model đang dán một cụm cố định
+    vào gần như mọi caption — cùng cơ chế đã giết arm `object`, chỉ khác chỗ nó
+    đứng trong câu. Nguyên nhân tìm được: ví dụ few-shot số 2 kết thúc bằng
+    "Wide shot at eye level.", và model học đúng cái thói quen đó.
+
+    Bảng phải tự nói ra, vì người đọc nó là người sắp tiêu ~100 giờ GPU.
+    """
+
+    #: Dat DUNG muc de thay: khong hang nao duoc gan nhan khi caption vua du.
+    BASE = {
+        "n": 307, "mau": 0.633, "quan_he": 0.571, "dem": 0.75, "vi_tri": 0.367,
+        "goc_may": 0.163, "mo_dau_cam": 0.0, "tieng_viet": 0.0,
+        "caption_token_trung_vi": 67, "co_chu": 1.0,
+        "ocr_dong_trung_vi": 3, "ocr_nhieu_dong": 1.0,
+    }
+
+    def test_bao_hoa_bi_goi_ten(self):
+        out = format_audit({**self.BASE, "goc_may": 0.964}, "x")
+        assert "BÃO HOÀ" in out
+
+    def test_dung_so_that_cua_luot_probe_25_08(self):
+        """Neo vào đúng con số đã đọc sai một lần."""
+        out = format_audit(
+            {**self.BASE, "mau": 0.805, "quan_he": 0.521, "dem": 0.583,
+             "vi_tri": 0.642, "goc_may": 0.964},
+            "probe",
+        )
+        goc_may = next(ln for ln in out.splitlines() if "góc máy" in ln)
+        assert "BÃO HOÀ" in goc_may
+        dem = next(ln for ln in out.splitlines() if "đếm" in ln and "%" in ln)
+        assert "HỤT" in dem
+        # 52,1% quan he KHONG duoc gan nhan gi: no gan nhu cau (57,1%), va van
+        # de cua no la "khong nhuc nhich so voi 50,5% cua Bao" — mot chuyen bang
+        # nay khong biet, vi bang khong thay ban truoc.
+        quan_he = next(ln for ln in out.splitlines() if "quan hệ" in ln)
+        assert "BÃO HOÀ" not in quan_he and "HỤT" not in quan_he
+
+    def test_dung_muc_tieu_thi_khong_gan_nhan(self):
+        assert format_audit(self.BASE, "x").count("<-") == 0

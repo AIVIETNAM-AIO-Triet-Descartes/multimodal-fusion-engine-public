@@ -370,7 +370,7 @@ class TestBienThePrompt:
         from mfe.offline.caption_prompt import PROMPT_VARIANTS
 
         aic = PROMPT_VARIANTS["aic"][0]
-        assert "Two presenters stand behind a curved white desk" in aic
+        assert "Two presenters read from a red folder and speak toward the camera" in aic
         assert "Đợt mưa lũ vừa qua khiến 3 người thiệt mạng" in aic
 
     def test_few_shot_KHONG_kem_anh_mau(self):
@@ -570,3 +570,52 @@ class TestBgeM3DocDungNguonCaption:
         stages.stage_n6_bge_m3(ctx)
         keys, _ = ctx.writer.written["dense_vectors"]
         assert keys == sorted(payload)
+
+
+class TestPromptKhongDayModelTaoStopword:
+    """Bài học 25-08-2026, đo trên chính lượt probe của Lead.
+
+    Ví dụ few-shot số 2 kết thúc bằng "Wide shot at eye level." Model học đúng
+    thói quen đó và dán một cụm về góc máy vào **96,4%** caption — trong khi chỉ
+    16,3% đề hỏi tới. Một cụm có mặt ở gần như mọi tài liệu là một **stopword**,
+    và nó không xếp hạng được gì: cùng cơ chế đã giết arm `object` (`một` 91,0%
+    tài liệu, idf 0,09), chỉ khác chỗ nó đứng trong câu.
+
+    Few-shot dạy **thói quen**, không chỉ dạy định dạng. Một câu thừa trong ví dụ
+    là một câu thừa trong 177.321 caption.
+    """
+
+    def test_khong_vi_du_nao_ket_thuc_bang_cau_ve_goc_may(self):
+        from mfe.offline.caption_prompt import PROMPT_VARIANTS
+
+        aic = PROMPT_VARIANTS["aic"][0]
+        assert "Wide shot at eye level" not in aic
+        for block in aic.split("[CAPTION]")[1:]:
+            caption = block.split("[TEXT]")[0].strip()
+            last = caption.rstrip(".").rsplit(".", 1)[-1].strip().casefold()
+            assert "shot" not in last and "eye level" not in last, (
+                f"vi du ket thuc bang cau ve goc may: {last!r}"
+            )
+
+    def test_chi_dan_noi_ro_goc_may_chi_khi_BAT_THUONG(self):
+        from mfe.offline.caption_prompt import PROMPT_VARIANTS
+
+        aic = PROMPT_VARIANTS["aic"][0]
+        assert "only when it is UNUSUAL" in aic
+        assert "ordinary eye-level shot is the default" in aic
+
+    def test_chi_dan_bat_cau_DAU_TIEN_la_hanh_dong(self):
+        """Quan hệ 50,5% -> 52,1% ở lượt probe: gần như không nhúc nhích.
+
+        Caption dài 67 token, đúng bằng bản của Bảo (70) — model không viết thêm,
+        nó chỉ chia lại cùng một ngân sách, và phần lớn ngân sách đó đi vào màu,
+        vị trí, góc máy. Bắt câu đầu là hành động là cách giành lại chỗ tốt nhất
+        cho thứ 57,1% đề hỏi tới.
+        """
+        from mfe.offline.caption_prompt import PROMPT_VARIANTS
+
+        aic = PROMPT_VARIANTS["aic"][0]
+        assert "FIRST sentence must be the action" in aic
+        # Hai vi du dau phai lam guong: cau dau la hanh dong, khong phai liet ke.
+        assert "Two presenters read from a red folder" in aic
+        assert "Five people peel bamboo shoots together" in aic

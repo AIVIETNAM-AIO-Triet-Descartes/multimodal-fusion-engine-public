@@ -334,6 +334,36 @@ QUERY_DEMAND = {
 }
 
 
+#: Trên ngưỡng này thì một năng lực không còn phân biệt được khung hình nào với
+#: khung hình nào — nó có mặt ở gần như mọi tài liệu, tức nó là **stopword**.
+#:
+#: Không phải ngưỡng tuỳ tiện: `một` có mặt ở 91,0% tài liệu của chỉ mục `object`
+#: (idf 0,09) và `giữa` ở 89,4% — đó chính là hai token đã làm arm `object` đo
+#: được ~0. Một hàng chạm 90% là hàng đang lặp lại chính nó.
+SATURATED = 0.90
+
+
+def _verdict(have: float, want: float) -> str:
+    """Một chữ nói cho người đọc biết hàng này đang nói gì.
+
+    Cần vì bảng thô đọc sai được theo hướng dễ chịu: lượt probe 25-08 in ra
+    `góc máy 96,4%` cạnh `đề đòi 16,3%` và điều đó **trông như thắng lớn**. Thật
+    ra model đang dán một cụm cố định vào gần như mọi caption — cùng cơ chế đã
+    giết arm `object`, chỉ khác chỗ nó đứng trong câu.
+
+    "Cao hơn đề đòi" KHÔNG phải mục tiêu. Không khung hình nào cũng có vật đếm
+    được hay góc máy đáng nói; một tỉ lệ vượt xa nhu cầu là dấu hiệu model đang
+    *bịa cho đủ*, và cái nó bịa ra là một stopword.
+    """
+    if have >= SATURATED:
+        return "<- BÃO HOÀ: gần như mọi caption đều có = stopword"
+    if have >= want * 2 and have >= 0.60:
+        return "<- cao gấp đôi nhu cầu, coi chừng bịa cho đủ"
+    if have < want * 0.75:
+        return "<- HỤT"
+    return ""
+
+
 def format_audit(report: dict, label: str = "") -> str:
     """Bảng người đọc được, kèm mốc đo trên 49 đề thật để so."""
     if not report.get("n"):
@@ -350,10 +380,9 @@ def format_audit(report: dict, label: str = "") -> str:
         f"  {'năng lực':<22}{'caption có':>12}{'49 đề có':>12}",
         f"  {'-' * 46}",
     ]
-    lines += [
-        f"  {name:<22}{report[key]:>11.1%}{QUERY_DEMAND[key]:>11.1%}"
-        for name, key in rows
-    ]
+    for name, key in rows:
+        have, want = report[key], QUERY_DEMAND[key]
+        lines.append(f"  {name:<22}{have:>11.1%}{want:>11.1%}   {_verdict(have, want)}")
     lines += [
         "",
         f"  tiếng Việt          {report['tieng_viet']:>11.1%}",
