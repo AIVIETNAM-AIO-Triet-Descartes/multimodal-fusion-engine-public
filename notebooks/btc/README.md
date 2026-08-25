@@ -33,9 +33,22 @@ vì `merge` lọc artifact theo `spec.stage in plan.stages`.
   `MEMBER`. Chia theo *gói zip*, cân theo số ảnh, tất định. `author` ghi ra vẫn là `MEMBER` —
   thêm tên mới vào `assignment` để chạy song song là cách chắc chắn làm hỏng bundle
   (`merge.check_ownership`).
-* **Cổng đối chiếu `PROBE_ONLY`** — chạy `L21_V001` rồi so với 855 keyframe Bảo đã chạy
-  (`../reference/dense_captions_qwen.json`) qua `scripts/compare_qwen_captions.py`, và **dừng**.
+* **Cổng đối chiếu `PROBE_ONLY`** — chạy `L21_V001` bằng **cả hai** biến thể prompt, in bảng
+  năng lực, **đo throughput**, so với 855 keyframe Bảo đã chạy
+  (`../reference/dense_captions_qwen.json`) qua `scripts/compare_qwen_captions.py`, rồi **dừng**.
   Lượt đầy đủ là 177.321 ảnh trên một model 7B; phát hiện lệch sau lượt đó là mất cả lượt.
+
+**Prompt của lượt 5 nằm ở `src/mfe/offline/caption_prompt.py`, hai biến thể:**
+
+| biến thể | tiếng | dùng khi |
+|---|---|---|
+| `bao` | Anh | probe — phép kiểm **đường ống** duy nhất đối chiếu được với bản của Bảo |
+| `aic` | **Việt** | chạy thật (mặc định) — có few-shot chỉ-văn-bản + chỉ dẫn theo `diem-yeu-pipeline-theo-49-de.md` §3 |
+
+Đo trên chính 855 keyframe của Bảo, caption **tiếng Anh** của bạn ấy đạt **màu 1,2% · vị trí 0,1%**
+trên phép đếm từ khoá tiếng Việt (`mfe/offline/caption_audit.py`) — trong khi 49 đề thật đòi
+**63%** và **45%**. Arm `caption_qwen` là BM25 trên truy vấn tiếng Việt, nên đó là bài học
+`labels_vi` đo được bằng số: không đổi ngôn ngữ thì arm vô dụng.
 
 ⚠️ **Notebook 08 không được chạy chung phiên Kaggle với 03 hay 06**: vLLM ghim `torch` riêng và
 sẽ kéo phiên bản khác về khi cài. Một phiên, một môi trường.

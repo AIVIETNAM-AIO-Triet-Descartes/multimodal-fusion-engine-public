@@ -64,25 +64,44 @@ extras:
 # góp ÂM trong ablation. Vẫn giữ, vì mối ngờ đó là GIẢ THUYẾT chưa đo, và đo được
 # nó cần chính dữ liệu này. Cái ta thêm: đếm số câu mất nhãn (`unmarked`).
 #
-# ĐỔI: **prompt**. Prompt của Bảo viết caption bằng TIẾNG ANH, và đo trên chính
-# 855 keyframe bạn ấy đã chạy thì caption đó đạt:
+# GIỮ NỐT: **tiếng Anh**. Caption đi vào HAI chỗ — arm BM25 `caption_qwen` và
+# `n6_bge_m3` -> arm `bge_m3`. BGE-M3 là mô hình đa ngữ nên truy vấn tiếng Việt
+# khớp caption tiếng Anh không cần dịch, còn nhánh BM25 dùng bản dịch tiếng Anh
+# của truy vấn mà đường truy vấn ĐÃ CÓ SẴN cho arm `siglip` (`--en-source auto`).
+# Caption tiếng Anh phục vụ cả hai arm; caption tiếng Việt chỉ phục vụ một.
 #
-#     màu gắn vào vật  1,2%   (đề thật đòi 63%)
-#     vị trí trái/phải 0,1%   (đề thật đòi 45%)
-#     đếm số lượng    23,9%   (đề thật đòi 51%)
-#     mở đầu bằng "The image shows…"  59,9%
+# ĐỔI: **nội dung chỉ dẫn**. Đo bằng `mfe.offline.caption_audit` trên chính 855
+# keyframe Bảo đã chạy (bộ dò song ngữ — bản chỉ có từ khoá tiếng Việt đọc ra 1,2%
+# và đó là lỗi của phép đo, không phải của caption):
 #
-# Đó chính là bài học `labels_vi` đo được bằng số: arm `caption_qwen` là BM25 trên
-# truy vấn TIẾNG VIỆT, nên caption tiếng Anh không có một token nào chung với truy
-# vấn — arm vô dụng cho tới khi đổi ngôn ngữ.
+#     năng lực            caption của Bảo    49 đề thật có
+#     màu gắn vào vật          78,6%              63,3%
+#     QUAN HỆ giữa các vật     50,5%              57,1%     <-- điều khoản số 1
+#     vị trí trái/phải         59,2%              36,7%
+#     góc máy                  11,1%              16,3%
+#     mở đầu "The image shows" 59,9%                —       <-- stopword
 #
-# Biến thể `aic` (mặc định) viết tiếng Việt, có few-shot **chỉ văn bản** để khoá
-# định dạng `[CAPTION]`/`[TEXT]` và bắt mỗi vùng chữ rời nhau xuống một dòng, và
-# có chỉ dẫn đọc ngược từ `docs/triet/diem-yeu-pipeline-theo-49-de.md` §3.
+# Hai chỗ hụt thật: **quan hệ** và **mở đầu sáo mòn**. Biến thể `aic` bắt buộc nêu
+# các vật ĐANG LÀM GÌ VỚI NHAU (yêu cầu của Lead 25-08-2026) — "người đang tưới
+# cây", không phải "một người, một vòi nước, mấy chậu cây" — cấm mở đầu sáo mòn,
+# thêm few-shot **chỉ văn bản** khoá định dạng `[CAPTION]`/`[TEXT]`, và cấm DỊCH
+# nửa `[TEXT]` (nó là nguồn của arm BM25 `ocr_qwen25`, phải giữ dấu tiếng Việt).
 #
 # Biến thể `bao` VẪN GIỮ và vẫn được dùng: nó là phép kiểm ĐƯỜNG ỐNG duy nhất —
 # đối chiếu được với bản của Bảo vì nó chính là prompt đã sinh ra bản đó. Notebook
 # 08 chạy CẢ HAI ở lượt probe: `bao` để kiểm địa chỉ/động cơ, `aic` để kiểm prompt.
+#
+# ───────────────────────────────────────────────────────────────────────────
+# VÌ SAO `n6_bge_m3` KHÔNG NẰM TRONG LƯỢT NÀY (đừng thêm vào)
+#
+# Nó là đích đến của caption, nhưng nó KHÔNG chạy chung phiên được: vLLM giữ
+# `gpu_memory_utilization=0.9`, nên nạp thêm BGE-M3 trong cùng vòng lặp là OOM,
+# còn tháo/nạp lại model theo từng video thì tốn hơn cả phần việc nó làm.
+#
+# `n6_bge_m3` đọc part `qwen_captions` TỪ VOLUME (`params.source: qwen_captions`),
+# nên nó chạy được ở một lượt riêng, SAU lượt này, và không cần tải một byte ảnh
+# nào — đó là lượt rẻ nhất của cả bundle. Mặc định của tầng vẫn là `dense_captions`
+# để không cướp địa chỉ của `n6_recap` trong `config/ingest_shards.yaml`.
 # ───────────────────────────────────────────────────────────────────────────
 params:
   # `params` bi `check_fingerprints` so THEO TUNG KHOA giua cac shard, nen o day

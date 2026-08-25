@@ -24,10 +24,30 @@
 # **thống nhất phiên bản trước khi chia việc**, và ghi lại bản đã dùng.
 
 # --- Động cơ sinh ---------------------------------------------------------
-# Không ghim cứng ở đây vì bánh xe vLLM gắn với CUDA của image Kaggle, và image
-# đó đổi theo thời gian. Ô Step 0a của notebook 08 IN RA phiên bản thật đã cài,
-# và đó là con số phải chép cho người chạy nửa còn lại.
-vllm>=0.6.3
+# GHIM CỨNG. Đây là bản Bảo đã chạy thật trên Kaggle T4×2 khi sinh
+# `notebooks/reference/dense_captions_qwen.json` — đọc từ log khởi động của bạn
+# ấy: `Initializing a V1 LLM engine (v0.27.1)`.
+#
+# Ghim vì hai lẽ, và lẽ thứ hai mới là lẽ bắt buộc:
+#
+#   1. **T4 là Turing (sm75).** Hỗ trợ Turing của vLLM là thứ có thể bị gỡ ở một
+#      bản bất kỳ mà không ai trong nhóm biết trước. 0.27.1 là bản DUY NHẤT ta có
+#      bằng chứng đã nạp được Qwen2.5-VL-7B trên đúng phần cứng này. `>=` là mời
+#      pip chọn hộ một bản chưa ai thử, giữa lúc chạy.
+#   2. **`vllm` nằm trong `NUMERIC_PACKAGES` (bundle.py).** Đổi bản là đổi cách
+#      xếp lịch lô và cách lượng tử hoá KV cache, tức đổi chuỗi Qwen2.5-VL trả
+#      về. `merge_bundle.py` TỪ CHỐI bundle có hai bản khác nhau giữa các mảnh —
+#      và nó chỉ nói ra ở bước gộp, sau hàng chục giờ GPU. Với `>=`, hai người
+#      cài cách nhau một tuần là gần như chắc chắn lệch bản.
+#
+# Kèm theo: 0.27.1 là **V1 engine**, nơi prefix caching bật MẶC ĐỊNH và có hỗ trợ
+# đầu vào đa phương thức. Nên `ENABLE_PREFIX_CACHING = True` ở notebook nhiều khả
+# năng chỉ là khẳng định lại thứ đã bật — đường lui trong `_qwen25_engine` vẫn
+# giữ, nhưng `facts["prefix_caching"]` mới là chỗ đọc sự thật.
+#
+# Đổi con số này = đổi cả bộ caption. Nếu buộc phải đổi, đổi TRƯỚC khi ai chạy
+# mảnh đầu tiên, và báo cả nhóm.
+vllm==0.27.1
 
 # --- Tiện ích dựng prompt đa phương thức của Qwen -------------------------
 # `process_vision_info` đọc ảnh và gài đúng token ảnh vào template. Bảo dùng nó;

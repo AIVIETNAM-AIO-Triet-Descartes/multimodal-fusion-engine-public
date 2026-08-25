@@ -284,14 +284,47 @@ class TestHaiTangGhiGi:
 class TestBienThePrompt:
     """Hai biến thể cùng tồn tại, và nhầm biến thể là sinh sai cả lượt."""
 
-    def test_hai_bien_the_khac_ngon_ngu_va_khac_max_tokens(self, tmp_path):
+    def test_ca_hai_bien_the_deu_yeu_cau_caption_TIENG_ANH(self, tmp_path):
+        """Caption đi vào BGE-M3 (đa ngữ) **và** BM25 qua truy vấn đã dịch.
+
+        Một caption tiếng Anh phục vụ cả hai arm; tiếng Việt chỉ phục vụ một.
+        Đây là quyết định của Lead 25-08-2026, và test này là chỗ nó không trôi
+        đi được khi ai đó sửa prompt lần sau.
+        """
         from mfe.offline.caption_prompt import PROMPT_VARIANTS
 
         bao, bao_tokens = PROMPT_VARIANTS["bao"]
         aic, aic_tokens = PROMPT_VARIANTS["aic"]
         assert "in English" in bao
-        assert "TIẾNG VIỆT" in aic
-        assert aic_tokens > bao_tokens, "caption tieng Viet ton nhieu token hon"
+        assert "in ENGLISH" in aic
+        assert "Writing the caption in Vietnamese" in aic, "phai CAM caption tieng Viet"
+        assert aic_tokens > bao_tokens, "aic con phai neu QUAN HE nen dai hon"
+
+    def test_aic_bat_buoc_neu_QUAN_HE_giua_cac_vat(self):
+        """Điều khoản số 1 của biến thể `aic` (yêu cầu Lead 25-08-2026).
+
+        Bảo đo được 50,5% caption có động từ tương tác, trong khi 57,1% đề thật
+        hỏi một hành động. "một người, một vòi nước, mấy chậu cây" đúng vật thể
+        nhưng sai sự việc — nó không trả lời được đề nào.
+        """
+        from mfe.offline.caption_prompt import PROMPT_VARIANTS
+
+        aic = PROMPT_VARIANTS["aic"][0]
+        assert "DOING WITH EACH OTHER" in aic
+        assert "waters a row of potted plants" in aic, "vi du DUNG"
+        assert "a man, a green hose, and several potted plants" in aic, "vi du SAI"
+
+    def test_aic_cam_DICH_nua_TEXT(self):
+        """`[TEXT]` là nguồn của arm BM25 `ocr_qwen25` — dịch nó là giết arm.
+
+        Caption đổi sang tiếng Anh làm điều luật này DỄ VI PHẠM hơn hẳn: model
+        đang được bảo viết tiếng Anh ở khối ngay phía trên.
+        """
+        from mfe.offline.caption_prompt import PROMPT_VARIANTS
+
+        aic = PROMPT_VARIANTS["aic"][0]
+        assert "DO NOT translate it" in aic
+        assert "Vietnamese text stays" in aic
 
     def test_max_tokens_mac_dinh_THEO_bien_the(self, tmp_path):
         """Không có một `max_tokens` chung: 256 của Bảo cắt cụt caption tiếng Việt."""
@@ -324,9 +357,21 @@ class TestBienThePrompt:
         from mfe.offline.caption_prompt import PROMPT_VARIANTS
 
         aic = PROMPT_VARIANTS["aic"][0]
-        assert aic.count("### Ví dụ") == 3
+        assert aic.count("### Example") == 3
         assert aic.count("[CAPTION]") >= 4   # 1 trong luat + 3 vi du
         assert "\n[TEXT]\n" in aic, "phai co mot vi du voi [TEXT] de TRONG"
+
+    def test_few_shot_ghep_caption_ANH_voi_TEXT_VIET(self):
+        """Cặp đó dạy bằng ví dụ đúng điều luật khó nói nhất của prompt.
+
+        Mô tả thì dịch sang tiếng Anh, chữ trên màn hình thì không. Nói bằng luật
+        là một câu; cho thấy trong cùng một ví dụ là thứ model làm theo được.
+        """
+        from mfe.offline.caption_prompt import PROMPT_VARIANTS
+
+        aic = PROMPT_VARIANTS["aic"][0]
+        assert "Two presenters stand behind a curved white desk" in aic
+        assert "Đợt mưa lũ vừa qua khiến 3 người thiệt mạng" in aic
 
     def test_few_shot_KHONG_kem_anh_mau(self):
         """Text-only. Một ảnh mẫu tốn hàng trăm token thị giác MỖI request."""
@@ -416,3 +461,85 @@ class TestFactsMoi:
         assert "prefix_caching" in kwargs["facts"]
         # Toc do la su that cua MAY, khong phai cua bundle.
         assert "images_per_s" not in kwargs["params"]
+
+
+class TestBgeM3DocDungNguonCaption:
+    """`n6_bge_m3` là đích đến của caption — và nó từng đọc nhầm địa chỉ.
+
+    Tầng này đọc part `dense_captions` (của `n6_recap`, Gemini). Từ 25-08-2026
+    caption của bundle BTC đến từ `n6_caption_qwen` và nằm ở `qwen_captions`, nên
+    tầng phải nhận được nguồn qua `params.source`.
+
+    Sửa cứng thay vì thêm tham số là làm `n6_recap` trong `config/ingest_shards.yaml`
+    sinh ra một tầng không ai đọc — im lặng, và chỉ lộ ra khi arm `bge_m3` trả về
+    rỗng trên nửa số video.
+    """
+
+    class _Layout:
+        def part(self, artifact, video_id):
+            return f"parts/{artifact}/{video_id}.json"
+
+    class _Transport:
+        def __init__(self, payload):
+            self.payload = payload
+            self.asked = []
+
+        def get(self, remote, local):
+            self.asked.append(remote)
+            Path(local).write_text(json.dumps(self.payload), encoding="utf-8")
+
+    class _Writer:
+        def __init__(self, transport):
+            self.transport = transport
+            self.written = {}
+
+        def write_vector_part(self, artifact, video_id, keys, vectors, **kwargs):
+            self.written[artifact] = (list(keys), kwargs)
+            return {"artifact": artifact, "rows": len(keys)}
+
+    @pytest.fixture
+    def fake_st(self, monkeypatch):
+        import sys
+        import types
+
+        import numpy as np
+
+        module = types.ModuleType("sentence_transformers")
+
+        class _Model:
+            def __init__(self, checkpoint):
+                self.checkpoint = checkpoint
+
+            def encode(self, texts, **kwargs):
+                return np.zeros((len(texts), 1024), dtype=np.float32)
+
+        module.SentenceTransformer = _Model
+        monkeypatch.setitem(sys.modules, "sentence_transformers", module)
+
+    def _run(self, tmp_path, fake_st, **params):
+        transport = self._Transport({"L21_V001#000100": "a man waters plants"})
+        ctx = _ctx(tmp_path, n_frames=1, **params)
+        ctx.writer = self._Writer(transport)
+        ctx.layout = self._Layout()
+        stages.stage_n6_bge_m3(ctx)
+        return transport, ctx.writer
+
+    def test_mac_dinh_GIU_NGUYEN_dense_captions(self, tmp_path, fake_st):
+        """Mặc định cũ phải sống sót: `n6_recap` vẫn nằm trong `ingest_shards.yaml`."""
+        transport, _ = self._run(tmp_path, fake_st)
+        assert transport.asked == ["parts/dense_captions/L21_V001.json"]
+
+    def test_source_qwen_captions_thi_doc_dung_part_do(self, tmp_path, fake_st):
+        transport, _ = self._run(tmp_path, fake_st, source="qwen_captions")
+        assert transport.asked == ["parts/qwen_captions/L21_V001.json"]
+
+    def test_source_di_vao_params_de_check_fingerprints_thay(self, tmp_path, fake_st):
+        """Hai người nhúng hai nguồn khác nhau vào CÙNG `dense_vectors` phải bị
+        từ chối ở bước gộp — nên `source` thuộc `params`, không thuộc `facts`."""
+        _, writer = self._run(tmp_path, fake_st, source="qwen_captions")
+        _, kwargs = writer.written["dense_vectors"]
+        assert kwargs["params"]["source"] == "qwen_captions"
+
+    def test_source_la_thi_NEM_chu_khong_am_tham_doc_nham(self, tmp_path, fake_st):
+        with pytest.raises(ValueError, match="source"):
+            self._run(tmp_path, fake_st, source="captions")

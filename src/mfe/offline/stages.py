@@ -2141,16 +2141,44 @@ def build_shots(ctx: StageContext, gap_seconds: float = 2.0) -> list:
     return shots
 
 
+#: Tang nao sinh ra caption cho `n6_bge_m3` an. Khoa = gia tri `params.source`.
+_BGE_M3_SOURCES = {
+    "dense_captions": "n6_recap",
+    "qwen_captions": "n6_caption_qwen",
+}
+
+
 def stage_n6_bge_m3(ctx: StageContext) -> dict:
-    """Captions -> BGE-M3. Separate from the Gemini call so re-embedding is free."""
+    """Captions -> BGE-M3. Separate from the generation call so re-embedding is free.
+
+    `params.source` chon caption nao de nhung, va mac dinh `dense_captions` giu
+    nguyen hanh vi cu cua bundle `aic_btc_v1`.
+
+    Vi sao la tham so chu khong phai sua cung: tu 25-08-2026 caption cua bundle
+    BTC den tu `n6_caption_qwen` (Qwen2.5-VL, TIENG ANH) chu khong tu `n6_recap`
+    (Gemini). Nhung `n6_recap` van nam trong `config/ingest_shards.yaml`, va doi
+    cung dia chi o day la lam ke hoach do sinh ra mot tang khong doc duoc gi.
+
+    `source` di vao `params`, nen `check_fingerprints` so no giua cac shard: hai
+    nguoi nhung hai nguon caption khac nhau vao CUNG mot artifact `dense_vectors`
+    se bi tu choi o buoc gop — dung cho no phai bi tu choi.
+    """
     from sentence_transformers import SentenceTransformer  # noqa: PLC0415
 
     checkpoint = "BAAI/bge-m3"
-    local = ctx.workdir / f"dense_captions_{ctx.video_id}.json"
-    ctx.writer.transport.get(ctx.layout.part("dense_captions", ctx.video_id), local)
+    source = ctx.params.get("source", "dense_captions")
+    if source not in _BGE_M3_SOURCES:
+        raise ValueError(
+            f"n6_bge_m3: source={source!r} khong hop le; "
+            f"chon mot trong {sorted(_BGE_M3_SOURCES)}"
+        )
+    local = ctx.workdir / f"{source}_{ctx.video_id}.json"
+    ctx.writer.transport.get(ctx.layout.part(source, ctx.video_id), local)
     captions = json.loads(local.read_text(encoding="utf-8"))
     if not captions:
-        raise RuntimeError(f"{ctx.video_id}: chua co dense_captions — chay n6_recap truoc")
+        raise RuntimeError(
+            f"{ctx.video_id}: chua co {source} — chay {_BGE_M3_SOURCES[source]} truoc"
+        )
 
     keys = sorted(captions)
     with Stopwatch() as timer:
@@ -2168,7 +2196,7 @@ def stage_n6_bge_m3(ctx: StageContext) -> dict:
         keys,
         np.asarray(vectors, dtype=np.float32),
         model=checkpoint,
-        params={"normalize": True},
+        params={"normalize": True, "source": source},
         elapsed_s=timer.seconds,
     )
 
