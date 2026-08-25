@@ -63,29 +63,107 @@ DENSE_ARM_SPECS: dict[str, tuple[str, int, str, str, str]] = {
 }
 
 
+#: SigLIP nạp tháp text với ĐỘ DÀI CỐ ĐỊNH 64 lúc huấn luyện, nên truy vấn phải
+#: được đệm tới đúng 64 token. Đây không phải chi tiết trang trí — xem
+#: `_encode_siglip`.
+_SIGLIP_MAX_LENGTH = 64
+
+
 @lru_cache(maxsize=4)
-def _load_encoder(checkpoint: str) -> Any:
+def _load_sentence_transformer(checkpoint: str) -> Any:
     from sentence_transformers import SentenceTransformer
 
     logger.info("Loading query encoder %s (first call downloads weights)", checkpoint)
     return SentenceTransformer(checkpoint)
 
 
+@lru_cache(maxsize=2)
+def _load_siglip(checkpoint: str) -> Any:
+    from transformers import AutoModel, AutoTokenizer
+
+    logger.info("Loading SigLIP text tower %s", checkpoint)
+    return AutoTokenizer.from_pretrained(checkpoint), AutoModel.from_pretrained(checkpoint).eval()
+
+
+@lru_cache(maxsize=2)
+def _load_clap(checkpoint: str) -> Any:
+    from transformers import ClapModel, ClapProcessor
+
+    logger.info("Loading CLAP text tower %s", checkpoint)
+    return ClapProcessor.from_pretrained(checkpoint), ClapModel.from_pretrained(checkpoint).eval()
+
+
+def _pooled(out) -> np.ndarray:
+    pooled = getattr(out, "pooler_output", None)
+    return (pooled if pooled is not None else out).numpy()
+
+
+def _encode_siglip(text: str, checkpoint: str) -> np.ndarray:
+    """Tháp text SigLIP qua `transformers`, đệm tới `max_length`.
+
+    KHÔNG dùng `SentenceTransformer` ở đây. Đo trên chính kho phẳng
+    (176.707×1152): hai đường cho hai vector truy vấn **khác nhau** —
+    cosine 0,658 với *"a landslide burying a mountain pass road"* và 0,798 với
+    *"a cyclist in a yellow jersey raising both arms after the finish line"*,
+    trùng nhau 3/10 và 7/10 ở top-10. Nguyên nhân: SigLIP huấn luyện tháp text
+    ở độ dài cố định 64, còn `SentenceTransformer` đệm động theo lô.
+
+    Cả hai đều trả về thứ hạng trông hợp lý, nên sai ở đây không nổ ra chỗ nào
+    — nó chỉ làm mọi phép đo `siglip` đo một hệ khác với hệ mà
+    `scripts/query_flat.py` và `app/rerank_lab.py` chạy.
+    """
+    import torch
+
+    tokenizer, model = _load_siglip(checkpoint)
+    batch = tokenizer(
+        [text],
+        padding="max_length",
+        max_length=_SIGLIP_MAX_LENGTH,
+        truncation=True,
+        return_tensors="pt",
+    )
+    with torch.no_grad():
+        return _pooled(model.get_text_features(**batch))[0]
+
+
+def _encode_clap(text: str, checkpoint: str) -> np.ndarray:
+    """Tháp text CLAP — cùng checkpoint `n3_audio` dùng cho phía âm thanh."""
+    import torch
+
+    processor, model = _load_clap(checkpoint)
+    batch = processor(text=[text], return_tensors="pt", padding=True)
+    with torch.no_grad():
+        return _pooled(model.get_text_features(**batch))[0]
+
+
 def encode_query(text: str, checkpoint: str, expected_dim: int) -> np.ndarray:
     """Embed a query, L2-normalized, with the dimension checked.
+
+    Tháp text được chọn theo **họ checkpoint**, không phải theo một thư viện
+    chung: SigLIP và CLAP không phải model câu, và nạp chúng qua
+    `SentenceTransformer` cho ra vector khác (`_encode_siglip`). `bge-m3` thì
+    đúng là model câu và đi đường `SentenceTransformer`.
 
     The check is not ceremony: a checkpoint that quietly returns a different
     width produces a Milvus error about the wire format, several layers away
     from the line that chose the wrong model.
     """
-    vector = _load_encoder(checkpoint).encode(text, normalize_embeddings=True)
+    if checkpoint.startswith("google/siglip"):
+        vector = _encode_siglip(text, checkpoint)
+    elif "clap" in checkpoint.lower():
+        vector = _encode_clap(text, checkpoint)
+    else:
+        vector = _load_sentence_transformer(checkpoint).encode(
+            text, normalize_embeddings=True
+        )
     vector = np.asarray(vector, dtype=np.float32).ravel()
     if vector.shape[0] != expected_dim:
         raise ValueError(
             f"{checkpoint} produced a {vector.shape[0]}-dim query vector, "
             f"but its collection holds {expected_dim}-dim ones"
         )
-    return vector
+    norm = float(np.linalg.norm(vector))
+    return vector / norm if norm else vector
 
 
 def _to_candidates(hits, arm_name: str, run_id: str) -> list[Candidate]:

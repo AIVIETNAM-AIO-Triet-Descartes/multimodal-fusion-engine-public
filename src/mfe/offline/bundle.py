@@ -94,6 +94,22 @@ ARTIFACTS: dict[str, Artifact] = {
         Artifact("viet_ocr", "text", "viet_ocr.json", "ocr_vietocr", None, "n5_ocr_vietocr"),
         Artifact("objects_text", "text", "objects_text.json", "object", None, "n4_objects"),
         Artifact("dense_captions", "text", "dense_captions.json", "caption", None, "n6_recap"),
+        # Qwen2.5-VL qua vLLM — MOT lan sinh, HAI nua (`[CAPTION]` / `[TEXT]`).
+        # Them 25-08-2026, phuong phap cua Bao (`notebooks/reference/caption.ipynb`).
+        #
+        # VI SAO KHONG DUNG LAI `dense_captions`: artifact do la cua `n6_recap`,
+        # va `spec.stage` la khoa DUY NHAT `merge.wanted` loc theo. Cuop no di la
+        # `n6_recap` thanh mot tang khong sinh ra gi — va no van nam trong
+        # `config/ingest_shards.yaml`, ke hoach 5 nguoi cua bundle `aic_btc_v1`.
+        # Sua mot ke hoach lich su de tien cho mot tang moi la viet lai qua khu.
+        #
+        # Hai nguon caption song song KHONG phai su trung lap can don: ca ba
+        # nguon OCR cung song canh nhau vi chung sai o ba cho khac nhau (xem ghi
+        # chu ngay tren). ReCap mang bo nho theo chuoi shot, Qwen2.5 nhin tung
+        # khung roi rac — hai phep do khac nhau, va chua ai do cai nao hon.
+        Artifact("qwen_captions", "text", "qwen_captions.json", "caption_qwen", None,
+                 "n6_caption_qwen"),
+        Artifact("qwen_ocr", "text", "qwen_ocr.json", "ocr_qwen25", None, "n6_ocr_qwen25"),
         Artifact("siglip_vectors", "vector", "siglip_vectors.npz", None, 1152, "n4_siglip"),
         Artifact("dense_vectors", "vector", "dense_vectors.npz", None, 1024, "n6_bge_m3"),
         Artifact("audio_features", "vector", "audio_features.npz", None, 512, "n3_audio"),
@@ -125,6 +141,9 @@ NUMERIC_PACKAGES = (
     "paddlepaddle-gpu",
     "paddlepaddle",
     "vietocr",
+    # Them 25-08-2026 cung `n6_caption_qwen`: doi phien ban vLLM la doi cau tra
+    # loi cua Qwen2.5-VL, nen no thuoc ve day chu khong phai OTHER_PACKAGES.
+    "vllm",
 )
 
 #: Recorded for provenance, ignored when comparing shards.
@@ -159,6 +178,10 @@ STAGE_PACKAGES: dict[str, tuple[str, ...]] = {
     # VietOCR reads them (`stages.stage_n5_ocr_vietocr`), so a Paddle version
     # change moves this stage's output too.
     "n5_ocr_vietocr": ("vietocr", "torch", "paddleocr", "paddlepaddle-gpu", "paddlepaddle"),
+    # vLLM la co may sinh, khong phai mot goi phu: no quyet dinh cach xep lich
+    # lo, cach luong tu hoa KV cache, va do la nhung thu doi duoc chuoi tra ve.
+    "n6_caption_qwen": ("torch", "transformers", "vllm"),
+    "n6_ocr_qwen25": ("torch", "transformers", "vllm"),
     "n6_recap": ("torch", "transformers"),
     "n6_bge_m3": ("torch", "transformers", "sentence-transformers"),
 }

@@ -1,9 +1,40 @@
 """QUEST: Question Evaluation & Structuring (Tầng 0).
 
 Mô đun phục hồi kỹ thuật PBR (Personalize Before Retrieve) gốc của SOTA_V2_AIC.
-Sử dụng LLM (Llama-3.1-70B hoặc Gemini) để:
-1. KIS Mode (QuestKIS): Dịch và phóng to câu truy vấn ngắn thành mô tả hình ảnh chi tiết.
-2. QA Mode (QuestVQA): Tách câu hỏi VQA phức tạp thành search_hint, ocr_keywords, logic_question.
+Ba việc, và chúng **khác nhau** — trộn vào một prompt là hỏng cả ba:
+
+1. `QuestKIS` — *viết lại theo văn phong*. Dịch câu truy vấn sang tiếng Anh mô tả
+   thị giác. Luật số 1 của nó là **cấm thêm** thứ không có trong câu.
+2. `quest_decompose` — *tách câu hỏi QA* thành `search_hint` / `ocr_keywords` /
+   `logic_question`.
+3. `quest_expand` — *gọi tên thứ đề cố ý không nêu tên*. Đây là việc duy nhất
+   được phép **thêm**, và nó là việc mà (1) bị cấm làm.
+
+Vì sao (3) phải là một hàm riêng
+---------------------------------
+Đọc 49 đề chính thức: **7 câu hỏi về thứ không nằm trong câu hỏi**
+(`docs/triet/diem-yeu-pipeline-theo-49-de.md` §2.4). *"phim của đạo diễn Steven
+Spielberg 1975"* phải thành *"cá mập"*; *"Đại học ở thành phố Lausanne"* phải
+thành *"EPFL"*. Không phép truy hồi nào giải được, vì từ khoá cần tìm không có
+trong câu.
+
+Nhưng 42 câu còn lại **không** cần thêm gì, và một từ bịa thêm vào truy vấn là
+recall mất đi. Nên `quest_expand` phải trả về **rỗng** được, và prompt của nó nói
+thẳng điều đó. Nhét luật này vào `QUEST_KIS_PROMPT` sẽ đổi hành vi của cả 49 câu
+để phục vụ 7 câu.
+
+Nhà cung cấp — đã kiểm ENDPOINT, không chỉ đọc code
+----------------------------------------------------
+Đo ngày 24-08-2026 trên chính máy này:
+
+* `gemini-2.5-flash` (giá trị cũ trong file này) trả **404** *"This model is not
+  found"* — dù nó vẫn nằm trong `models.list()`. Liệt kê không có nghĩa là gọi được.
+* `gemini-3.6-flash` **200**, 5,8 s. `gemini-flash-lite-latest` **200**, 1,0 s.
+* Hai đường OpenRouter và NVIDIA cần `openai`, và gói đó **không có trong venv** —
+  `QuestClient.__init__` nuốt `ImportError` nên cả hai âm thầm không tồn tại.
+
+Nghĩa là trước hôm nay `quest` không chạy được một lượt nào trên máy này, và
+`generate()` sẽ ném "Mọi Provider đều không khả dụng" ở lượt gọi đầu tiên.
 """
 
 from __future__ import annotations
@@ -12,8 +43,49 @@ import json
 import logging
 import os
 import re
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
+
+#: Model Gemini dùng cho mọi lượt QUEST. **Không** phải `gemini-2.5-flash` — xem
+#: docstring module: nó trả 404 cho khoá của nhóm. `-lite-latest` nhanh gấp ~6
+#: lần nhưng đây là bước viết lại truy vấn, chạy một lần mỗi truy vấn, nên chất
+#: lượng đáng giá hơn 5 giây.
+GEMINI_MODEL = "gemini-3.6-flash"
+
+QUEST_EXPAND_PROMPT = """You are a query analyst for a Vietnamese news-video search engine.
+
+The user's query sometimes refers to something WITHOUT NAMING IT — a film, an
+animal species, a place, an institution, an event. The search engine matches
+words, so an unnamed thing can never be found.
+
+Your ONLY job: name what the query refers to but does not say.
+
+RULES:
+1. If the query names everything it refers to, return an EMPTY list. This is the
+   common case. Returning nothing is a correct and expected answer.
+2. Only add a term when you are confident. A wrong term costs the user the query.
+3. Give each term in BOTH Vietnamese and English, as the search engine has arms
+   in both languages.
+4. Do not restate what the query already says. Do not add adjectives, colours,
+   scenery or mood.
+
+Return ONLY this JSON, no markdown, no explanation:
+{"terms": [{"vi": "...", "en": "...", "why": "..."}]}
+
+EXAMPLE A (something is unnamed):
+Query: "Đoạn clip về 1 thị trấn ven biển thu hút du khách nhờ 1 loài động vật biển
+nguy hiểm. Loài này nổi tiếng trong 1 bộ phim của đạo diễn Steven Spielberg sản
+xuất vào năm 1975"
+{"terms": [{"vi": "cá mập", "en": "shark", "why": "phim Spielberg 1975 la Jaws (Ham ca map)"},
+           {"vi": "cá mập trắng", "en": "great white shark", "why": "loai trong phim"}]}
+
+EXAMPLE B (nothing is unnamed):
+Query: "tay đua mặc áo vàng giơ hai tay lên ăn mừng sau khi về đích"
+{"terms": []}
+
+Query: "{query}"
+"""
 
 QUEST_VQA_PROMPT = """Bạn là bộ phân tích câu hỏi cho hệ thống tìm kiếm video thời sự Việt Nam.
 
@@ -136,15 +208,32 @@ class QuestClient:
             try:
                 from google.genai import types
                 response = self.gemini_client.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model=GEMINI_MODEL,
                     contents=prompt,
                     config=types.GenerateContentConfig(temperature=0.0)
                 )
-                return response.text.strip()
+                return (response.text or "").strip()
             except Exception as e:
-                logger.warning(f"QUEST Gemini fallback failed: {e}")
-                
-        raise RuntimeError("QUEST: Mọi Provider đều không khả dụng hoặc lỗi.")
+                logger.warning("QUEST Gemini (%s) failed: %s: %s", GEMINI_MODEL, type(e).__name__, e)
+
+        raise RuntimeError(
+            "QUEST: khong provider nao chay duoc. "
+            f"openai={'co' if self.openrouter_client or self.nvidia_client else 'KHONG cai'}, "
+            f"gemini={'co khoa' if self.gemini_key else 'KHONG co GEMINI_API_KEY'}"
+        )
+
+    def available(self) -> tuple[bool, str | None]:
+        """Có đường nào gọi được không, và nếu không thì vì sao.
+
+        Hỏi trước khi gọi, vì `generate()` chỉ ném ở lượt gọi đầu — nghĩa là một
+        pipeline bật quest mà thiếu khoá sẽ chạy tới đúng truy vấn đầu tiên rồi
+        mới đổ, sau khi đã nạp xong cả kho.
+        """
+        if self.openrouter_client or self.nvidia_client or self.gemini_client:
+            return True, None
+        if not (self.openrouter_key or self.nvidia_key or self.gemini_key):
+            return False, "khong co OPENROUTER_API_KEY / NVIDIA_API_KEY / GEMINI_API_KEY"
+        return False, "co khoa nhung thieu SDK (pip install openai / google-genai)"
 
 
 class QuestKIS:
@@ -159,6 +248,78 @@ class QuestKIS:
         prompt = QUEST_KIS_PROMPT.replace("{query}", text)
         result = self.client.generate(prompt, max_tokens=150)
         return result
+
+
+@dataclass(frozen=True)
+class ExpansionTerm:
+    """Một thứ đề nhắc tới mà không gọi tên, kèm lý do LLM đưa ra."""
+
+    vi: str
+    en: str
+    why: str = ""
+
+
+def quest_expand(query: str, client: QuestClient | None = None) -> list[ExpansionTerm]:
+    """Gọi tên thứ câu truy vấn nhắc tới mà không nêu tên. Rỗng là câu trả lời ĐÚNG.
+
+    Trả `[]` trong ba trường hợp, và cả ba đều **không** phải lỗi: câu đã nêu đủ
+    tên, LLM không chạy được, hoặc trả về thứ không đọc được. Người gọi vẫn tìm
+    bằng nguyên câu — mở rộng là phần **cộng thêm**, không phải phần thay thế.
+
+    Đó là lý do không có `fallback` trả lại chính câu hỏi ở đây. `quest_decompose`
+    có, và nó đúng cho việc của nó (tách một câu hỏi thì luôn còn lại câu hỏi);
+    với mở rộng thì "trả lại chính câu" nghĩa là *nhân đôi* mọi token của truy vấn
+    và làm lệch BM25 mà không thêm một chữ mới nào.
+    """
+    client = client or QuestClient()
+    ok, reason = client.available()
+    if not ok:
+        logger.warning("quest_expand: khong mo rong duoc — %s", reason)
+        return []
+
+    try:
+        text = client.generate(QUEST_EXPAND_PROMPT.replace("{query}", query), max_tokens=400)
+    except Exception as err:  # noqa: BLE001 — không có mở rộng thì vẫn tìm được
+        logger.warning("quest_expand: %s: %s", type(err).__name__, err)
+        return []
+
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if not match:
+        logger.warning("quest_expand: khong doc duoc JSON tu %r", text[:120])
+        return []
+    try:
+        payload = json.loads(match.group(0))
+    except ValueError as err:
+        logger.warning("quest_expand: JSON hong (%s): %r", err, text[:120])
+        return []
+
+    terms: list[ExpansionTerm] = []
+    for item in payload.get("terms") or []:
+        if not isinstance(item, dict):
+            continue
+        vi = str(item.get("vi") or "").strip()
+        en = str(item.get("en") or "").strip()
+        if not (vi or en):
+            continue
+        terms.append(ExpansionTerm(vi=vi, en=en, why=str(item.get("why") or "").strip()))
+    return terms
+
+
+def expanded_queries(
+    query_vi: str, query_en: str | None, terms: list[ExpansionTerm]
+) -> tuple[str, str | None]:
+    """Ghép các từ đã gọi tên vào **cuối** truy vấn, mỗi ngôn ngữ một bản.
+
+    Nối vào cuối chứ không thay thế: câu gốc vẫn mang phần mô tả thị giác mà
+    `siglip` sống bằng, còn từ mới chỉ thêm cơ hội cho arm văn bản. Thay hẳn thì
+    *"phim Spielberg 1975"* thành *"cá mập"* — mất luôn "thị trấn ven biển",
+    "du khách", mọi thứ đã đúng.
+    """
+    vi_extra = " ".join(t.vi for t in terms if t.vi)
+    en_extra = " ".join(t.en for t in terms if t.en)
+    out_vi = f"{query_vi} {vi_extra}".strip() if vi_extra else query_vi
+    out_en = f"{query_en} {en_extra}".strip() if (query_en and en_extra) else query_en
+    return out_vi, out_en
 
 
 def quest_decompose(question: str) -> dict[str, str]:

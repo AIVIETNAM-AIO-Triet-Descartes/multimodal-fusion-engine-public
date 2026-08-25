@@ -118,6 +118,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--only", default=None, help="Chi chay nhung query_id nay, ngan bang phay")
     parser.add_argument("--limit-rows", type=int, default=MAX_ANSWERS_PER_QUERY)
+    parser.add_argument(
+        "--flat-root",
+        default=None,
+        help="Chay tren kho phang (vd stores/flat) thay vi Elasticsearch + Milvus. "
+             "KHONG co co nay thi script doi hai may chu ma laptop khong dung.",
+    )
     return parser
 
 
@@ -244,7 +250,14 @@ def main() -> None:
 
     relational = RelationalMap(config.paths.relational_db)
     relational.init_schema()
-    cascade = Cascade.from_config(config)
+    # Đường phẳng là đường DUY NHẤT chạy được trên laptop: `Cascade.from_config`
+    # trần đòi Elasticsearch + Milvus, và §4 của CLAUDE.md đã chốt bỏ cả hai.
+    if args.flat_root:
+        from mfe.online.flat_arms import build_flat_cascade
+
+        cascade = build_flat_cascade(config, args.flat_root)
+    else:
+        cascade = Cascade.from_config(config)
 
     _print_arms(cascade)
     videos = _known_videos(relational)

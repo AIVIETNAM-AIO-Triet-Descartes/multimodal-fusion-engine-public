@@ -50,6 +50,8 @@ TEXT_ARM_SPECS: dict[str, tuple[str, bool]] = {
     "ocr_vietocr": ("ocr_vietocr", False),
     "object": ("object", False),
     "caption": ("caption", False),
+    "caption_qwen": ("caption_qwen", False),
+    "ocr_qwen25": ("ocr_qwen25", False),
 }
 
 _DESCRIPTIONS = {
@@ -60,6 +62,11 @@ _DESCRIPTIONS = {
     "ocr_vietocr": "OCR VietOCR trên vùng chữ của PaddleOCR — giữ dấu, lẫn ở logo",
     "object": "Nhãn vật thể phát hiện được",
     "caption": "Mô tả ảnh sinh tự động (TIẾNG ANH — truy vấn tiếng Việt sẽ trượt)",
+    # Cùng cảnh báo ngôn ngữ như `caption`: prompt của Bảo yêu cầu mô tả bằng
+    # TIẾNG ANH, nên arm này chỉ khớp khi truy vấn đã được dịch. Nửa `[TEXT]` thì
+    # ngược lại — nó chép chữ trên màn hình, phần lớn là tiếng Việt.
+    "caption_qwen": "Mô tả ảnh bởi Qwen2.5-VL (TIẾNG ANH — cần bản dịch truy vấn)",
+    "ocr_qwen25": "Chữ trên màn hình do Qwen2.5-VL chép, cùng lượt sinh với caption",
 }
 
 

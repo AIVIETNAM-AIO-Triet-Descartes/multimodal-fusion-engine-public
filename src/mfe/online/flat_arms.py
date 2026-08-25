@@ -43,8 +43,10 @@ nên không có bước tra ordinal nào ở đây — đúng lý do bản gộp
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import pickle
 import time
 from pathlib import Path
 
@@ -70,6 +72,8 @@ SOURCE_FILE = {
     "ocr_vietocr": "viet_ocr.json",
     "object": "objects_text.json",
     "caption": "dense_captions.json",
+    "caption_qwen": "qwen_captions.json",
+    "ocr_qwen25": "qwen_ocr.json",
 }
 
 #: Tên arm dense -> tên file phẳng.
@@ -177,6 +181,163 @@ class FlatBundle:
         text = ", ".join(f"{s}:{len(k)}" for s, k in sorted(self.text_keys.items()))
         dense = ", ".join(f"{m}:{v.shape[0]}" for m, v in sorted(self.vectors.items()))
         return f"van ban [{text}] · dense [{dense}] · thieu {sorted(self.missing)}"
+
+
+#: Cache dẫn xuất của bản gộp: BM25 pickle + ma trận trải ra `.npy` để mmap.
+#: Cùng thư mục `scripts/query_flat.py` dùng, và cố ý vậy — hai chỗ cache riêng
+#: là hai lần trả cùng một chi phí, và là hai cơ hội để lệch nhau.
+DEFAULT_CACHE_DIR = Path(".cache/flat")
+
+
+def _fingerprint(path: Path) -> str:
+    """Vân tay rẻ của một file: tên + kích thước + thời gian sửa.
+
+    Không băm nội dung: file lớn nhất là 777 MB và băm nó mỗi lần chạy sẽ đắt
+    hơn chính việc nạp. Đổi lại, một file bị ghi đè mà giữ nguyên cỡ và mtime sẽ
+    trượt — trường hợp đó chỉ xảy ra khi có người cố tình, và `use_cache=False`
+    có mặt cho đúng lúc đó.
+    """
+    stat = path.stat()
+    raw = f"{path.name}:{stat.st_size}:{int(stat.st_mtime)}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+def flat_base(root: str | Path) -> Path:
+    """`{root}/data/vectors/`, hoặc chính `{root}` nếu file nằm thẳng đó."""
+    root = Path(root)
+    base = root / "data" / "vectors"
+    return base if base.is_dir() else root
+
+
+def load_cached_bm25(bundle: FlatBundle, source: str, base: Path, cache_dir: Path):
+    """BM25 của một nguồn, đọc từ cache nếu file nguồn không đổi.
+
+    Dựng lại BM25 trên 169k dòng mất hàng chục giây và cho ra **đúng** cùng một
+    model; một lượt quét trọng số đụng bốn nguồn thì đó là phút chờ thuần tuý.
+    """
+    path = base / SOURCE_FILE[source]
+    cache = cache_dir / f"bm25-{source}-{_fingerprint(path)}.pkl"
+    if cache.is_file():
+        started = time.perf_counter()
+        with cache.open("rb") as handle:
+            model = pickle.load(handle)
+        bundle.bm25[source] = model
+        logger.info("bm25 %s: doc cache (%.1fs)", source, time.perf_counter() - started)
+        return model
+
+    model = bundle.build_bm25(source)
+    if model is not None:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        tmp = cache.with_suffix(".tmp")
+        with tmp.open("wb") as handle:
+            pickle.dump(model, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        tmp.replace(cache)   # đổi tên nguyên tử: cache dở dang không đọc được
+    return model
+
+
+def load_cached_vectors(base: Path, model: str, cache_dir: Path):
+    """`(ids, ma trận)` cho một arm dense, **memory-map** khi có thể.
+
+    `.npz` là một file zip, nên `np.load` phải giải nén cả 777 MB vào RAM mỗi
+    lần chạy — đo được ~10 giây. Lần đầu, hàm này trải nó ra thành `.npy` thô
+    cộng một danh sách id; từ lần sau `mmap_mode="r"` để hệ điều hành nạp theo
+    trang, và phép `matmul` chỉ chạm đúng những trang nó đọc.
+
+    Đổi lại một bản sao 777 MB trên đĩa. Đó là cái giá đúng ở đây: đĩa rẻ, và
+    thứ đang tiêu là những giây người vận hành ngồi nhìn màn hình.
+    """
+    source = base / DENSE_FILE[model]
+    tag = _fingerprint(source)
+    npy = cache_dir / f"vec-{model}-{tag}.npy"
+    ids_path = cache_dir / f"vec-{model}-{tag}.ids.json"
+
+    if npy.is_file() and ids_path.is_file():
+        started = time.perf_counter()
+        ids = json.loads(ids_path.read_text(encoding="utf-8"))
+        matrix = np.load(npy, mmap_mode="r")
+        logger.info(
+            "%s: mmap %s (%.1fs)", model, matrix.shape, time.perf_counter() - started
+        )
+        return ids, matrix
+
+    started = time.perf_counter()
+    with np.load(source, allow_pickle=False) as payload:
+        ids = [str(x) for x in payload["ids"].tolist()]
+        matrix = np.asarray(payload["vectors"], dtype=np.float32)
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    matrix = matrix / norms
+    logger.info(
+        "%s: doc npz %s (%.1fs)", model, matrix.shape, time.perf_counter() - started
+    )
+
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    tmp = npy.with_suffix(".tmp.npy")
+    np.save(tmp, matrix)
+    tmp.replace(npy)
+    ids_path.write_text(json.dumps(ids), encoding="utf-8")
+    logger.info("%s: da trai ra %s cho lan sau", model, npy.name)
+    return ids, matrix
+
+
+def load_flat_bundle(
+    root: str | Path,
+    *,
+    sources=None,
+    models=None,
+    cache_dir: str | Path = DEFAULT_CACHE_DIR,
+    use_cache: bool = True,
+) -> FlatBundle:
+    """`FlatBundle.load` cộng lớp cache dẫn xuất — đường dùng cho mọi công cụ.
+
+    `FlatBundle.load` thẳng vẫn đúng và vẫn là API cho test; cái nó không có là
+    cache, và không có cache thì mỗi lượt chạy trả lại ~30 giây giải nén npz
+    cộng vài chục giây dựng BM25. Một lượt quét trọng số chạy hàng chục lần.
+    """
+    if not use_cache:
+        return FlatBundle.load(root, sources=sources, models=models)
+
+    base = flat_base(root)
+    cache_dir = Path(cache_dir)
+    # `models=set()` — phần dense nạp qua cache mmap ngay dưới đây, nên để
+    # `FlatBundle.load` đọc npz nữa là trả hai lần cùng một chi phí.
+    bundle = FlatBundle.load(root, sources=sources, models=set())
+    for model, filename in DENSE_FILE.items():
+        if models is not None and model not in models:
+            continue
+        if not (base / filename).is_file():
+            bundle.missing[model] = f"khong co {filename} trong {base}"
+            continue
+        ids, matrix = load_cached_vectors(base, model, cache_dir)
+        bundle.vectors[model] = matrix
+        bundle.vector_keys[model] = ids
+    for source in sorted(bundle.texts):
+        load_cached_bm25(bundle, source, base, cache_dir)
+    return bundle
+
+
+def build_flat_cascade(config, root: str | Path, **overrides):
+    """`Cascade` chạy trên bản gộp — không Elasticsearch, không Milvus, không Faiss.
+
+    `flat_bundle` PHẢI đi qua `from_config`, không gán sau: `_build_arms` chạy
+    trong `__init__` và đọc `self.flat_bundle` ngay lúc đó, nên gán muộn cho ra
+    một cascade 0 arm mà không báo gì.
+
+    Ba kho kia truyền `None` **tường minh**: đường phẳng không đọc chúng, và để
+    `from_config` thử mở là trả tiền import `faiss` cộng một lượt gọi
+    Elasticsearch cho hai arm mà `_build_arms` sẽ bỏ qua ngay sau đó.
+    """
+    from mfe.online.cascade import Cascade  # noqa: PLC0415 — tránh vòng import
+
+    bundle = overrides.pop("flat_bundle", None) or load_flat_bundle(root)
+    return Cascade.from_config(
+        config,
+        flat_bundle=bundle,
+        vector_index=None,
+        inverted_index=None,
+        text_store=None,
+        **overrides,
+    )
 
 
 def _candidates(pairs, arm_name: str, run_id: str) -> list[Candidate]:

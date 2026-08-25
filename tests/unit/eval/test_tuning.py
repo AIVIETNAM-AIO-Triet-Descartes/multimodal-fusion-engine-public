@@ -276,3 +276,79 @@ def test_measurement_summary_is_readable_without_a_strict_window() -> None:
     result = _measure([evidence], Assignment({"a": 1.0}))
     assert "HEP -" in result.summary()
     assert result.strict is None
+
+
+# --- cache evidence ------------------------------------------------------
+#
+# Trọng số KHÔNG đổi cái arm trả về, chỉ đổi cách gộp — nên một lượt truy hồi
+# dùng được cho mọi lượt quét sau. Cái phải khoá không phải chuyện ghi/đọc chạy
+# được, mà là chuyện cache TỪ CHỐI khi nó không còn mô tả lượt chạy này: một
+# cache lặng lẽ khớp nhầm cho ra bảng số đo của một cấu hình khác, và không có
+# gì trong bảng đó lộ ra điều ấy.
+
+
+def test_evidence_cache_di_va_ve_nguyen_hinh(tmp_path) -> None:
+    from mfe.eval.tuning import load_evidence_cache, save_evidence_cache
+
+    evidence = _evidence({"siglip": _candidates([1000, 2000]), "ocr": _candidates([3000])})
+    path = tmp_path / "ev.json"
+    save_evidence_cache(path, [evidence], key="k1")
+
+    back = load_evidence_cache(path, [evidence.query], key="k1")
+    assert back is not None and len(back) == 1
+    assert back[0].arm_names == {"siglip", "ocr"}
+    assert [c.keyframe_id for c in back[0].per_event[0]["siglip"]] == [
+        c.keyframe_id for c in evidence.per_event[0]["siglip"]
+    ]
+    assert back[0].per_event[0]["siglip"][0].score == pytest.approx(1.0)
+
+
+def test_evidence_cache_cham_diem_ra_dung_con_so_cu(tmp_path) -> None:
+    """Đọc từ cache phải cho ra ĐÚNG con số của lượt truy hồi thật.
+
+    Đây là điều kiện để một bảng quét trọng số chạy từ cache so được với bảng
+    chạy trực tiếp. Sai ở đây thì cache không tiết kiệm thời gian, nó tạo ra một
+    phép đo thứ hai.
+    """
+    from mfe.eval.tuning import load_evidence_cache, save_evidence_cache
+
+    evidence = _evidence({"a": _candidates([500, 1000]), "b": _candidates([1000])})
+    assignment = Assignment({"a": 1.0, "b": 2.0})
+    before = _measure([evidence], assignment)
+
+    path = tmp_path / "ev.json"
+    save_evidence_cache(path, [evidence], key="k")
+    after = _measure(load_evidence_cache(path, [evidence.query], key="k"), assignment)
+
+    assert after.wide == pytest.approx(before.wide)
+    assert after.mean_first_hit_rank == before.mean_first_hit_rank
+
+
+def test_evidence_cache_van_tay_lech_thi_TU_CHOI(tmp_path) -> None:
+    from mfe.eval.tuning import load_evidence_cache, save_evidence_cache
+
+    evidence = _evidence({"a": _candidates([1000])})
+    path = tmp_path / "ev.json"
+    save_evidence_cache(path, [evidence], key="config-cu")
+    assert load_evidence_cache(path, [evidence.query], key="config-moi") is None
+
+
+def test_evidence_cache_thieu_cau_thi_TU_CHOI(tmp_path) -> None:
+    """Thiếu một câu là truy hồi lại CẢ BỘ, không phải vá phần thiếu.
+
+    Vá phần thiếu sẽ trộn hai lượt truy hồi vào một bảng, và hai lượt đó có thể
+    chạy trên hai kho khác nhau.
+    """
+    from mfe.eval.tuning import load_evidence_cache, save_evidence_cache
+
+    first = _evidence({"a": _candidates([1000])}, query_id="q1")
+    second = _query("q2")
+    path = tmp_path / "ev.json"
+    save_evidence_cache(path, [first], key="k")
+    assert load_evidence_cache(path, [first.query, second], key="k") is None
+
+
+def test_evidence_cache_chua_co_file_thi_tra_None(tmp_path) -> None:
+    from mfe.eval.tuning import load_evidence_cache
+
+    assert load_evidence_cache(tmp_path / "chua-co.json", [_query()], key="k") is None

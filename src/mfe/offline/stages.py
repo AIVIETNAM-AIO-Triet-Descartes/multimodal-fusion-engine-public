@@ -19,6 +19,7 @@ what it produced does not get to claim it finished.
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import logging
 import os
@@ -30,6 +31,7 @@ import numpy as np
 
 from mfe.contracts.ids import build_keyframe_id, frame_idx_from_pts
 from mfe.offline.bundle import BundleLayout, BundleWriter, Stopwatch
+from mfe.offline.caption_prompt import PROMPT_VARIANTS
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +73,24 @@ _DETECTIONS: dict[int, list[tuple[tuple[int, int, int, int], str, float]]] = {}
 #: la cache bi don sach — xem `paddle_scan`.
 _DETECTION_SCOPE: tuple[str, str] | None = None
 
+#: Cau tra loi THO cua Qwen2.5-VL, giu lai trong PHIEN. `{n cua keyframe: text}`.
+#:
+#: Cung ly do nhu `_DETECTIONS`, va o day dat hon nhieu: `n6_caption_qwen` va
+#: `n6_ocr_qwen25` doc HAI NUA cua CUNG mot cau tra loi (`[CAPTION]` va `[TEXT]`).
+#: Sinh lai lan hai la tra gap doi tien GPU de lay lai dung chuoi vua co.
+#:
+#: Khoa scope gom ca tham so sinh, nen doi prompt hay `max_tokens` la cache truot
+#: chu khong tra ve cau cu. Cung vong doi voi `_MODELS`.
+_QWEN_VL_ANSWERS: dict[int, str] = {}
+
+#: `(video_id, khoa cache sinh)` ma `_QWEN_VL_ANSWERS` dang giu.
+_QWEN_VL_SCOPE: tuple[str, str] | None = None
+
+#: Cong don `{"images": n, "seconds": s}` cua ca phien, chi de BAO CAO. Khong
+#: reset theo video: cau hoi dang tra loi la "ca luot chay bao lau", va mot con
+#: so tinh tren mot video thi lan nap model dau tien lam no vo nghia.
+_QWEN_VL_TIMING: dict[str, float] = {}
+
 
 def cached_model(key: str, build):
     """The model for `key`, built once. `build` is only called on a miss."""
@@ -92,8 +112,11 @@ def unload_models() -> None:
     # Ket qua phat hien gan voi doi tuong model da tao ra chung; giu lai sau khi
     # model bi tha la giu mot ket qua khong con gi trong phien nay sinh lai duoc.
     _DETECTIONS.clear()
-    global _DETECTION_SCOPE  # noqa: PLW0603
+    _QWEN_VL_ANSWERS.clear()
+    _QWEN_VL_TIMING.clear()
+    global _DETECTION_SCOPE, _QWEN_VL_SCOPE  # noqa: PLW0603
     _DETECTION_SCOPE = None
+    _QWEN_VL_SCOPE = None
     free_gpu()
 
 
@@ -1650,6 +1673,367 @@ def build_gemini_generate(model_name: str = "gemini-3.6-flash"):
     return generate
 
 
+# ---------------------------------------------------------------------------
+# N6 — Qwen2.5-VL qua vLLM: caption + chu tren man hinh, MOT lan sinh
+# ---------------------------------------------------------------------------
+
+#: Anh moi lan `llm.generate()`. 32 la con so cua Bao tren 2xT4 voi
+#: `gpu_memory_utilization=0.9` — model 7B chia doi con ~8 GB moi card lam KV
+#: cache. vLLM tu xep lich trong lo nen day la tran, khong phai kich thuoc co dinh.
+QWEN25_BATCH = 32
+
+#: Stop token cua Qwen2.5 (`<|endoftext|>`, `<|im_end|>`).
+_QWEN25_STOP_IDS = (151643, 151645)
+
+#: Throughput da do cua bien the `bao` tren 2xT4: **~60,5 giay cho lo 32 anh**,
+#: tuc **~0,52 anh/giay** — ~95 gio GPU cho 177.321 keyframe. Moi thay doi prompt
+#: phai duoc do lai so voi con so nay TRUOC khi ap len ca bo (notebook 08, ô đo
+#: throughput). Prompt dai hon lam prefill nang hon; `max_tokens` cao hon lam
+#: decode dai hon. Ca hai deu cong vao 95 gio do.
+QWEN25_BASELINE_IMAGES_PER_S = 0.52
+
+
+def qwen25_prompt(ctx: StageContext) -> str:
+    """Prompt cua luot chay nay. `params["prompt_variant"]` chon bien the."""
+    variant = str(ctx.params.get("prompt_variant", "aic"))
+    if variant not in PROMPT_VARIANTS:
+        raise ValueError(
+            f"prompt_variant={variant!r} khong co. Biet: {sorted(PROMPT_VARIANTS)}"
+        )
+    return PROMPT_VARIANTS[variant][0]
+
+
+def qwen25_max_tokens(ctx: StageContext) -> int:
+    """`max_tokens` cua luot nay — mac dinh THEO BIEN THE, khong phai mot so chung."""
+    variant = str(ctx.params.get("prompt_variant", "aic"))
+    return int(ctx.params.get("max_tokens", PROMPT_VARIANTS[variant][1]))
+
+
+def _qwen25_cache_key(ctx: StageContext) -> str:
+    """Van tay cua mot luot sinh. Doi bat ky thu gi o day la cache phai truot."""
+    return json.dumps(
+        {
+            "checkpoint": ctx.params.get("checkpoint", "Qwen/Qwen2.5-VL-7B-Instruct"),
+            "max_tokens": qwen25_max_tokens(ctx),
+            "temperature": float(ctx.params.get("temperature", 0.1)),
+            # Ban than prompt, khong phai ten bien the: doi noi dung prompt ma
+            # giu ten thi cache van trung, va lan chay sau tra ve cau cua prompt cu.
+            "prompt": qwen25_prompt(ctx),
+            "text_first": bool(ctx.params.get("text_first", True)),
+        },
+        sort_keys=True,
+    )
+
+
+def parse_qwen25_caption_ocr(text: str) -> tuple[str, str, bool]:
+
+    """`(caption, chu doc duoc, co DU hai nhan)` tu cau tra loi tho.
+
+    Ba thu phai xu ly, va ca ba deu quan sat duoc tren chinh 855 cau tra loi cua
+    Bao:
+
+    1. **Ngoac don bao quanh.** Prompt viet `[CAPTION] (your description here)`
+       nen model thuong tra ve ca cap ngoac: `[CAPTION] (The image shows ...)`.
+       Giu nguyen thi moi caption bat dau bang `(` — vo hai cho BM25 nhung ban
+       ra hai chuoi khac nhau khi doi chieu voi ban cua Bao.
+    2. **Cau tra loi mat nhan.** Tra ve `False` o phan tu thu ba de nguoi goi
+       DEM duoc. Khong co nhan `[TEXT]` thi ta coi ca cau la caption va de OCR
+       trong — an toan hon la doan, vi doan sai se do mot doan mo ta canh vat
+       vao chi muc OCR.
+    3. **Tu bo cuoc.** Prompt CO cho san duong thoat `'None'`, nen model se dung
+       no. Loc theo TUNG DONG bang `_BAIL_WORDS`, cung ham `parse_qwen_ocr` da
+       dung: cho phep loc that bai la khi model tra ca chu that VA tu bo cuoc
+       trong cung mot cau.
+    """
+    raw = (text or "").strip()
+    has_caption = "[CAPTION]" in raw
+    has_text = "[TEXT]" in raw
+
+    if has_text:
+        head, _, tail = raw.partition("[TEXT]")
+    else:
+        head, tail = raw, ""
+    caption = head.replace("[CAPTION]", "", 1).strip() if has_caption else head.strip()
+
+    def unwrap(value: str) -> str:
+        value = value.strip()
+        if value.startswith("(") and value.endswith(")") and value.count("(") == 1:
+            return value[1:-1].strip()
+        return value
+
+    caption = unwrap(caption)
+
+    kept: list[str] = []
+    for line in unwrap(tail).splitlines():
+        cleaned = line.strip().strip("*").strip()
+        if not cleaned:
+            continue
+        if cleaned.lower().strip(" .:\"'") in _BAIL_WORDS:
+            continue
+        kept.append(cleaned)
+    return caption, "\n".join(kept).strip(), (has_caption and has_text)
+
+
+def qwen25_scan(ctx: StageContext, keyframes: list[Keyframe], *, label: str) -> list[str]:
+    """Cau tra loi tho cho `keyframes`, dung lai neu phien nay da sinh.
+
+    Hai tang N6 goi ham nay tren cung mot video, nen tang chay sau **khong tra
+    lai** tien GPU. Do la mot nua tong chi phi cua ca luot — dat hon nhieu so
+    voi `paddle_scan`, vi day la mot model 7B chu khong phai mot pipeline CPU.
+    """
+    global _QWEN_VL_SCOPE  # noqa: PLW0603
+
+    scope = (ctx.video_id, _qwen25_cache_key(ctx))
+    if _QWEN_VL_SCOPE != scope:
+        # MOT video mot luc — chan bo nho, cung ly do `paddle_scan` ghi: giu lai
+        # video truoc khong cuu duoc lan goi nao, no chi tich lai cho toi khi
+        # phien Kaggle het RAM sau nhieu gio da chay.
+        _QWEN_VL_ANSWERS.clear()
+        _QWEN_VL_SCOPE = scope
+
+    todo = [kf for kf in keyframes if kf.n not in _QWEN_VL_ANSWERS]
+    if not todo:
+        if keyframes:
+            logger.info("%s: dung lai %d cau tra loi da sinh", label, len(keyframes))
+        return [_QWEN_VL_ANSWERS[kf.n] for kf in keyframes]
+
+    import time  # noqa: PLC0415
+
+    from qwen_vl_utils import process_vision_info  # noqa: PLC0415
+    from vllm import SamplingParams  # noqa: PLC0415
+
+    processor, llm = _qwen25_engine(ctx)
+    prompt_text = qwen25_prompt(ctx)
+    sampling = SamplingParams(
+        temperature=float(ctx.params.get("temperature", 0.1)),
+        max_tokens=qwen25_max_tokens(ctx),
+        stop_token_ids=list(_QWEN25_STOP_IDS),
+    )
+    width = int(ctx.params.get("batch_size", QWEN25_BATCH))
+    every = int(ctx.params.get("progress_every", 1))
+    text_first = bool(ctx.params.get("text_first", True))
+
+    started = time.perf_counter()
+    for start in range(0, len(todo), width):
+        batch = todo[start : start + width]
+        prompts = []
+        for keyframe in batch:
+            # THU TU CO Y, va no la dieu kien de prefix caching co tac dung.
+            #
+            # vLLM tai dung KV-cache theo TIEN TO chung tinh tu token dau tien.
+            # Dat anh truoc (nhu ban cua Bao) thi hang tram token thi giac —
+            # khac nhau o moi anh — nam ngay dau, nen phan chi dan + few-shot
+            # dai phia sau KHONG BAO GIO trung tien to va phai prefill lai tung
+            # lan. Dat chi dan truoc thi ca khoi do la mot tien to co dinh dung
+            # chung cho ca 177.321 anh.
+            #
+            # `text_first=False` giu lai de doi chieu voi ban cua Bao — bien the
+            # `bao` chay dung thu tu cua ban ay.
+            text_part = {"type": "text", "text": prompt_text}
+            image_part = {"type": "image", "image": str(keyframe.image)}
+            content = [text_part, image_part] if text_first else [image_part, text_part]
+            messages = [{"role": "user", "content": content}]
+            images, _ = process_vision_info(messages)
+            prompts.append(
+                {
+                    "prompt": processor.apply_chat_template(
+                        messages, tokenize=False, add_generation_prompt=True
+                    ),
+                    "multi_modal_data": {"image": images[0]},
+                }
+            )
+        outputs = llm.generate(prompts, sampling_params=sampling, use_tqdm=False)
+        # `zip(strict=True)`: vLLM tra ve theo dung thu tu dua vao, nhung "dung
+        # thu tu" la thu ta dang DUA VAO chu khong phai thu da kiem. Lech mot
+        # phan tu la gan caption cua anh nay cho anh khac — sai lang le, va
+        # khong bang ket qua nao lo ra.
+        for keyframe, output in zip(batch, outputs, strict=True):
+            _QWEN_VL_ANSWERS[keyframe.n] = output.outputs[0].text.strip()
+        _progress(label, min(start + width, len(todo)), len(todo), started, every * width)
+
+    # Throughput cua chinh luot nay, de tang ghi vao `facts`. Khong co no thi
+    # cau hoi "prompt dai hon co lam cham khong" chi tra loi duoc bang cach ngoi
+    # bam gio, va khong ai bam gio mot luot chay 95 tieng.
+    elapsed = time.perf_counter() - started
+    _QWEN_VL_TIMING["images"] = _QWEN_VL_TIMING.get("images", 0) + len(todo)
+    _QWEN_VL_TIMING["seconds"] = _QWEN_VL_TIMING.get("seconds", 0.0) + elapsed
+    logger.info(
+        "%s: %d anh trong %.1fs = %.2f anh/giay (nen cua bien the `bao`: %.2f)",
+        label, len(todo), elapsed, len(todo) / max(elapsed, 1e-9),
+        QWEN25_BASELINE_IMAGES_PER_S,
+    )
+
+    return [_QWEN_VL_ANSWERS[kf.n] for kf in keyframes]
+
+
+def _qwen25_engine(ctx: StageContext):
+    """`(processor, LLM)` cua vLLM, nap mot lan cho ca phien.
+
+    Tham so lay y nguyen tu notebook cua Bao, va moi dong co mot ly do nguoi
+    doc khong suy ra duoc:
+
+    * `tensor_parallel_size=2` — cua doi model 7B ra hai card T4, moi card ~7 GB,
+      con ~8 GB lam KV cache. Kaggle mot GPU thi phai dat `tensor_parallel_size=1`
+      va ha `max_model_len`; xem `notebooks/btc/08-*.ipynb`.
+    * `dtype="half"` — T4 khong co bfloat16.
+    * `enforce_eager=True` — **bat buoc** tren T4: CUDA Graph cua vLLM no tren
+      kien truc Turing.
+    * `enable_prefix_caching=True` — tai dung KV-cache cua TIEN TO chung. Voi
+      bien the `aic`, tien to do la ca khoi chi dan + few-shot (~900 token) va no
+      giong het nhau o ca 177.321 request. Chi co tac dung khi prompt dat TRUOC
+      anh (`text_first`, xem `qwen25_scan`).
+
+    Prefix caching **khong duoc phep lam do ca luot chay**: vLLM cu chua ho tro
+    no cho dau vao da phuong thuc va se nem ngay o `LLM(...)`. Nen ta thu bat,
+    va neu no khong nhan thi nap lai KHONG co no va GHI LAI su that do —
+    `enable_prefix_caching` di vao `facts` cua marker chu khong phai mot gia dinh
+    trong dau nguoi chay. Mot toi uu im lang tat di la mot con so throughput
+    khong giai thich duoc.
+    """
+    checkpoint = ctx.params.get("checkpoint", "Qwen/Qwen2.5-VL-7B-Instruct")
+    tp_size = int(ctx.params.get("tensor_parallel_size", 2))
+    max_len = int(ctx.params.get("max_model_len", 4096))
+    utilisation = float(ctx.params.get("gpu_memory_utilization", 0.9))
+    wants_prefix = bool(ctx.params.get("enable_prefix_caching", True))
+
+    def build():
+        from transformers import AutoProcessor  # noqa: PLC0415
+        from vllm import LLM  # noqa: PLC0415
+
+        common = {
+            "model": checkpoint,
+            "tensor_parallel_size": tp_size,
+            "dtype": "half",
+            "gpu_memory_utilization": utilisation,
+            "max_model_len": max_len,
+            "enforce_eager": True,
+            "limit_mm_per_prompt": {"image": 1},
+        }
+        processor = AutoProcessor.from_pretrained(checkpoint)
+        if wants_prefix:
+            try:
+                engine = LLM(**common, enable_prefix_caching=True)
+                _QWEN_VL_TIMING["prefix_caching"] = 1.0
+                logger.info("vLLM: prefix caching BAT")
+                return processor, engine
+            except Exception as err:  # noqa: BLE001 — ban vLLM cu khong nhan co nay
+                logger.warning(
+                    "vLLM tu choi enable_prefix_caching (%s: %s) — nap lai KHONG co no. "
+                    "Throughput se thap hon, va do la ly do.",
+                    type(err).__name__, str(err)[:160],
+                )
+        _QWEN_VL_TIMING["prefix_caching"] = 0.0
+        return processor, LLM(**common)
+
+    return cached_model(
+        f"vllm {checkpoint} tp{tp_size} len{max_len} prefix{int(wants_prefix)}", build
+    )
+
+
+def _qwen25_common(ctx: StageContext) -> tuple[dict, dict, dict]:
+    """`(params, facts, {n: (caption, ocr)})` — phan hai tang N6 dung chung."""
+    answers = qwen25_scan(ctx, ctx.keyframes, label=f"qwen2.5-vl {ctx.video_id}")
+    parsed: dict[int, tuple[str, str]] = {}
+    unmarked = 0
+    for keyframe, answer in zip(ctx.keyframes, answers, strict=True):
+        caption, ocr, marked = parse_qwen25_caption_ocr(answer)
+        parsed[keyframe.n] = (caption, ocr)
+        unmarked += 0 if marked else 1
+
+    prompt_text = qwen25_prompt(ctx)
+    params = {
+        "checkpoint": ctx.params.get("checkpoint", "Qwen/Qwen2.5-VL-7B-Instruct"),
+        "max_tokens": qwen25_max_tokens(ctx),
+        "temperature": float(ctx.params.get("temperature", 0.1)),
+        "engine": "vllm",
+        "prompt_variant": str(ctx.params.get("prompt_variant", "aic")),
+        # Van tay cua CHINH chuoi prompt, khong phai ten bien the. Sua mot chu
+        # trong prompt ma giu ten thi hai nguoi sinh ra hai bo caption khac nhau
+        # duoi cung mot nhan, va `check_fingerprints` se khong thay gi.
+        "prompt_sha": hashlib.sha256(prompt_text.encode()).hexdigest()[:16],
+        # Thu tu text/anh doi ca dau vao cua model, nen no la tham so cua BUNDLE:
+        # hai nguoi chay hai thu tu la hai bo caption khong so duoc voi nhau.
+        "text_first": bool(ctx.params.get("text_first", True)),
+    }
+    # `tensor_parallel_size` / `batch_size` / prefix caching la lua chon cua MAY,
+    # khong phai cua bundle: mot phien Kaggle 2xT4 va mot phien 1xP100 deu hop le,
+    # va prefix caching chi doi TOC DO chu khong doi chuoi tra ve. Dat chung vao
+    # `params` la `check_fingerprints` tu choi ca bundle vi hai nguoi dung hai
+    # loai GPU — mot phep tu choi dung hinh thuc va rong ve noi dung.
+    images = _QWEN_VL_TIMING.get("images", 0.0)
+    seconds = _QWEN_VL_TIMING.get("seconds", 0.0)
+    facts = {
+        "unmarked": unmarked,
+        "tensor_parallel_size": int(ctx.params.get("tensor_parallel_size", 2)),
+        "batch_size": int(ctx.params.get("batch_size", QWEN25_BATCH)),
+        "prefix_caching": bool(_QWEN_VL_TIMING.get("prefix_caching", 0.0)),
+        # Throughput CONG DON cua ca phien, khong phai cua video nay: lan nap
+        # model dau tien lam con so tren mot video vo nghia.
+        "images_per_s": round(images / seconds, 3) if seconds else None,
+    }
+    return params, facts, parsed
+
+
+def stage_n6_caption_qwen(ctx: StageContext) -> dict:
+    """Nua `[CAPTION]` cua mot lan sinh Qwen2.5-VL. Chay TRUOC `n6_ocr_qwen25`.
+
+    Thu tu quan trong: hai tang doc hai nua cua CUNG mot cau tra loi, va
+    `qwen25_scan` chi giu lai ket qua trong PHIEN va cho MOT video. Chay hai tang
+    lien tiep tren tung video (vong lap theo VIDEO, khong theo TANG) la dieu kien
+    de tang thu hai khong phai sinh lai — giong het rang buoc cua cap
+    `n5_ocr_paddle` / `n5_ocr_vietocr`.
+    """
+    with Stopwatch() as timer:
+        params, facts, parsed = _qwen25_common(ctx)
+        mapping = {
+            build_keyframe_id(ctx.video_id, kf.frame_idx): parsed[kf.n][0]
+            for kf in ctx.keyframes
+            if parsed[kf.n][0]
+        }
+
+    return ctx.writer.write_text_part(
+        "qwen_captions",
+        ctx.video_id,
+        mapping,
+        model=params["checkpoint"],
+        params={**params, "field": "caption"},
+        facts=facts,
+        elapsed_s=timer.seconds,
+    )
+
+
+def stage_n6_ocr_qwen25(ctx: StageContext) -> dict:
+    """Nua `[TEXT]` cua cung lan sinh. Chay NGAY SAU `n6_caption_qwen`.
+
+    Ghi vao `qwen_ocr` (`qwen_ocr.json`, source `ocr_qwen25`) chu KHONG vao
+    `sviptr_ocr`: cai ten do thuoc ve `n5_ocr_qwen` — Qwen2-**VL** 7B 4-bit, mot
+    model khac, do duoc 10,8 giay/anh va da bi bo (CLAUDE.md §4). Dung lai ten
+    cua no la lam song lai mot artifact vinh vien khong co du lieu.
+
+    Arm `ocr_qwen25` da duoc noi (`TEXT_ARM_SPECS`), nhung trong so cua no CHUA
+    duoc do: cau hoi "Qwen2.5 doc chu tot hon `viet_ocr` khong" can chinh du lieu
+    nay moi tra loi duoc. Ba nguon OCR hien co da cho thay cau tra loi khong hien
+    nhien — `ocr` (easyocr) chay mot minh 17/42 nhung dong gop AM trong hop nhat.
+    """
+    with Stopwatch() as timer:
+        params, facts, parsed = _qwen25_common(ctx)
+        mapping = {
+            build_keyframe_id(ctx.video_id, kf.frame_idx): parsed[kf.n][1]
+            for kf in ctx.keyframes
+            if parsed[kf.n][1]
+        }
+
+    return ctx.writer.write_text_part(
+        "qwen_ocr",
+        ctx.video_id,
+        mapping,
+        model=params["checkpoint"],
+        params={**params, "field": "text"},
+        facts=facts,
+        elapsed_s=timer.seconds,
+    )
+
+
 def stage_n6_recap(ctx: StageContext) -> dict:
     """Recurrence captioning for ONE video. See `mfe.offline.recap` for batching.
 
@@ -1800,6 +2184,8 @@ STAGES = {
     "n5_ocr_qwen": stage_n5_ocr_qwen,
     "n5_ocr_paddle": stage_n5_ocr_paddle,
     "n5_ocr_vietocr": stage_n5_ocr_vietocr,
+    "n6_caption_qwen": stage_n6_caption_qwen,
+    "n6_ocr_qwen25": stage_n6_ocr_qwen25,
     "n6_recap": stage_n6_recap,
     "n6_bge_m3": stage_n6_bge_m3,
 }

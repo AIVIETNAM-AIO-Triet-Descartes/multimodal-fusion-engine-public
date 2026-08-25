@@ -8,22 +8,44 @@ kiểm tra kích thước và nhận biết notebook đang dùng cache hay fallb
 
 > **Người làm: Trọng & Quang.** Tài liệu giao việc đầy đủ — phân công, model từng feature, hợp
 > đồng ID/schema, cách gộp sau khi xong: [`giao-viec-trong-quang.md`](giao-viec-trong-quang.md).
-> Không sinh caption ở lượt này.
+> Caption: KHÔNG sinh ở ba lượt đầu; lượt 5 (`08`) sinh caption + chữ trên màn hình bằng
+> Qwen2.5-VL, theo đúng phương pháp Bảo nghiên cứu (`../reference/caption.ipynb`).
 
 Chạy theo thứ tự, đổi `MEMBER` ở ô đầu thành `"trong"` hoặc `"quang"`. Cả ba lượt **dùng chung
 một cách chia người**, nên tên bạn cho ra cùng tập video ở mọi lượt.
 
-| | Notebook | Tầng | Requirements |
-|---|---|---|---|
-| 1 | `02-keyframes-btc-import.ipynb` | `n0_import_btc` | `../requirements-kaggle-nomodel.txt` |
-| 2 | `03-btc-siglip-ocr.ipynb` | `n4_siglip`, `n5_ocr_easyocr`, `n5_ocr_qwen` | `../requirements-kaggle-btc-images.txt` |
-| 3 | `04-btc-subtitles-audio.ipynb` | `n2_subtitles`, `n3_audio` | `../requirements-kaggle-btc-video.txt` |
+| | Notebook | Tầng | Shards | Requirements |
+|---|---|---|---|---|
+| 1 | `02-keyframes-btc-import.ipynb` | `n0_import_btc` | `…_btc.yaml` | `../requirements-kaggle-nomodel.txt` |
+| 2 | `03-btc-siglip-ocr.ipynb` | `n4_siglip`, `n5_ocr_easyocr` | `…_btc_images.yaml` | `../requirements-kaggle-btc-images.txt` |
+| 3 | `04-btc-subtitles-audio.ipynb` | `n2_subtitles`, `n3_audio` | `…_btc_video.yaml` | `../requirements-kaggle-btc-video.txt` |
+| 4 | `06-btc-paddle-vietocr.ipynb` | `n5_ocr_paddle`, `n5_ocr_vietocr` | `…_btc_ocr2.yaml` | `../requirements-kaggle-btc-paddle-vietocr.txt` |
+| 5 | `08-btc-caption-ocr-qwen25.ipynb` | `n6_caption_qwen`, `n6_ocr_qwen25` | `…_btc_caption.yaml` | `../requirements-kaggle-btc-caption.txt` |
+
+**Mỗi lượt một file shards riêng, và đó không phải sự lộn xộn.** `merge_bundle.py` đòi ĐỦ mảnh
+cho mọi tầng có trong `plan.stages`; gộp hết vào một file là bundle bị từ chối cho tới khi lượt
+cuối cùng chạy xong toàn bộ 873 video. Tách ra thì gộp được độc lập, và bốn lượt không đụng nhau
+vì `merge` lọc artifact theo `spec.stage in plan.stages`.
+
+**Lượt 5 (`08`) có hai thứ bốn lượt kia không có:**
+
+* **Cắt lát bằng `PART` / `NUM_PARTS`** để nhiều notebook Kaggle chạy song song cho **cùng một**
+  `MEMBER`. Chia theo *gói zip*, cân theo số ảnh, tất định. `author` ghi ra vẫn là `MEMBER` —
+  thêm tên mới vào `assignment` để chạy song song là cách chắc chắn làm hỏng bundle
+  (`merge.check_ownership`).
+* **Cổng đối chiếu `PROBE_ONLY`** — chạy `L21_V001` rồi so với 855 keyframe Bảo đã chạy
+  (`../reference/dense_captions_qwen.json`) qua `scripts/compare_qwen_captions.py`, và **dừng**.
+  Lượt đầy đủ là 177.321 ảnh trên một model 7B; phát hiện lệch sau lượt đó là mất cả lượt.
+
+⚠️ **Notebook 08 không được chạy chung phiên Kaggle với 03 hay 06**: vLLM ghim `torch` riêng và
+sẽ kéo phiên bản khác về khi cài. Một phiên, một môi trường.
 
 Bộ keyframe của BTC **cố định** — không phụ thuộc ρ hay ngưỡng mật độ nào của DAKE. Nên đây
 không phải bản nháp chờ chốt tham số: mọi thứ trích ở đây là kết quả cuối. Phương án DAKE sẽ
 ra một volume **khác**, xem `../dake/`.
 
-`n4_objects` không có ở lượt nào — BTC phát hành sẵn nhãn và lượt 1 nạp chúng. `n6_recap` /
-`n6_bge_m3` do Lead hoãn.
+`n4_objects` không có ở lượt nào — BTC phát hành sẵn nhãn và lượt 1 nạp chúng. `n5_ocr_qwen`
+đã bỏ (10,8 giây/ảnh, ~532 giờ GPU cho batch 1). `n6_recap` / `n6_bge_m3` do Lead hoãn —
+lượt 5 KHÔNG dùng lại artifact `dense_captions` của ReCap, nó có `qwen_captions` riêng.
 
 Chi tiết và các bất biến phải giữ: [`docs/triet/ke-hoach-offline-ingest.md`](../../docs/triet/ke-hoach-offline-ingest.md) §7.1.

@@ -35,10 +35,9 @@ khác với hệ đem đi thi, và mọi kết luận rút ra ở đây đều k
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import logging
-import pickle
+import os
 import sys
 import time
 from pathlib import Path
@@ -47,7 +46,12 @@ import numpy as np
 
 from mfe.contracts.tools import Candidate
 from mfe.core.cli import setup_console
-from mfe.online.flat_arms import SOURCE_FILE, FlatBundle
+from mfe.online.flat_arms import (
+    DEFAULT_CACHE_DIR,
+    FlatBundle,
+    load_cached_bm25,
+    load_cached_vectors,
+)
 from mfe.online.fusion import weighted_fusion
 from mfe.stores.inverted.index import _normalize_text, _tokenize
 
@@ -55,7 +59,6 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_ROOT = "stores/flat"
 DEFAULT_CONFIG = "config/btc_b1.yaml"
-CACHE_DIR = Path(".cache/flat")
 SIGLIP_CHECKPOINT = "google/siglip-so400m-patch14-384"
 CLAP_CHECKPOINT = "laion/clap-htsat-unfused"
 
@@ -77,88 +80,6 @@ WEIGHT_KEY = {
     "object": "object",
     "caption": "caption",
 }
-
-
-def _fingerprint(path: Path) -> str:
-    """Vân tay rẻ của một file: tên + kích thước + thời gian sửa.
-
-    Không băm nội dung: file lớn nhất là 777 MB và băm nó mỗi lần chạy sẽ đắt
-    hơn chính việc nạp. Đổi lại, một file bị ghi đè mà giữ nguyên cỡ và mtime sẽ
-    trượt — trường hợp đó chỉ xảy ra khi có người cố tình, và `--no-cache` có
-    mặt cho đúng lúc đó.
-    """
-    stat = path.stat()
-    raw = f"{path.name}:{stat.st_size}:{int(stat.st_mtime)}"
-    return hashlib.sha256(raw.encode()).hexdigest()[:16]
-
-
-def load_bm25(bundle: FlatBundle, source: str, base: Path, *, use_cache: bool = True):
-    """BM25 của một nguồn, đọc từ cache nếu file nguồn không đổi."""
-    path = base / SOURCE_FILE[source]
-    cache = CACHE_DIR / f"bm25-{source}-{_fingerprint(path)}.pkl"
-    if use_cache and cache.is_file():
-        started = time.perf_counter()
-        with cache.open("rb") as handle:
-            model = pickle.load(handle)
-        bundle.bm25[source] = model
-        logger.info("bm25 %s: doc cache (%.1fs)", source, time.perf_counter() - started)
-        return model
-
-    model = bundle.build_bm25(source)
-    if use_cache and model is not None:
-        CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        tmp = cache.with_suffix(".tmp")
-        with tmp.open("wb") as handle:
-            pickle.dump(model, handle, protocol=pickle.HIGHEST_PROTOCOL)
-        tmp.replace(cache)   # đổi tên nguyên tử: cache dở dang không đọc được
-    return model
-
-
-def load_vectors(base: Path, model: str, *, use_cache: bool = True):
-    """`(ids, ma trận)` cho một arm dense, **memory-map** khi có thể.
-
-    `.npz` là một file zip, nên `np.load` phải giải nén cả 777 MB vào RAM mỗi
-    lần chạy — đo được ~10 giây, tức phần lớn thời gian của một truy vấn. Lần
-    đầu, hàm này trải nó ra thành `.npy` thô cộng một danh sách id; từ lần sau
-    `mmap_mode="r"` để hệ điều hành nạp theo trang, và phép `matmul` chỉ chạm
-    đúng những trang nó đọc.
-
-    Đổi lại một bản sao 777 MB trên đĩa. Đó là cái giá đúng ở đây: đĩa rẻ, và
-    thứ đang tiêu là những giây người vận hành ngồi nhìn màn hình.
-    """
-    from mfe.online.flat_arms import DENSE_FILE
-
-    source = base / DENSE_FILE[model]
-    tag = _fingerprint(source)
-    npy = CACHE_DIR / f"vec-{model}-{tag}.npy"
-    ids_path = CACHE_DIR / f"vec-{model}-{tag}.ids.json"
-
-    if use_cache and npy.is_file() and ids_path.is_file():
-        started = time.perf_counter()
-        ids = json.loads(ids_path.read_text(encoding="utf-8"))
-        matrix = np.load(npy, mmap_mode="r")
-        logger.info("%s: mmap %s (%.1fs)", model, matrix.shape,
-                    time.perf_counter() - started)
-        return ids, matrix
-
-    started = time.perf_counter()
-    with np.load(source, allow_pickle=False) as payload:
-        ids = [str(x) for x in payload["ids"].tolist()]
-        matrix = np.asarray(payload["vectors"], dtype=np.float32)
-    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
-    norms[norms == 0] = 1.0
-    matrix = matrix / norms
-    logger.info("%s: doc npz %s (%.1fs)", model, matrix.shape,
-                time.perf_counter() - started)
-
-    if use_cache:
-        CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        tmp = npy.with_suffix(".tmp.npy")
-        np.save(tmp, matrix)
-        tmp.replace(npy)
-        ids_path.write_text(json.dumps(ids), encoding="utf-8")
-        logger.info("%s: da trai ra %s cho lan sau", model, npy.name)
-    return ids, matrix
 
 
 def encode_query_siglip(text_en: str) -> np.ndarray:
@@ -250,7 +171,11 @@ def run_arms(bundle, base, query_vi, query_en, arms, pool, use_cache, vectors=No
             runs[arm] = to_candidates(hits[:pool], arm)
             continue
 
-        model = load_bm25(bundle, source, base, use_cache=use_cache)
+        model = (
+            load_cached_bm25(bundle, source, base, DEFAULT_CACHE_DIR)
+            if use_cache
+            else bundle.build_bm25(source)
+        )
         if model is None:
             continue
         scores = model.get_scores(_tokenize(query_vi))
@@ -258,6 +183,45 @@ def run_arms(bundle, base, query_vi, query_en, arms, pool, use_cache, vectors=No
         runs[arm] = to_candidates([keys[i] for i in order], arm)
 
     return runs
+
+
+def _load_uncached(base: Path, model: str):
+    """`--no-cache`: đọc thẳng npz, không đụng `.cache/flat/`."""
+    from mfe.online.flat_arms import DENSE_FILE
+
+    with np.load(base / DENSE_FILE[model], allow_pickle=False) as payload:
+        ids = [str(x) for x in payload["ids"].tolist()]
+        matrix = np.asarray(payload["vectors"], dtype=np.float32)
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    return ids, matrix / norms
+
+
+def apply_quest(query_vi: str, query_en: str | None) -> tuple[str, str | None]:
+    """Gọi tên thứ truy vấn nhắc tới mà không nêu tên — `mfe.online.quest`.
+
+    Đụng **7 trong 49 đề chính thức**: *"phim của đạo diễn Steven Spielberg
+    1975"* phải thành *"cá mập"* trước khi tìm, vì từ khoá cần tìm không nằm
+    trong câu hỏi. Đo ngày 24-08 trên đúng 7 câu đó: 6 câu được gọi tên đúng,
+    và cả 3 câu đối chứng (đề đã nêu đủ tên) trả về **rỗng** — tính chất quan
+    trọng thứ hai, vì một từ bịa thêm là recall mất đi.
+
+    In ra thứ nó thêm và **vì sao**. Một truy vấn âm thầm bị viết lại là một
+    bảng kết quả không giải thích được.
+    """
+    from mfe.offline.transport import load_dotenv
+    from mfe.online.quest import expanded_queries, quest_expand
+
+    for key, value in load_dotenv(".env").items():
+        os.environ.setdefault(key, value)
+
+    terms = quest_expand(query_vi)
+    if not terms:
+        logger.info("quest: khong co gi de goi ten — tim bang nguyen cau")
+        return query_vi, query_en
+    for term in terms:
+        logger.info("quest them: %r / %r — %s", term.vi, term.en, term.why)
+    return expanded_queries(query_vi, query_en, terms)
 
 
 def load_weights(config_path: str) -> dict[str, float]:
@@ -280,6 +244,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--en", help="Ban dich tieng Anh, dua tay (tot nhat).")
     parser.add_argument("--translate", action="store_true",
                         help="Dich bang envit5 neu khong co --en.")
+    parser.add_argument("--quest", action="store_true",
+                        help="Goi LLM GOI TEN thu de nhac toi ma khong neu ten "
+                             "(7/49 de chinh thuc). Chi THEM tu vao cuoi, khong thay cau.")
     parser.add_argument("--fetch", metavar="THU_MUC",
                         help="Keo anh cua top ket qua tu Modal Volume ve day.")
     parser.add_argument("--json", action="store_true", help="In JSON thay vi bang.")
@@ -305,19 +272,25 @@ def main() -> None:
     started = time.perf_counter()
     bundle = FlatBundle.load(root, sources=sources, models=set())
     vectors = {
-        model: load_vectors(base, model, use_cache=not args.no_cache)
+        model: load_cached_vectors(base, model, DEFAULT_CACHE_DIR)
+        if not args.no_cache
+        else _load_uncached(base, model)
         for model in sorted(models)
     }
     logger.info("nap xong %.1fs · %s", time.perf_counter() - started, bundle.report())
 
+    query_vi = args.query
     query_en = args.en
     if not query_en and args.translate:
         from mfe.online.translate import MachineTranslator
 
-        query_en = MachineTranslator().translate(args.query)
+        query_en = MachineTranslator().translate(query_vi)
         logger.info("dich: %s", query_en)
 
-    runs = run_arms(bundle, base, args.query, query_en, arms, args.pool,
+    if args.quest:
+        query_vi, query_en = apply_quest(query_vi, query_en)
+
+    runs = run_arms(bundle, base, query_vi, query_en, arms, args.pool,
                     not args.no_cache, vectors)
     if not runs:
         raise SystemExit("khong arm nao chay duoc — xem canh bao o tren.")

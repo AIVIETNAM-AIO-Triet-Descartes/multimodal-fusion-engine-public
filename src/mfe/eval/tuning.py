@@ -46,9 +46,11 @@ it is fixed and recorded rather than left to a set's iteration order.
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from mfe.contracts.tools import Candidate
@@ -91,6 +93,74 @@ class QueryEvidence:
     @property
     def arm_names(self) -> set[str]:
         return {name for event in self.per_event for name in event}
+
+
+def evidence_key(config_path: str, queryset: str, coarse_topk: int, en_source: str) -> str:
+    """Vân tay của một lượt truy hồi — thứ làm cache hết hạn khi cần.
+
+    Cố ý **không** gồm trọng số: đó chính là thứ cache này cho phép quét miễn phí.
+    """
+    return f"{config_path}|{queryset}|{coarse_topk}|{en_source}"
+
+
+def load_evidence_cache(path: str | Path, queries, key: str) -> list[QueryEvidence] | None:
+    """Dựng lại `QueryEvidence` từ đĩa, hoặc None nếu cache không dùng được.
+
+    Trả None (chứ không ném) khi vân tay lệch hoặc thiếu câu: cache cũ là chuyện
+    thường và truy hồi lại là đúng phản ứng. Nhưng nó phải **nói ra** — một cache
+    lặng lẽ khớp nhầm cho ra một bảng số đo của kho khác, và không có gì trong
+    bảng đó lộ ra điều ấy.
+    """
+    path = Path(path)
+    if not path.is_file():
+        return None
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("key") != key:
+        logger.warning("cache %s la cua luot khac (%s) — truy hoi lai", path, payload.get("key"))
+        return None
+    stored = payload.get("queries", {})
+    missing = [q.query_id for q in queries if q.query_id not in stored]
+    if missing:
+        logger.warning("cache %s thieu %d cau — truy hoi lai", path, len(missing))
+        return None
+
+    evidences = []
+    for query in queries:
+        per_event = [
+            {
+                arm: [
+                    Candidate(
+                        keyframe_id=keyframe_id,
+                        video_id=keyframe_id.split("#")[0],
+                        score=float(score),
+                        evidence_id=f"{arm}:cache:{rank}",
+                    )
+                    for rank, (keyframe_id, score) in enumerate(rows, start=1)
+                ]
+                for arm, rows in event.items()
+            }
+            for event in stored[query.query_id]
+        ]
+        evidences.append(QueryEvidence(query=query, per_event=per_event))
+    logger.info("cache %s: dung lai %d cau, khong truy hoi lai", path, len(evidences))
+    return evidences
+
+
+def save_evidence_cache(path: str | Path, evidences: Sequence[QueryEvidence], key: str) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "key": key,
+        "queries": {
+            ev.query.query_id: [
+                {arm: [[c.keyframe_id, c.score] for c in cands] for arm, cands in event.items()}
+                for event in ev.per_event
+            ]
+            for ev in evidences
+        },
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    logger.info("da ghi cache truy hoi: %s", path)
 
 
 @dataclass(frozen=True)

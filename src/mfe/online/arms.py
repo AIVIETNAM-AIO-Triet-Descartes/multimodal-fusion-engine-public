@@ -33,6 +33,19 @@ logger = logging.getLogger(__name__)
 #: `(query_text, top_k, run_id) -> candidates`
 SearchFn = Callable[[str, int, str], list[Candidate]]
 
+#: Arm nhận `ocr_keywords` thay cho nguyên câu truy vấn — thứ `mfe.online.quest`
+#: tách ra từ câu hỏi QA ("dòng chữ nào hiện trên màn hình").
+#:
+#: Danh sách này từng ghi `["bm25", "ocr", "subtitles", "objects", "blip"]` — ba
+#: cái tên **không tồn tại**. Tên arm thật là `subtitle_partial`, `object`, và
+#: không có arm nào tên `blip`. Nên nhánh này chỉ chạm tới `bm25` và `ocr`, tức
+#: đúng hai arm không có dữ liệu trên đường phẳng: quest tách được từ khoá rồi
+#: gửi chúng cho hai arm im lặng. Không có gì báo, vì `ocr_keywords` là tuỳ chọn
+#: và một arm không nhận nó vẫn chạy bình thường với nguyên câu.
+OCR_KEYWORD_ARMS = frozenset(
+    {"bm25", "ocr", "ocr_paddle", "ocr_vietocr", "object", "subtitle_partial"}
+)
+
 
 @dataclass(frozen=True)
 class Arm:
@@ -202,7 +215,7 @@ class ArmRegistry:
                     )
                     continue
                 text = query_text_en
-            elif ocr_keywords and arm.name in ["bm25", "ocr", "subtitles", "objects", "blip"]:
+            elif ocr_keywords and arm.name in OCR_KEYWORD_ARMS:
                 text = ocr_keywords
             try:
                 hits = arm.search(text, top_k, run_id)  # type: ignore[misc]

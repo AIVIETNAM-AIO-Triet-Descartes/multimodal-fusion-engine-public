@@ -113,6 +113,63 @@ def _reorder(candidates: Sequence[Candidate], order: Sequence[str]) -> list[Cand
 
 
 # ---------------------------------------------------------------------------
+# Tầng của ta — `mfe.online.rerank.Reranker`, khoác đúng giao diện tầng
+# ---------------------------------------------------------------------------
+
+
+class OurRerankTier:
+    """`Reranker` của ta (SigLIP đa ngữ chấm lại pixel) dưới giao diện tầng.
+
+    Nó có API riêng — `rerank(query, candidates, run_id)` và một `asset_store`
+    trả `bytes` — nên nó không cắm thẳng vào `apply_tiers` được. Chỗ nối nằm ở
+    đây chứ không nằm trong từng người gọi: bản đo và bàn thử Streamlit phải
+    chạy **cùng một** tầng, nếu không hai bên báo hai con số cho cùng một tên.
+
+    `budget_ms` là chính sách của `Reranker`: quá hạn thì nó cắt và trả phần đuôi
+    theo thứ tự cũ, không ném. Nên một ngân sách quá chặt không làm hỏng lượt
+    chạy — nó chỉ lặng lẽ biến tầng này thành không làm gì, và `scored` là chỗ
+    duy nhất nhìn thấy điều đó.
+    """
+
+    name = "ta"
+    needs_english = False
+    needs_images = True
+
+    def __init__(self, reranker) -> None:
+        self.reranker = reranker
+
+    def available(self) -> tuple[bool, str | None]:
+        return (True, None) if self.reranker is not None else (False, "chua dung Reranker")
+
+    def rerank(
+        self,
+        candidates: Sequence[Candidate],
+        *,
+        query_vi: str,
+        query_en: str | None = None,
+        depth: int = 100,
+        **_,
+    ) -> tuple[list[Candidate], TierOutcome]:
+        ok, reason = self.available()
+        if not ok:
+            return list(candidates), TierOutcome(self.name, False, reason)
+
+        started = time.perf_counter()
+        head = list(candidates[:depth])
+        try:
+            ranked = self.reranker.rerank(query_vi, head)
+        except Exception as err:  # noqa: BLE001 — một tầng hỏng không được đổ cả lượt
+            return list(candidates), TierOutcome(
+                self.name, False, f"{type(err).__name__}: {str(err)[:140]}"
+            )
+        after = _reorder(candidates, [c.keyframe_id for c in ranked])
+        return after, TierOutcome(
+            self.name, True, None, len(head),
+            time.perf_counter() - started, _moved(candidates, after),
+        )
+
+
+# ---------------------------------------------------------------------------
 # Tầng 3 — ColPali MaxSim
 # ---------------------------------------------------------------------------
 

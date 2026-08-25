@@ -54,6 +54,9 @@ SOURCE_FILES: dict[str, str] = {
     "caption": "dense_captions.json",
     "ocr_paddle": "paddle_ocr.json",
     "ocr_vietocr": "viet_ocr.json",
+    # Hai nua cua MOT lan sinh Qwen2.5-VL (`n6_caption_qwen` / `n6_ocr_qwen25`).
+    "caption_qwen": "qwen_captions.json",
+    "ocr_qwen25": "qwen_ocr.json",
 }
 
 #: The subset SOTA_AIC's own export ships. **Not the same set as `SOURCE_FILES`,

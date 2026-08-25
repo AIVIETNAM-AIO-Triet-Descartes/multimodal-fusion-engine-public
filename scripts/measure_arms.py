@@ -16,6 +16,10 @@ the hand-written `text_en` is replaced by the machine (handoff §5.1)?
     manual  the `text_en` on each query — hand-written, does not scale to 115
     auto    ignore it, translate with the configured chain instead
     none    supply none at all, so English-only arms sit out — the floor
+
+`--flat-root` chạy trên **kho phẳng** (`stores/flat/`) thay vì Elasticsearch +
+Milvus. Đó là đường đang thật sự chạy — xem `mfe.online.flat_arms` — nên một
+phép đo không có cờ này đo một hệ mà máy này không dựng nổi.
 """
 
 from __future__ import annotations
@@ -25,6 +29,7 @@ import argparse
 from mfe.core.config import load_config
 from mfe.eval.official import load_official_queryset
 from mfe.online.cascade import Cascade
+from mfe.online.flat_arms import build_flat_cascade, load_flat_bundle
 
 
 def _gt_ranges(query) -> tuple[str, list[tuple[int, int]]]:
@@ -46,6 +51,15 @@ def _first_hit_rank(candidates, video_id: str, ranges: list[tuple[int, int]]) ->
     return None
 
 
+def build_cascade(config, flat_root: str | None) -> Cascade:
+    """Cascade trên kho phẳng khi có `--flat-root`, còn lại là đường có kho."""
+    if not flat_root:
+        return Cascade.from_config(config)
+    bundle = load_flat_bundle(flat_root)
+    print(f"kho phang: {bundle.report()}")
+    return build_flat_cascade(config, flat_root, flat_bundle=bundle)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="measure_arms", description=__doc__)
     parser.add_argument("--config", default="config/pilot.yaml")
@@ -57,24 +71,47 @@ def main() -> None:
         default="manual",
         help="Where the English query comes from; see the module docstring.",
     )
+    parser.add_argument(
+        "--flat-root",
+        default=None,
+        help="Chay tren kho phang (vd stores/flat) thay vi Elasticsearch + Milvus.",
+    )
     args = parser.parse_args()
 
     config = load_config(args.config)
     queries = load_official_queryset(args.queryset)
-    cascade = Cascade.from_config(config)
+    cascade = build_cascade(config, args.flat_root)
 
-    def english_for(query) -> str | None:
+    def search_text_of(query) -> str:
+        """Đúng chuỗi tầng A tìm bằng — với QA đó là `retrieval_text`.
+
+        Câu QA của BTC là một **câu hỏi**, còn `siglip` huấn luyện trên caption;
+        `QAQuery.retrieval_text` có sẵn cho đúng chỗ này. Đo bằng `query.text` là
+        đo một hệ mà `mfe.eval.official.score_one` không chạy.
+        """
+        from mfe.eval.official import QAQuery, TRAKEQuery
+
+        if isinstance(query, QAQuery):
+            return query.retrieval_text or query.text
+        if isinstance(query, TRAKEQuery):
+            # Một dòng cho cả chuỗi: bảng này đo arm, không đo phép ghép DANTE.
+            return query.text
+        return query.text
+
+    def english_for(query, search_text: str) -> str | None:
         """The English form under the chosen policy.
 
         `auto` passes `manual=None` deliberately: the point of the run is to
         measure the machine's translation, so letting the hand-written form win
-        would report the manual number under the automatic label.
+        would report the manual number under the automatic label. It also
+        translates `search_text`, not `query.text` — dịch một chuỗi rồi tìm bằng
+        chuỗi khác là để `siglip` đi tìm thứ sáu arm còn lại không tìm.
         """
         if args.en_source == "none":
             return None
         if args.en_source == "manual":
             return query.text_en
-        return cascade.resolve_english(query.text, None)
+        return cascade.resolve_english(search_text, None)
 
     arms = list(cascade.arms)
     print(f"\n{len(arms)} arm, {len(queries)} truy van, do sau {args.top_k}\n")
@@ -92,11 +129,12 @@ def main() -> None:
 
     for query in queries:
         video_id, ranges = _gt_ranges(query)
-        text_en = english_for(query)
+        search_text = search_text_of(query)
+        text_en = english_for(query, search_text)
         row = f"{query.query_id:<17}"
         for name in usable:
             results = cascade.arms.run_named(
-                [name], query.text, args.top_k, "measure", query_text_en=text_en
+                [name], search_text, args.top_k, "measure", query_text_en=text_en
             )
             rank = _first_hit_rank(results.get(name, []), video_id, ranges)
             row += f"{(rank if rank else '-'):>12}"
