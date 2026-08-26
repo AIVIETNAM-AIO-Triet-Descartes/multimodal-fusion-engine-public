@@ -11,6 +11,7 @@ from mfe.contracts.errors import ContractError, ErrorCode
 from mfe.contracts.ids import (
     build_keyframe_id,
     build_shot_id,
+    frame_idx_from_pts,
     parse_keyframe_id,
     parse_shot_id,
     pts_time_to_timestamp_ms,
@@ -114,12 +115,37 @@ class TestShotId:
             parse_keyframe_id(build_shot_id("L21_V001", 7))
 
 
-class TestPtsTimeToTimestampMs:
-    """The one sanctioned time conversion: seconds -> milliseconds.
+class TestFrameIdxFromPts:
+    @pytest.mark.parametrize(
+        ("pts_time", "fps", "expected"),
+        [
+            (0.0333333, 30.0, 0),
+            (4.03333, 30.0, 120),
+            (17.3333, 30.0, 519),
+            (1893.66, 29.97, 56752),
+        ],
+    )
+    def test_uses_dataset_floor_rule(self, pts_time, fps, expected):
+        assert frame_idx_from_pts(pts_time, fps) == expected
 
-    There is deliberately NO frame<->time derivation. docs/adr/0002-id-format.md:
-    `round(pts_time * fps)` was measured wrong on 83-93% of 29.97fps rows, so
-    frame_idx and pts_time are read from the CSV, never computed.
+    def test_does_not_round_to_nearest_frame(self):
+        pts_time, fps = 0.0333333, 30.0
+        assert frame_idx_from_pts(pts_time, fps) == 0
+        assert round(pts_time * fps) == 1
+
+    @pytest.mark.parametrize(("pts_time", "fps"), [(-0.01, 30.0), (1.0, 0.0)])
+    def test_rejects_invalid_inputs(self, pts_time, fps):
+        with pytest.raises(ContractError) as exc:
+            frame_idx_from_pts(pts_time, fps)
+        assert exc.value.code is ErrorCode.INVALID_ID
+
+
+class TestPtsTimeToTimestampMs:
+    """The sanctioned conversion for seconds -> milliseconds.
+
+    This is separate from custom-frame derivation, which is locked above to
+    `floor(pts_time * fps)`. When BTC's CSV already supplies `frame_idx`, the
+    pipeline still copies that source value instead of recomputing it.
     """
 
     @pytest.mark.parametrize(
