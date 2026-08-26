@@ -1765,6 +1765,7 @@ def _qwen25_engine(ctx: StageContext):
     max_len = int(ctx.params.get("max_model_len", 4096))
     utilisation = float(ctx.params.get("gpu_memory_utilization", 0.9))
     wants_prefix = bool(ctx.params.get("enable_prefix_caching", True))
+    kv_bytes = int(ctx.params.get("kv_cache_memory_bytes", 0) or 0)
 
     def build():
         from transformers import AutoProcessor  # noqa: PLC0415
@@ -1780,23 +1781,55 @@ def _qwen25_engine(ctx: StageContext):
             "limit_mm_per_prompt": {"image": 1},
         }
         processor = AutoProcessor.from_pretrained(checkpoint)
-        if wants_prefix:
-            try:
-                engine = LLM(**common, enable_prefix_caching=True)
-                _QWEN_VL_TIMING["prefix_caching"] = 1.0
-                logger.info("vLLM: prefix caching BAT")
-                return processor, engine
-            except Exception as err:  # noqa: BLE001 — ban vLLM cu khong nhan co nay
-                logger.warning(
-                    "vLLM tu choi enable_prefix_caching (%s: %s) — nap lai KHONG co no. "
-                    "Throughput se thap hon, va do la ly do.",
-                    type(err).__name__, str(err)[:160],
-                )
-        _QWEN_VL_TIMING["prefix_caching"] = 0.0
-        return processor, LLM(**common)
 
+        # Hai co TUY CHON, va ca hai deu co the bi ban vLLM nay tu choi. Thu tu
+        # bo bot di tu day du -> tran, va GHI LAI cai nao that su dinh lai.
+        #
+        # Vi sao phai la mot chuoi chu khong phai mot `try` long nhau: bo prefix
+        # caching roi thu lai VOI kv_cache_memory_bytes se nem lai dung cho do,
+        # va lan nay khong ai bat. Mot duong lui chi lui duoc mot buoc la mot
+        # duong lui hong.
+        attempts = []
+        if wants_prefix and kv_bytes:
+            attempts.append(("prefix + kv", {"enable_prefix_caching": True,
+                                             "kv_cache_memory_bytes": kv_bytes}))
+        if wants_prefix:
+            attempts.append(("prefix", {"enable_prefix_caching": True}))
+        if kv_bytes:
+            attempts.append(("kv", {"kv_cache_memory_bytes": kv_bytes}))
+        attempts.append(("tran", {}))
+
+        last_error = None
+        for label, extra in attempts:
+            try:
+                engine = LLM(**common, **extra)
+            except Exception as err:  # noqa: BLE001 — ban vLLM cu khong nhan co nay
+                last_error = err
+                logger.warning(
+                    "vLLM tu choi cau hinh `%s` (%s: %s) — thu cau hinh ke tiep.",
+                    label, type(err).__name__, str(err)[:160],
+                )
+                continue
+            _QWEN_VL_TIMING["prefix_caching"] = float("enable_prefix_caching" in extra)
+            _QWEN_VL_TIMING["kv_cache_bytes"] = float(extra.get("kv_cache_memory_bytes", 0))
+            logger.info(
+                "vLLM: cau hinh `%s` (prefix_caching=%s, kv_cache=%s)",
+                label,
+                "enable_prefix_caching" in extra,
+                f"{kv_bytes / 2**30:.2f} GiB" if "kv_cache_memory_bytes" in extra else "tu chon",
+            )
+            return processor, engine
+        raise RuntimeError(
+            "vLLM khong nap duoc voi bat ky cau hinh nao da thu"
+        ) from last_error
+
+    # `kv_bytes` PHAI nam trong khoa cache. Khong co no thi doi con so nay giua
+    # hai luot trong CUNG mot phien se dung lai dong co cu, va bang throughput se
+    # bao "khong doi gi" — mot ket luan sai ma khong gi noi ra.
     return cached_model(
-        f"vllm {checkpoint} tp{tp_size} len{max_len} prefix{int(wants_prefix)}", build
+        f"vllm {checkpoint} tp{tp_size} len{max_len} "
+        f"prefix{int(wants_prefix)} kv{kv_bytes}",
+        build,
     )
 
 
@@ -1837,6 +1870,8 @@ def _qwen25_common(ctx: StageContext) -> tuple[dict, dict, dict]:
         "tensor_parallel_size": int(ctx.params.get("tensor_parallel_size", 2)),
         "batch_size": int(ctx.params.get("batch_size", QWEN25_BATCH)),
         "prefix_caching": bool(_QWEN_VL_TIMING.get("prefix_caching", 0.0)),
+        # 0 = de vLLM tu chon. Con so THAT da dinh lai, khong phai con so da xin.
+        "kv_cache_bytes": int(_QWEN_VL_TIMING.get("kv_cache_bytes", 0.0)),
         # Throughput CONG DON cua ca phien, khong phai cua video nay: lan nap
         # model dau tien lam con so tren mot video vo nghia.
         "images_per_s": round(images / seconds, 3) if seconds else None,
