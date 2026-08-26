@@ -16,11 +16,12 @@ reports success.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
 from mfe.offline.bundle import BundleLayout, BundleWriter, load_shard_plan
-from mfe.offline.stages import cached_model, unload_models
+from mfe.offline.stages import STAGES, cached_model, unload_models
 from mfe.offline.transport import LocalDirTransport
 
 VIDEO = "L21_V001"
@@ -149,6 +150,11 @@ class TestThreePassesAgreeOnOwnership:
         "config/ingest_shards_batch1_btc_video.yaml",
         # Lượt 4 — hai nguồn OCR thay chỗ `n5_ocr_qwen`.
         "config/ingest_shards_batch1_btc_ocr2.yaml",
+        # Lượt 5 — caption + chữ màn hình bằng Qwen2.5-VL qua vLLM.
+        "config/ingest_shards_batch1_btc_caption.yaml",
+        # Lượt 6 — nhúng chính caption đó bằng BGE-M3. Đọc part từ Volume, không
+        # đọc ảnh, nên nó KHÔNG chia lát theo `PART` như lượt 5.
+        "config/ingest_shards_batch1_btc_bge.yaml",
     ]
 
     def test_every_pass_assigns_the_same_videos_to_the_same_member(self):
@@ -158,23 +164,59 @@ class TestThreePassesAgreeOnOwnership:
             assert plan.bundle == first.bundle
             assert plan.members == first.members
 
-    def test_the_passes_together_cover_every_stage_except_recap(self):
+    def test_the_passes_together_cover_every_stage(self):
         stages = [s for p in self.PLANS for s in load_shard_plan(p).stages]
         assert stages == [
             "n0_import_btc",
             "n4_siglip", "n5_ocr_easyocr",
             "n2_subtitles", "n3_audio",
             "n5_ocr_paddle", "n5_ocr_vietocr",
+            "n6_caption_qwen", "n6_ocr_qwen25",
+            "n6_bge_m3",
         ]
         # n4_objects: BTC ships them, imported by pass 1.
-        # n6_recap / n6_bge_m3: deferred by the Lead.
         assert "n4_objects" not in stages
+        # `n6_recap` (ReCap qua Gemini/Qwen2-VL) XOÁ HẲN 25-08-2026 — nhóm đổi
+        # sang `n6_caption_qwen`. Khẳng định ở đây chứ không chỉ xoá khỏi yaml,
+        # cùng lý do như `n5_ocr_qwen` bên dưới.
+        assert "n6_recap" not in stages
+        assert "n6_recap" not in STAGES
         # `n5_ocr_qwen` BỎ HẲN 21-08-2026 — 10,8 giây/ảnh, ~532 giờ GPU cho
         # batch 1. `n5_ocr_paddle` + `n5_ocr_vietocr` thay chỗ. Khẳng định ở đây
         # chứ không chỉ xoá khỏi danh sách trên: `plan.stages` là hợp đồng mà
         # `merge_bundle.py` đọc để đòi đủ mảnh, nên tầng lỡ quay lại yaml là
         # merge lại đòi 873 mảnh `sviptr_ocr` không tồn tại.
         assert "n5_ocr_qwen" not in stages
+
+    def test_moi_tang_trong_ke_hoach_deu_CHAY_duoc(self):
+        """`plan.stages` là hợp đồng `merge_bundle.py` đọc để đòi đủ mảnh.
+
+        Một tên tầng còn trong yaml mà không còn trong `STAGES` là một lượt gộp
+        đòi 873 mảnh không ai sinh được — và nó chỉ nói ra ở bước gộp.
+        """
+        for path in self.PLANS:
+            for stage in load_shard_plan(path).stages:
+                assert stage in STAGES, f"{path}: {stage} khong co trong STAGES"
+
+    def test_luot_6_KHONG_chia_theo_PART(self):
+        """Lượt 6 đọc caption từ Volume, không tải `Keyframes_*.zip`.
+
+        Cắt lát tồn tại để tránh tải cùng một gói zip nhiều lần. Ở đây không có
+        gói nào để tải, nên `PART` chỉ là một cần gạt sai được mà không lợi gì —
+        và notebook 09 cố ý không có nó.
+        """
+        notebook = json.loads(
+            Path("notebooks/btc/09-btc-bge-m3-embed.ipynb").read_text(encoding="utf-8")
+        )
+        # CHI cac o CODE. Markdown cua notebook 09 co nhac `NUM_PARTS` — de giai
+        # thich vi sao no KHONG co, va do la thu dang giu chu khong dang cam.
+        code = "".join(
+            "".join(cell["source"])
+            for cell in notebook["cells"]
+            if cell["cell_type"] == "code"
+        )
+        assert "NUM_PARTS" not in code
+        assert "Keyframes_" not in code
 
     def test_every_assigned_video_can_actually_be_fetched(self):
         """Pass `04` needs a Range entry per video, and it reads the assignment
@@ -217,3 +259,51 @@ class TestZipSizesAreKnown:
         book = yaml.safe_load(open("config/zips_keyframes_btc.yaml", encoding="utf-8"))
         plan = load_shard_plan("config/ingest_shards_batch1_btc.yaml")
         assert plan.zip_bytes == {n: b["bytes"] for n, b in book["zips"].items()}
+
+
+class TestNotebookCoDuGoiDeDayLenVolume:
+    """Mọi notebook đẩy part lên Modal Volume phải khai `modal` trong requirements.
+
+    Đây là một lỗi ĐÃ XẢY RA (25-08-2026), và nó đắt vì nó nổ MUỘN:
+    `build_transport("modal", …)` gọi `import modal` bên trong
+    `ModalVolumeTransport.__init__`, tức ở ô Step 0b — **sau** khi notebook đã
+    clone repo, cài xong vLLM và nạp xong kế hoạch. Người chạy mất vài phút
+    quota GPU để nhận một `ModuleNotFoundError` lẽ ra phải thấy từ đầu.
+
+    Nó lọt lưới vì notebook 06 khai **hai** file requirements và `modal` nằm ở
+    file kia, nên `…-paddle-vietocr.txt` thiếu mà không ai thấy. Notebook 08 và
+    09 chỉ khai một file, và ở đó chỗ thiếu lộ ra ngay.
+
+    Nên phép kiểm là trên HỢP của mọi file notebook đó cài, không phải trên từng
+    file — đúng hình dạng thật của cái bẫy.
+    """
+
+    @staticmethod
+    def _code(notebook: Path) -> str:
+        cells = json.loads(notebook.read_text(encoding="utf-8"))["cells"]
+        return "".join(
+            "".join(c["source"]) for c in cells if c["cell_type"] == "code"
+        )
+
+    @pytest.mark.parametrize(
+        "notebook", sorted(Path("notebooks/btc").glob("*.ipynb")), ids=lambda p: p.name
+    )
+    def test_notebook_dung_modal_thi_phai_cai_modal(self, notebook):
+        import re
+
+        code = self._code(notebook)
+        if not re.search(r'TRANSPORT\s*=\s*"modal"', code):
+            pytest.skip("notebook nay khong day len Volume")
+
+        names = re.findall(r'"(requirements-kaggle[\w.-]+\.txt)"', code)
+        assert names, f"{notebook.name}: dung modal ma khong cai requirements nao"
+
+        declared = "\n".join(
+            (Path("notebooks") / name).read_text(encoding="utf-8")
+            for name in names
+            if (Path("notebooks") / name).is_file()
+        )
+        assert re.search(r"^modal\b", declared, re.M), (
+            f"{notebook.name} đẩy part lên Modal Volume nhưng không file nào trong "
+            f"{names} khai `modal`. Ô Step 0b sẽ chết bằng ModuleNotFoundError."
+        )

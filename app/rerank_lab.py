@@ -181,12 +181,21 @@ our_budget_ms = st.sidebar.slider("Ngân sách tầng của ta (ms)", 3000, 6000
 
 with st.sidebar.expander("Vì sao không cái nào bật sẵn"):
     st.markdown(
-        "Ba tầng của Bảo đều gọi ra ngoài. `vlm` **gửi ảnh keyframe của BTC cho "
-        "dịch vụ bên thứ ba** — đó là dữ liệu cuộc thi.\n\n"
+        "**Tiền và thời gian, không phải dữ liệu.** BTC cho phép chia sẻ dữ liệu "
+        "tự do (Lead xác nhận 23-08-2026), nên `vlm` gửi ảnh ra ngoài không phải "
+        "rào cản — đo được 32 giây cho 12 ảnh, và mỗi lượt là một lần gọi API "
+        "tính phí.\n\n"
         "`colpali` tải model 6 GB. Bản của Bảo dựng sẵn ma trận token cho cả kho "
         "và phải tắt vì RAM; ở đây nó mã hoá **lúc chạy**, chỉ top ứng viên, nên "
         "kho bằng 0 nhưng mỗi truy vấn chậm hơn."
     )
+
+st.sidebar.header("🧠 Tầng 0 — QUEST")
+use_quest = st.sidebar.checkbox(
+    "Gọi tên thứ đề không nêu tên", value=False,
+    help="Đụng 7/49 đề chính thức: 'phim Spielberg 1975' -> 'cá mập'. "
+         "Chỉ THÊM từ vào cuối truy vấn, không thay câu. Cần GEMINI_API_KEY.",
+)
 
 st.sidebar.header("🖼 Ảnh")
 show_images = st.sidebar.checkbox("Hiện ảnh (tải từ Modal)", value=True)
@@ -215,6 +224,22 @@ if go and query_vi.strip():
         with st.spinner("Dịch bằng envit5 …"):
             query_en = load_translator().translate(query_vi)
         st.info(f"Đã dịch: **{query_en}**")
+
+    if use_quest:
+        from mfe.online.quest import expanded_queries, quest_expand
+
+        with st.spinner("QUEST đang gọi tên …"):
+            terms = quest_expand(query_vi)
+        if terms:
+            # In ra thứ nó thêm VÀ vì sao. Một truy vấn âm thầm bị viết lại là
+            # một bảng kết quả không giải thích được.
+            st.info(
+                "QUEST thêm: "
+                + " · ".join(f"**{t.vi}** / {t.en} ({t.why})" for t in terms)
+            )
+            query_vi, query_en = expanded_queries(query_vi, query_en or None, terms)
+        else:
+            st.caption("QUEST: không có gì để gọi tên — tìm bằng nguyên câu.")
 
     # --- truy hồi -----------------------------------------------------------
     runs: dict[str, list[Candidate]] = {}
@@ -284,22 +309,15 @@ if go and query_vi.strip():
     # --- rerank -------------------------------------------------------------
     outcomes = []
     if use_ours:
-        from mfe.online.rerank_tiers import TierOutcome, _moved, _reorder
+        # `OurRerankTier` chứ không phải một bản chuyển thể viết tại đây: bàn thử
+        # này và `scripts/measure_rerank.py` phải chạy CÙNG MỘT tầng, nếu không
+        # hai bên báo hai con số dưới cùng một cái tên.
+        from mfe.online.rerank_tiers import OurRerankTier
 
-        started = time.perf_counter()
-        try:
-            head = fused[:rerank_depth]
-            ranked = load_our_reranker(images, our_budget_ms).rerank(query_vi, head)
-            after = _reorder(fused, [c.keyframe_id for c in ranked])
-            outcomes.append(TierOutcome(
-                "ta (siglip da ngu)", True, None, len(head),
-                time.perf_counter() - started, _moved(fused, after),
-            ))
-            fused = after
-        except Exception as err:  # noqa: BLE001 - mot tang hong khong duoc do ca luot
-            outcomes.append(TierOutcome(
-                "ta (siglip da ngu)", False, f"{type(err).__name__}: {err}"
-            ))
+        fused, outcome = OurRerankTier(
+            load_our_reranker(images, our_budget_ms)
+        ).rerank(fused, query_vi=query_vi, depth=rerank_depth)
+        outcomes.append(outcome)
 
     tiers = []
     if use_colpali:

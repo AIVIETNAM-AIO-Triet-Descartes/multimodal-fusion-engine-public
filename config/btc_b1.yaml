@@ -69,42 +69,70 @@ retrieval:
   # `tune_weights.py` chỉ quét những khoá CÓ MẶT trong file này, nên arm không
   # khai là arm không bao giờ được chỉnh.
   #
-  # `ocr_paddle` / `ocr_vietocr`: Trọng còn ~234 video chưa chạy xong, nên chúng
-  # KHÔNG được nạp vào ES lượt này. Arm sẽ trả rỗng và góp 0 — không thiên lệch.
-  # Nạp bản phủ một phần mới là thiên lệch: 234 video chưa có sẽ bị dìm xuống
-  # một cách có hệ thống, và điểm thấp lúc đó không phân biệt được là do truy
-  # hồi kém hay do thiếu dữ liệu.
   fusion_weights:
-    # siglip=2.0 — DO ĐƯỢC, không đoán. Coordinate ascent trên 42 câu
-    # `eval/dev/*`, kiểm chéo trên 15 câu `eval/heldout/*` chưa từng đụng tới:
+    # ═══ ĐO ĐƯỢC 24-08-2026 trên KHO PHẲNG, không đoán ═══
     #
-    #             Final        trúng      hạng trung bình
-    #   dev   0,5429 → 0,5810   32→34/42     13,2 → 11,0
-    #   held  0,5867 → 0,6400   12→12/15     15,8 →  6,1
+    # Coordinate ascent trên 42 câu `eval/dev/*` (KIS+QA; 9 câu TRAKE để ngoài vì
+    # chúng ghép qua DANTE), rồi CÔNG BỐ trên `eval/heldout/*` chưa từng đụng tới.
     #
-    # Ba arm văn bản đang DÌM siglip khi trọng số đều nhau: thêm hai arm phụ đề
-    # vào siglip làm R@5 tụt 0,429 → 0,286 trong khi R@100 tăng. Chúng tìm ra
-    # thêm 5 câu mà không arm nào khác thấy — vấn đề chỉ nằm ở chỗ chúng xếp ở
-    # đâu. Cho siglip đếm gấp đôi là đủ; không arm nào cần tắt.
+    #                       dev RỘNG   dev hạngTB   dev trúng | held RỘNG  held HẸP
+    #   đều 1.0 (siglip=2)    0,529        12,6        32/42   |   0,493     0,393
+    #   sau leo dốc           0,610         9,4        34/42   |   0,563     0,430
     #
-    # Lưới quét là (0 · 0,5 · 1 · 2 · 4) + OFF, và ascent dừng sau một thay đổi
-    # duy nhất — nên 2.0 là cực trị địa phương trên lưới đó, không phải giá trị
-    # tối ưu. Lưới mịn hơn chưa quét.
+    # Heldout theo dạng đề: KIS 0,444→0,511 · QA 0,733→0,833 · TRAKE 0,156→0,178.
+    # Thắng ở CẢ BA dạng, nên đây không phải một cấu hình vừa khít bộ dev.
+    #
+    # Tái lập:
+    #   python scripts/tune_weights.py --config config/btc_b1.yaml \
+    #     --queryset eval/queryset_dev.jsonl --skip-types TRAKE \
+    #     --flat-root stores/flat --en-source auto \
+    #     --evidence-cache .cache/tune/dev-kisqa-v2.json
+    #
+    # Lưới quét (0 · 0,5 · 1 · 2 · 4) + OFF, dừng sau 3 vòng. Đây là cực trị ĐỊA
+    # PHƯƠNG trên lưới thô đó, không phải giá trị tối ưu; lưới mịn chưa quét.
+    #
+    # ── vì sao từng con số ───────────────────────────────────────────────────
     clip: 1.0
     bm25: 1.0
+
+    # siglip 2.0 — arm gánh cả hệ. Chạy một mình: 34/42. Tắt nó đi thì Final tụt
+    # 0,529 → 0,305 và chỉ còn 17/42. Ba arm văn bản DÌM nó khi trọng số đều nhau.
+    # Quét: OFF 0,300 · 0,5 0,362 · 1,0 0,495 · 2,0 0,610 · 4,0 0,557.
     siglip: 2.0
+
     bge_m3: 1.0
     subtitle_partial: 1.0
     subtitle_exact: 1.0
     caption: 1.0
-    ocr: 1.0
-    ocr_paddle: 1.0
+
+    # ocr 0.0 — easyocr. KHÔNG phải "arm vô dụng": chạy một mình nó vẫn 17/42.
+    # Nhưng trong hợp nhất nó đóng góp ÂM — bỏ đi Final tăng 0,529 → 0,571. Ba bộ
+    # OCR đọc cùng những khung ấy, nên cái nhiễu nhất chỉ thêm phiếu cho thứ hạng
+    # sai. Để 0.0 chứ không OFF: ứng viên của nó vẫn vào pool (bám đuôi, không
+    # ghi điểm), tức vẫn lấp được chỗ trống ở trần 100 dòng của BTC.
+    ocr: 0.0
+
+    # ocr_paddle 0.5 — rụng dấu thanh (35,3% token có dấu) nên đọc kém, nhưng nó
+    # đọc SẠCH logo và đồng hồ mà hai bộ kia làm hỏng. Nửa phiếu là đúng vai đó.
+    ocr_paddle: 0.5
     ocr_vietocr: 1.0
-    object: 1.0
-    # CLAP nghe âm thanh. Trên bộ dev toàn mô tả thị giác nó đóng góp ~0, nên
-    # 1.0 ở đây là chỗ đứng chứ không phải giá trị đã đo — chưa có câu hỏi nào
-    # về tiếng động để đo bằng.
-    clap: 1.0
+
+    # object 0.0 — bản có SỐ ĐẾM và VỊ TRÍ, đo ngày 24-08. Chạy một mình 2/42, và
+    # cả hai câu đó siglip đã tìm ra ở hạng 2 và 7. Trong hợp nhất: bỏ nó đi đổi
+    # Final +0,000; để 1.0 thì MẤT 0,024.
+    #
+    # Nguyên nhân KHÔNG phải "lặp nhãn làm tài liệu dài". Đo idf trên chính chỉ
+    # mục 168.009 tài liệu: `một` có mặt ở 91,0% (idf 0,09), `giữa` 89,4% (0,11),
+    # `trái`/`phải` ~63% (0,45/0,47) — hai thứ vừa thêm vào là STOPWORD. Và chúng
+    # là token TỰ DO: "bốn thức ăn" tách thành `bốn`+`thức`+`ăn`, nên `bốn` khớp
+    # mọi khung có bốn *thứ gì đó*. Muốn có tác dụng phải ghép vào nhãn thành một
+    # token (`ba_người`, `trái_người`) và viết lại truy vấn theo — chưa làm.
+    object: 0.0
+
+    # clap 0.5 — nó NGHE, không nhìn. Trên bộ dev toàn mô tả thị giác nó chạy một
+    # mình chỉ 1/42, và 0,5 thắng 1,0 đúng 0,005 tức trong vùng nhiễu. Chưa có
+    # câu hỏi nào về tiếng động để đo arm này bằng.
+    clap: 0.5
   rerank_budget_ms: 20000
   rerank_depth: 100
   temporal_window_frames: 640

@@ -99,3 +99,11 @@ select = ["E", "F", "I", "UP", "B"]
 # thứ không ai nghĩ tới khi đi tìm nguyên nhân kết quả đổi. Chỉ tha E501, mọi
 # luật khác vẫn áp dụng cho file này.
 "src/mfe/online/quest.py" = ["E501"]
+# Cung ly do: `caption_prompt.py` chi chua prompt + few-shot cua Qwen2.5-VL.
+# Mot vi du few-shot bi ngat dong cho vua 100 cot la mot vi du KHAC voi cai
+# model duoc hoc, va no doi dinh dang dau ra tren ca 177.321 keyframe.
+"src/mfe/offline/caption_prompt.py" = ["E501"]
+# `scratchpad/gen_nb*.py` chua NOI DUNG notebook, khong phai ma. Mot dong cua
+# bang markdown PHAI nam tren mot dong thi no moi render ra bang — ngat no cho
+# vua 100 cot la bien bang thanh van xuoi trong notebook nguoi khac doc.
+"scratchpad/gen_nb*.py" = ["E501"]

@@ -1,0 +1,136 @@
+# BUNDLE BTC — LƯỢT 5: caption + chữ trên màn hình bằng Qwen2.5-VL qua vLLM
+# notebooks/btc/08-btc-caption-ocr-qwen25.ipynb · phương pháp: notebooks/reference/caption.ipynb
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# CÙNG bundle, CÙNG volume, CÙNG cách chia người như bốn lượt trước. Bảng phân
+# công đọc từ `config/zips_keyframes_btc.yaml` — file DUY NHẤT, không chép lại.
+#
+# Đây là bất biến quan trọng nhất của bundle này (§4.1 handoff):
+# `part-manifest/{video}.json` ghi đúng MỘT `author`, và `merge.check_ownership`
+# từ chối cả bundle nếu author khác người được giao. Chia lại theo bảng khác là
+# hỏng bundle, không phải chỉ chậm.
+#
+# ⚠️ CHẠY NHIỀU NOTEBOOK SONG SONG THÌ CHIA THEO `PART`, KHÔNG CHIA THEO NGƯỜI.
+#    Notebook 08 có `PART` / `NUM_PARTS`: nó cắt phần việc của CHÍNH `MEMBER` đó
+#    thành N lát rời nhau. `author` ghi ra vẫn là `MEMBER`, nên `check_ownership`
+#    vẫn đúng. Thêm tên mới vào `assignment` để chạy song song là cách chắc chắn
+#    làm hỏng bundle — xem ghi chú ở cuối `config/zips_keyframes_btc.yaml`.
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# VÌ SAO LÀ FILE RIÊNG chứ không thêm hai tầng vào `…_btc_images.yaml`:
+#
+#   `merge_bundle.py` đòi ĐỦ mảnh cho mọi tầng có trong `plan.stages`. Thêm vào
+#   file kia là bundle bị từ chối ngay lập tức cho tới khi lượt này chạy xong
+#   toàn bộ 873 video. Tách ra thì gộp được ĐỘC LẬP:
+#
+#     python scripts/merge_bundle.py --shards config/ingest_shards_batch1_btc_caption.yaml
+#
+#   Lệnh đó chỉ gộp `qwen_captions` + `qwen_ocr`; nó không đụng ba lượt kia vì
+#   `merge` lọc artifact theo `spec.stage in plan.stages`.
+#
+# ẢNH LẤY TỪ ĐÂU: tải lại `Keyframes_*.zip`, KHÔNG kéo từ Modal Volume — cùng lý
+# do như ba lượt trước: Volume ở đường BTC là ghi-một-chiều, kéo về là ~177.000
+# lần `read_file` còn tải lại gói là 1,4–6 GB có resume.
+
+bundle: aic_btc_b1_v1
+keyframe_set: btc
+calibration_video: L21_V001
+
+assign: zips
+zip_inventory: config/zips_keyframes_btc.yaml
+
+# THỨ TỰ CÓ Ý NGHĨA, và ở đây nó là một RÀNG BUỘC chứ không phải sở thích.
+#
+# Hai tầng đọc HAI NỬA của CÙNG một câu trả lời Qwen2.5-VL (`[CAPTION]` và
+# `[TEXT]`). `stages.qwen25_scan` giữ câu trả lời thô lại trong PHIÊN và chỉ cho
+# MỘT video, nên tầng chạy sau không phải sinh lại — đó là một nửa tổng chi phí
+# GPU của cả lượt.
+#
+# Kéo theo: vòng lặp của notebook 08 phải đi theo VIDEO chứ không theo TẦNG,
+# đúng như notebook 06 và khác notebook 03.
+stages:
+  - n6_caption_qwen
+  - n6_ocr_qwen25
+
+extras:
+  map_keyframes: https://aic-data.ledo.io.vn/map-keyframes-aic25-b1.zip
+
+# ───────────────────────────────────────────────────────────────────────────
+# HAI THỨ GIỮ NGUYÊN CỦA BẢO, VÀ MỘT THỨ CỐ Ý ĐỔI
+#
+# GIỮ: một lần sinh cho cả hai nửa (`[CAPTION]` + `[TEXT]`), và động cơ vLLM với
+# đúng tham số của bạn ấy. `stage_n5_ocr_qwen` có ghi mối ngờ về cách cắt hai
+# trường từ một lần sinh — `ocr_sviptr` xếp hạng 1,0 khi chạy một mình nhưng đóng
+# góp ÂM trong ablation. Vẫn giữ, vì mối ngờ đó là GIẢ THUYẾT chưa đo, và đo được
+# nó cần chính dữ liệu này. Cái ta thêm: đếm số câu mất nhãn (`unmarked`).
+#
+# GIỮ NỐT: **tiếng Anh**. Caption đi vào HAI chỗ — arm BM25 `caption_qwen` và
+# `n6_bge_m3` -> arm `bge_m3`. BGE-M3 là mô hình đa ngữ nên truy vấn tiếng Việt
+# khớp caption tiếng Anh không cần dịch, còn nhánh BM25 dùng bản dịch tiếng Anh
+# của truy vấn mà đường truy vấn ĐÃ CÓ SẴN cho arm `siglip` (`--en-source auto`).
+# Caption tiếng Anh phục vụ cả hai arm; caption tiếng Việt chỉ phục vụ một.
+#
+# ĐỔI: **nội dung chỉ dẫn**. Đo bằng `mfe.offline.caption_audit` trên chính 855
+# keyframe Bảo đã chạy (bộ dò song ngữ — bản chỉ có từ khoá tiếng Việt đọc ra 1,2%
+# và đó là lỗi của phép đo, không phải của caption):
+#
+#     năng lực            caption của Bảo    49 đề thật có
+#     màu gắn vào vật          78,6%              63,3%
+#     QUAN HỆ giữa các vật     50,5%              57,1%     <-- điều khoản số 1
+#     vị trí trái/phải         59,2%              36,7%
+#     góc máy                  11,1%              16,3%
+#     mở đầu "The image shows" 59,9%                —       <-- stopword
+#
+# Hai chỗ hụt thật: **quan hệ** và **mở đầu sáo mòn**. Biến thể `aic` bắt buộc nêu
+# các vật ĐANG LÀM GÌ VỚI NHAU (yêu cầu của Lead 25-08-2026) — "người đang tưới
+# cây", không phải "một người, một vòi nước, mấy chậu cây" — cấm mở đầu sáo mòn,
+# thêm few-shot **chỉ văn bản** khoá định dạng `[CAPTION]`/`[TEXT]`, và cấm DỊCH
+# nửa `[TEXT]` (nó là nguồn của arm BM25 `ocr_qwen25`, phải giữ dấu tiếng Việt).
+#
+# Biến thể `bao` VẪN GIỮ và vẫn được dùng: nó là phép kiểm ĐƯỜNG ỐNG duy nhất —
+# đối chiếu được với bản của Bảo vì nó chính là prompt đã sinh ra bản đó. Notebook
+# 08 chạy CẢ HAI ở lượt probe: `bao` để kiểm địa chỉ/động cơ, `aic` để kiểm prompt.
+#
+# ───────────────────────────────────────────────────────────────────────────
+# VÌ SAO `n6_bge_m3` KHÔNG NẰM TRONG LƯỢT NÀY (đừng thêm vào)
+#
+# Nó là đích đến của caption, nhưng nó KHÔNG chạy chung phiên được: vLLM giữ
+# `gpu_memory_utilization=0.9`, nên nạp thêm BGE-M3 trong cùng vòng lặp là OOM,
+# còn tháo/nạp lại model theo từng video thì tốn hơn cả phần việc nó làm.
+#
+# `n6_bge_m3` đọc part `qwen_captions` TỪ VOLUME (`params.source: qwen_captions`),
+# nên nó chạy được ở một lượt riêng, SAU lượt này, và không cần tải một byte ảnh
+# nào — đó là lượt rẻ nhất của cả bundle. Mặc định của tầng vẫn là `dense_captions`
+# để không cướp địa chỉ của `n6_recap` trong `config/ingest_shards.yaml`.
+# ───────────────────────────────────────────────────────────────────────────
+params:
+  # `params` bi `check_fingerprints` so THEO TUNG KHOA giua cac shard, nen o day
+  # chi duoc de thu PHAI giong nhau o moi may. `tensor_parallel_size`,
+  # `batch_size`, `gpu_memory_utilization`, `max_model_len`, prefix caching la
+  # lua chon cua MAY — chung nam trong o dau notebook 08 va di vao `facts`.
+  n6_caption_qwen: &qwen25
+    checkpoint: Qwen/Qwen2.5-VL-7B-Instruct
+
+    # BIEN THE PROMPT. Xem `src/mfe/offline/caption_prompt.py`.
+    #   `aic` — tieng Viet + few-shot, dung cho luot chay THAT
+    #   `bao` — prompt goc cua Bao (tieng Anh), dung cho luot PROBE doi chieu
+    #
+    # Doi gia tri nay la doi ca bo caption. `max_tokens` di theo bien the (aic
+    # 384, bao 256) va KHONG khai o day: mot nguon su that, khong hai.
+    prompt_variant: aic
+
+    # Chi dan + few-shot dat TRUOC anh. Day la dieu kien de prefix caching cua
+    # vLLM co tac dung: no tai dung KV-cache theo TIEN TO tinh tu token dau tien,
+    # nen dat anh truoc (nhu ban goc cua Bao) thi hang tram token thi giac khac
+    # nhau o moi anh se chan mat ca khoi ~900 token co dinh phia sau.
+    #
+    # Doi lai: thu tu dau vao doi that, nen day la tham so cua BUNDLE — hai nguoi
+    # chay hai thu tu la hai bo caption khong so duoc voi nhau.
+    text_first: true
+
+    temperature: 0.1
+
+  # PHAI giong het tang tren. Lech mot khoa la `_qwen25_cache_key` doi, cache cau
+  # tra loi truot, va tang thu hai sinh lai toan bo — gap doi tien GPU cua ca
+  # luot, khong loi nao bao.
+  n6_ocr_qwen25: *qwen25

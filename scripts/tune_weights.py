@@ -14,6 +14,9 @@ Two rules this script cannot enforce but the reader must:
 * **9 pilot queries are not enough to chase 0.01.** Final Score saturates once a
   hit is in the top 5, so read the mean-rank column too, and treat a gain under
   ~0.03 on this set as noise rather than a result.
+
+`--flat-root` chạy trên **kho phẳng** (`stores/flat/`) thay vì Elasticsearch +
+Milvus — đường đang thật sự chạy, xem `mfe.online.flat_arms`.
 """
 
 from __future__ import annotations
@@ -34,11 +37,24 @@ from mfe.eval.tuning import (
     QueryEvidence,
     ablation,
     coordinate_ascent,
+    evidence_key,
+    load_evidence_cache,
+    save_evidence_cache,
 )
 from mfe.mapping.relational import RelationalMap
 from mfe.online.cascade import Cascade
+from mfe.online.flat_arms import build_flat_cascade, load_flat_bundle
 
 logger = logging.getLogger("tune_weights")
+
+
+def build_cascade(config, flat_root: str | None) -> Cascade:
+    """Cascade trên kho phẳng khi có `--flat-root`, còn lại là đường có kho."""
+    if not flat_root:
+        return Cascade.from_config(config)
+    bundle = load_flat_bundle(flat_root)
+    print(f"kho phang: {bundle.report()}")
+    return build_flat_cascade(config, flat_root, flat_bundle=bundle)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -68,6 +84,30 @@ def build_parser() -> argparse.ArgumentParser:
         default="manual",
         help="Where the English query comes from (see scripts/measure_arms.py).",
     )
+    parser.add_argument(
+        "--flat-root",
+        default=None,
+        help="Chay tren kho phang (vd stores/flat) thay vi Elasticsearch + Milvus.",
+    )
+    parser.add_argument(
+        "--only-arms",
+        default=None,
+        help="Chi quet nhung arm nay (cach nhau dau phay). Cac arm con lai giu "
+             "nguyen trong so trong config.",
+    )
+    parser.add_argument(
+        "--skip-types",
+        default=None,
+        help="Bo cac dang truy van nay, vd TRAKE. Bang so sanh cu do tren 42 cau "
+             "KIS+QA cua eval/dev (= 51 tru 9 TRAKE).",
+    )
+    parser.add_argument(
+        "--evidence-cache",
+        default=None,
+        help="Doc/ghi ket qua truy hoi tho o day. Trong so KHONG doi cai arm tra "
+             "ve, chi doi cach gop — nen mot lan truy hoi dung duoc cho moi luot "
+             "quet sau. Xoa file nay khi doi kho, doi arm hoac doi bo truy van.",
+    )
     parser.add_argument("--out", default=None, help="Report path (JSON)")
     return parser
 
@@ -76,19 +116,28 @@ def collect_evidence(cascade: Cascade, queries, coarse_topk: int, en_source: str
     """Query every arm once per query (per event for TRAKE)."""
     evidences = []
     for query in queries:
-        if en_source == "none":
-            text_en = None
-        elif en_source == "manual":
-            text_en = query.text_en
-        else:
-            text_en = cascade.resolve_english(query.text, None)
-
         if isinstance(query, TRAKEQuery):
             searches = query.searches()
         elif isinstance(query, QAQuery):
             searches = [query.retrieval_text or query.text]
         else:
             searches = [query.text]
+
+        if en_source == "none":
+            text_en = None
+        elif en_source == "manual":
+            text_en = query.text_en
+        else:
+            # Dịch chuỗi ĐANG TÌM, không dịch `query.text`. Với QA hai thứ đó
+            # khác nhau: `text` là câu hỏi ("mặc áo màu gì?"), `retrieval_text`
+            # là bản viết lại thành mô tả. SigLIP huấn luyện trên caption chứ
+            # không trên câu hỏi, nên dịch câu hỏi rồi đưa cho nó là để arm mạnh
+            # nhất tìm bằng một chuỗi mà 6 arm còn lại không dùng.
+            #
+            # `Cascade.search` vốn đã làm đúng — nó gọi `resolve_english` trên
+            # chính `query_text`. Chỗ này từng lệch khỏi nó, nên bảng trọng số
+            # chỉnh trên một hệ khác với hệ đem đi thi.
+            text_en = cascade.resolve_english(searches[0], None)
 
         per_event = [
             cascade.arms.run(text, coarse_topk, query.query_id, query_text_en=text_en)
@@ -109,6 +158,11 @@ def main() -> None:
     config = load_config(args.config)
     queryset = args.queryset or config.resolve_path(config.eval.queryset)
     queries = load_official_queryset(queryset)
+    if args.skip_types:
+        dropped = {t.strip().upper() for t in args.skip_types.split(",") if t.strip()}
+        before = len(queries)
+        queries = [q for q in queries if q.type.upper() not in dropped]
+        print(f"bo {before - len(queries)} cau dang {sorted(dropped)}; con {len(queries)}")
     top_k = min(config.retrieval.rerank_topk, MAX_ANSWERS_PER_QUERY)
 
     # Kỷ luật hộp đen — docs/task/bo-test-dev-heldout.md §7.
@@ -127,9 +181,20 @@ def main() -> None:
 
     relational = RelationalMap(config.paths.relational_db)
     relational.init_schema()
-    cascade = Cascade.from_config(config)
 
-    if cascade.reranker is not None:
+    cache_key = evidence_key(
+        args.config, str(queryset), config.retrieval.coarse_topk, args.en_source
+    )
+    cache_path = Path(args.evidence_cache) if args.evidence_cache else None
+    evidences = (
+        load_evidence_cache(cache_path, queries, cache_key) if cache_path else None
+    )
+
+    # Cascade chỉ dựng khi THẬT SỰ phải truy hồi: nạp tháp text SigLIP là ~10s
+    # và bản gộp là ~1 GB, cả hai vô ích nếu evidence đã nằm trên đĩa.
+    cascade = build_cascade(config, args.flat_root) if evidences is None else None
+
+    if cascade is not None and cascade.reranker is not None:
         # Stage C reorders *after* fusion, so a cached-evidence sweep would tune
         # weights whose effect the reranker then partly overwrites — and paying
         # ~12 s/query × 180 evaluations is not an option either.
@@ -142,27 +207,47 @@ def main() -> None:
     fusion = config.retrieval.fusion
     normalizer, rrf_k = fusion.resolved_normalizer(), fusion.rrf_k
 
-    evidences = collect_evidence(cascade, queries, config.retrieval.coarse_topk, args.en_source)
-    if cascade.translator is not None:
-        cascade.translator.save_cache()
+    # Tầng B (dedup + gom theo thời gian) đọc config chứ không đọc kho, nên khi
+    # chạy từ cache một `Cascade` rỗng cho ra ĐÚNG hàm gom đó mà không mở gì.
+    grouper = (cascade if cascade is not None else Cascade(config=config)).group
+
+    if evidences is None:
+        evidences = collect_evidence(
+            cascade, queries, config.retrieval.coarse_topk, args.en_source
+        )
+        if cascade.translator is not None:
+            cascade.translator.save_cache()
+        if cache_path is not None:
+            save_evidence_cache(cache_path, evidences, cache_key)
 
     # Only tune arms that actually returned something: an unavailable arm has no
     # weight worth choosing, and including it would waste a sixth of the sweep
     # measuring a no-op.
     answering = sorted({name for ev in evidences for name in ev.arm_names})
-    arm_order = [arm.name for arm in cascade.arms if arm.name in answering]
-    silent = [arm.name for arm in cascade.arms if arm.name not in answering]
+    # Thứ tự arm là MỘT PHẦN của kết quả (leo dốc tham lam, xem `mfe.eval.tuning`),
+    # nên nó lấy từ registry khi có; chạy từ cache thì registry không tồn tại và
+    # thứ tự chữ cái là cái duy nhất tái lập được.
+    order = [arm.name for arm in cascade.arms] if cascade is not None else answering
+    arm_order = [name for name in order if name in answering]
+    silent = [name for name in order if name not in answering]
     print(f"\ntuning {len(arm_order)} arm(s): {', '.join(arm_order)}")
     if silent:
         print(f"khong tham gia (khong tra ve gi tren bo nay): {', '.join(silent)}")
 
     weights = config.retrieval.fusion_weights.model_dump()
     start = Assignment({name: float(weights.get(name, 1.0)) for name in arm_order})
+    if args.only_arms:
+        wanted = {a.strip() for a in args.only_arms.split(",") if a.strip()}
+        unknown = wanted - set(arm_order)
+        if unknown:
+            raise SystemExit(f"--only-arms khong co arm nao ten {sorted(unknown)}")
+        arm_order = [name for name in arm_order if name in wanted]
+        print(f"chi quet: {', '.join(arm_order)} (cac arm khac giu trong so config)")
     common = dict(normalizer=normalizer, rrf_k=rrf_k, top_k=top_k)
 
     if args.ablation:
         rows = ablation(
-            evidences, start, arm_order, relational, cascade.group, **common
+            evidences, start, arm_order, relational, grouper, **common
         )
         print(f"\n{'cau hinh':<20} {'RONG':>7} {'HEP':>7} {'hangTB':>8} {'hit':>6}")
         print("-" * 52)
@@ -218,7 +303,7 @@ def main() -> None:
             start,
             arm_order,
             relational,
-            cascade.group,
+            grouper,
             allow_off=not args.no_off,
             rounds=args.rounds,
             objective=args.objective,

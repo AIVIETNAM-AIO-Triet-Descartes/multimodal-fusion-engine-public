@@ -1,0 +1,80 @@
+# Môi trường cho Qwen2.5-VL qua vLLM — notebook 08 (caption + chữ trên màn hình)
+# config/ingest_shards_batch1_btc_caption.yaml · phương pháp: notebooks/reference/caption.ipynb
+#
+# ⚠️ FILE NÀY TÁCH KHỎI `requirements-kaggle-btc-images.txt` LÀ BẮT BUỘC, KHÔNG
+# PHẢI SỞ THÍCH.
+#
+# vLLM ghim `torch` rất chặt (mỗi bản vLLM đi với đúng một dải torch) và nó sẽ
+# **kéo torch sang phiên bản khác** khi cài. Trọng & Quang đang chạy notebook 03
+# và 06 trên cùng bundle bằng hai file môi trường kia; một lần cài vLLM chung vào
+# đó là đổi torch dưới chân họ, và hậu quả không phải một lỗi — nó là tiền xử lý
+# ảnh của SigLIP đổi theo, tức vector của bundle thành hỗn hợp hai phép đo, và
+# `merge_bundle.py` sẽ từ chối cả bundle ở bước gộp sau nhiều giờ.
+#
+# Vì cùng lý do đó: **notebook 08 KHÔNG được chạy chung phiên Kaggle với 03/06.**
+# Một phiên, một môi trường, một lượt.
+#
+# ⚠️ `torch` KHÔNG được khai ở đây. Để vLLM tự chọn bản torch của nó. Ghim thêm
+# một dải torch ở đây là đúng cách tạo ra một lượt giải phụ thuộc vô nghiệm mà
+# pip chỉ báo sau vài phút.
+#
+# `vllm` NẰM TRONG `NUMERIC_PACKAGES` (bundle.py): đổi phiên bản vLLM là đổi cách
+# xếp lịch lô và cách lượng tử hoá KV cache, tức đổi chuỗi Qwen2.5-VL trả về.
+# `merge_bundle.py` sẽ TỪ CHỐI bundle nếu hai người chạy hai bản vLLM — nên
+# **thống nhất phiên bản trước khi chia việc**, và ghi lại bản đã dùng.
+
+# --- Động cơ sinh ---------------------------------------------------------
+# GHIM CỨNG. Đây là bản Bảo đã chạy thật trên Kaggle T4×2 khi sinh
+# `notebooks/reference/dense_captions_qwen.json` — đọc từ log khởi động của bạn
+# ấy: `Initializing a V1 LLM engine (v0.27.1)`.
+#
+# Ghim vì hai lẽ, và lẽ thứ hai mới là lẽ bắt buộc:
+#
+#   1. **T4 là Turing (sm75).** Hỗ trợ Turing của vLLM là thứ có thể bị gỡ ở một
+#      bản bất kỳ mà không ai trong nhóm biết trước. 0.27.1 là bản DUY NHẤT ta có
+#      bằng chứng đã nạp được Qwen2.5-VL-7B trên đúng phần cứng này. `>=` là mời
+#      pip chọn hộ một bản chưa ai thử, giữa lúc chạy.
+#   2. **`vllm` nằm trong `NUMERIC_PACKAGES` (bundle.py).** Đổi bản là đổi cách
+#      xếp lịch lô và cách lượng tử hoá KV cache, tức đổi chuỗi Qwen2.5-VL trả
+#      về. `merge_bundle.py` TỪ CHỐI bundle có hai bản khác nhau giữa các mảnh —
+#      và nó chỉ nói ra ở bước gộp, sau hàng chục giờ GPU. Với `>=`, hai người
+#      cài cách nhau một tuần là gần như chắc chắn lệch bản.
+#
+# Kèm theo: 0.27.1 là **V1 engine**, nơi prefix caching bật MẶC ĐỊNH và có hỗ trợ
+# đầu vào đa phương thức. Nên `ENABLE_PREFIX_CACHING = True` ở notebook nhiều khả
+# năng chỉ là khẳng định lại thứ đã bật — đường lui trong `_qwen25_engine` vẫn
+# giữ, nhưng `facts["prefix_caching"]` mới là chỗ đọc sự thật.
+#
+# Đổi con số này = đổi cả bộ caption. Nếu buộc phải đổi, đổi TRƯỚC khi ai chạy
+# mảnh đầu tiên, và báo cả nhóm.
+vllm==0.27.1
+
+# --- Tiện ích dựng prompt đa phương thức của Qwen -------------------------
+# `process_vision_info` đọc ảnh và gài đúng token ảnh vào template. Bảo dùng nó;
+# tự dựng lại phần này là tự viết lại một thứ đã đúng.
+qwen-vl-utils>=0.0.8
+
+# --- KHÔNG cài `flash-attn` -----------------------------------------------
+# Notebook của Bảo có `pip install flash-attn --no-build-isolation`. Bỏ, và đây
+# là một sửa lỗi chứ không phải cắt bớt:
+#
+#   * FlashAttention cần **compute capability >= 8.0** (Ampere). T4 là Turing
+#     (7.5), P100 là Pascal (6.0) — hai loại GPU duy nhất Kaggle cấp miễn phí.
+#     Trên cả hai, gói này hoặc không build được hoặc build xong không bao giờ
+#     được gọi tới.
+#   * `--no-build-isolation` biên dịch từ nguồn: đo trên Kaggle là **20–40 phút**
+#     của quota GPU, để lấy một thư viện sẽ không chạy.
+#
+# Nếu sau này chạy trên A100/L4 thì bật lại — và lúc đó nó thuộc về
+# `NUMERIC_PACKAGES`, vì kernel attention khác cho ra chuỗi khác.
+
+# --- Đẩy part lên Modal Volume -------------------------------------------
+# BẮT BUỘC, và nó đã từng bị quên: `mfe.offline.transport.build_transport`
+# `import modal` bên trong `ModalVolumeTransport.__init__`, nên thiếu gói này thì
+# ô Step 0b chết bằng `ModuleNotFoundError: No module named 'modal'` — SAU khi đã
+# clone repo và cài xong mọi thứ nặng.
+#
+# `>=1.0` cho khớp bốn file requirements kia. `modal` nằm trong `OTHER_PACKAGES`
+# (xuất xứ, không phải con số) nên lệch bản không làm hỏng bundle — nhưng lệch
+# bản API thì hỏng lượt chạy.
+modal>=1.0

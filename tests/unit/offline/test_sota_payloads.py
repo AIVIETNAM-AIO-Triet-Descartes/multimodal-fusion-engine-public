@@ -196,11 +196,21 @@ class TestAgainstBaosRealExport:
         assert len(records) == sum(r.records for r in reports)
 
     def test_a_source_bao_never_shipped_is_reported_absent_not_raised(self, id_map):
-        """`ocr_paddle` / `ocr_vietocr` come from our own bundle. Pointed at Bảo's
-        directory they must be *reported* missing, because "absent" is a valid
-        state for a payload whose producer is a different pass entirely."""
+        """Sources from our own passes. Pointed at Bảo's directory they must be
+        *reported* missing, because "absent" is a valid state for a payload whose
+        producer is a different pass entirely.
+
+        The list is asserted rather than merely iterated: a new source that
+        forgets to declare itself in `SOURCE_FILES` is invisible, and one that
+        lands in `SOTA_SOURCES` by mistake would claim Bảo ships it.
+
+        `caption_qwen` / `ocr_qwen25` joined on 25-08-2026 — the two halves of one
+        Qwen2.5-VL generation (`n6_caption_qwen` / `n6_ocr_qwen25`). Bảo's
+        *method* is where they come from, but his **export** never carried them,
+        which is exactly the distinction this test keeps.
+        """
         ours = sorted(set(SOURCE_FILES) - SOTA_SOURCES)
-        assert ours == ["ocr_paddle", "ocr_vietocr"]
+        assert ours == ["caption_qwen", "ocr_paddle", "ocr_qwen25", "ocr_vietocr"]
         records, reports = load_all(_SOTA_VECTORS, id_map, sources=ours)
         assert records == []
         assert all(not r.present for r in reports)

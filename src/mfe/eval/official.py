@@ -627,8 +627,15 @@ def run(
     config_path: str = "config/sample2026.yaml",
     queryset_path: str | None = None,
     out_dir: str | None = None,
+    flat_root: str | None = None,
 ) -> OfficialRunResult:
-    """Score a whole query set with the official metrics and write the report."""
+    """Score a whole query set with the official metrics and write the report.
+
+    `flat_root` chạy trên **bản gộp phẳng** thay vì Elasticsearch + Milvus. Đó là
+    đường duy nhất chạy được trên laptop (CLAUDE.md §4 đã chốt bỏ cả hai kho), và
+    nó là đường phải dùng để **công bố trên heldout**: chỉnh trọng số trên dev ở
+    đường phẳng rồi công bố ở một đường khác là công bố một con số khác.
+    """
     config: Config = load_config(config_path)
     queryset_path = queryset_path or "eval/queryset_btc_2026.jsonl"
     out_dir = out_dir or config.paths.eval_results
@@ -644,7 +651,12 @@ def run(
         # No `reranker=None` override: stage C is a config decision now
         # (`models.reranker`), and pinning it off here is how the harness spent
         # a run reporting that a working reranker changed nothing.
-        cascade = Cascade.from_config(config)
+        if flat_root:
+            from mfe.online.flat_arms import build_flat_cascade  # noqa: PLC0415
+
+            cascade = build_flat_cascade(config, flat_root)
+        else:
+            cascade = Cascade.from_config(config)
         results = [score_one(query, cascade, relational, top_k) for query in queries]
         # After scoring, not before: `translation_used` reports what actually
         # happened to each query, which is only known once they have all run.
@@ -855,13 +867,23 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", default="config/sample2026.yaml")
     parser.add_argument("--queryset", default=None)
     parser.add_argument("--out", default=None)
+    parser.add_argument(
+        "--flat-root",
+        default=None,
+        help="Chay tren kho phang (vd stores/flat) thay vi Elasticsearch + Milvus.",
+    )
     return parser
 
 
 def main() -> None:
     setup_console()
     args = build_parser().parse_args()
-    run(config_path=args.config, queryset_path=args.queryset, out_dir=args.out)
+    run(
+        config_path=args.config,
+        queryset_path=args.queryset,
+        out_dir=args.out,
+        flat_root=args.flat_root,
+    )
 
 
 if __name__ == "__main__":

@@ -302,3 +302,73 @@ class TestGoBocLoHfTraVe:
         )
         assert [c.keyframe_id for c in after] == [c.keyframe_id for c in pool]
         assert not outcome.ran and "hinh dang la" in outcome.reason
+
+
+class TestTangCuaTa:
+    """`OurRerankTier` — `Reranker` của ta khoác giao diện tầng.
+
+    Nó tồn tại để bàn thử Streamlit và bản đo chạy **cùng một** tầng. Nên thứ
+    phải khoá là hợp đồng chung của mọi tầng, không phải chất lượng xếp hạng:
+    không mất ứng viên, không ném ra ngoài, `depth` được tôn trọng.
+    """
+
+    class FakeReranker:
+        def __init__(self, order=None, error=None):
+            self.order = order
+            self.error = error
+            self.seen = None
+
+        def rerank(self, query, cands, run_id="r"):
+            self.seen = list(cands)
+            if self.error is not None:
+                raise self.error
+            if self.order is None:
+                return list(reversed(cands))
+            by_id = {c.keyframe_id: c for c in cands}
+            return [by_id[k] for k in self.order if k in by_id]
+
+    def test_xep_lai_va_giu_du_ung_vien(self):
+        from mfe.online.rerank_tiers import OurRerankTier
+
+        pool = candidates(4)
+        after, outcome = OurRerankTier(self.FakeReranker()).rerank(pool, query_vi="x")
+        assert len(after) == 4
+        assert [c.keyframe_id for c in after] == [c.keyframe_id for c in reversed(pool)]
+        assert outcome.ran and outcome.scored == 4
+
+    def test_depth_chi_cham_phan_dau_con_duoi_giu_nguyen(self):
+        from mfe.online.rerank_tiers import OurRerankTier
+
+        pool = candidates(5)
+        fake = self.FakeReranker()
+        after, outcome = OurRerankTier(fake).rerank(pool, query_vi="x", depth=2)
+        assert len(fake.seen) == 2, "chi hai ung vien dau duoc cham"
+        assert len(after) == 5
+        assert [c.keyframe_id for c in after[2:]] == [c.keyframe_id for c in pool[2:]]
+
+    def test_loi_khong_thoat_ra_ngoai_va_giu_nguyen_thu_tu(self):
+        from mfe.online.rerank_tiers import OurRerankTier
+
+        pool = candidates(3)
+        tier = OurRerankTier(self.FakeReranker(error=RuntimeError("model chet")))
+        after, outcome = tier.rerank(pool, query_vi="x")
+        assert [c.keyframe_id for c in after] == [c.keyframe_id for c in pool]
+        assert not outcome.ran and "RuntimeError" in outcome.reason
+
+    def test_khong_co_reranker_thi_bao_ly_do(self):
+        from mfe.online.rerank_tiers import OurRerankTier
+
+        pool = candidates(2)
+        after, outcome = OurRerankTier(None).rerank(pool, query_vi="x")
+        assert after == pool and not outcome.ran
+
+    def test_cam_duoc_vao_chuoi_nhu_moi_tang_khac(self):
+        from mfe.online.rerank_tiers import OurRerankTier
+
+        pool = candidates(3)
+        after, outcomes = apply_tiers(
+            pool, [OurRerankTier(self.FakeReranker()), ColPaliTier()],
+            query_vi="x", query_en=None,
+        )
+        assert len(after) == 3
+        assert [o.tier for o in outcomes] == ["ta", "colpali"]

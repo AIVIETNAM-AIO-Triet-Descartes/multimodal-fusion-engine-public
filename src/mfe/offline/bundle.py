@@ -93,7 +93,16 @@ ARTIFACTS: dict[str, Artifact] = {
         Artifact("paddle_ocr", "text", "paddle_ocr.json", "ocr_paddle", None, "n5_ocr_paddle"),
         Artifact("viet_ocr", "text", "viet_ocr.json", "ocr_vietocr", None, "n5_ocr_vietocr"),
         Artifact("objects_text", "text", "objects_text.json", "object", None, "n4_objects"),
-        Artifact("dense_captions", "text", "dense_captions.json", "caption", None, "n6_recap"),
+        # Qwen2.5-VL qua vLLM — MOT lan sinh, HAI nua (`[CAPTION]` / `[TEXT]`).
+        # Them 25-08-2026, phuong phap cua Bao (`notebooks/reference/caption.ipynb`).
+        #
+        # Day la nguon caption DUY NHAT cua bundle. Artifact `dense_captions` (cua
+        # `n6_recap`, ReCap qua Gemini/Qwen2-VL) da bi go cung ngay: nhom doi han
+        # sang duong nay, nen giu mot artifact khong ai sinh chi de lai mot arm
+        # vinh vien toi — dung cai bay `sviptr_ocr` da mac mot lan.
+        Artifact("qwen_captions", "text", "qwen_captions.json", "caption_qwen", None,
+                 "n6_caption_qwen"),
+        Artifact("qwen_ocr", "text", "qwen_ocr.json", "ocr_qwen25", None, "n6_ocr_qwen25"),
         Artifact("siglip_vectors", "vector", "siglip_vectors.npz", None, 1152, "n4_siglip"),
         Artifact("dense_vectors", "vector", "dense_vectors.npz", None, 1024, "n6_bge_m3"),
         Artifact("audio_features", "vector", "audio_features.npz", None, 512, "n3_audio"),
@@ -125,6 +134,9 @@ NUMERIC_PACKAGES = (
     "paddlepaddle-gpu",
     "paddlepaddle",
     "vietocr",
+    # Them 25-08-2026 cung `n6_caption_qwen`: doi phien ban vLLM la doi cau tra
+    # loi cua Qwen2.5-VL, nen no thuoc ve day chu khong phai OTHER_PACKAGES.
+    "vllm",
 )
 
 #: Recorded for provenance, ignored when comparing shards.
@@ -159,7 +171,10 @@ STAGE_PACKAGES: dict[str, tuple[str, ...]] = {
     # VietOCR reads them (`stages.stage_n5_ocr_vietocr`), so a Paddle version
     # change moves this stage's output too.
     "n5_ocr_vietocr": ("vietocr", "torch", "paddleocr", "paddlepaddle-gpu", "paddlepaddle"),
-    "n6_recap": ("torch", "transformers"),
+    # vLLM la co may sinh, khong phai mot goi phu: no quyet dinh cach xep lich
+    # lo, cach luong tu hoa KV cache, va do la nhung thu doi duoc chuoi tra ve.
+    "n6_caption_qwen": ("torch", "transformers", "vllm"),
+    "n6_ocr_qwen25": ("torch", "transformers", "vllm"),
     "n6_bge_m3": ("torch", "transformers", "sentence-transformers"),
 }
 
@@ -240,9 +255,6 @@ class BundleLayout:
 
     def subtitle_segments(self, video_id: str) -> str:
         return f"{self.root}/subtitles_segments/{video_id}.json"
-
-    def recap_memory(self, video_id: str) -> str:
-        return f"{self.root}/recap_memory/{video_id}.json"
 
     def part(self, artifact: str, video_id: str) -> str:
         suffix = "npz" if ARTIFACTS[artifact].kind == "vector" else "json"

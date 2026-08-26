@@ -45,6 +45,5 @@ stages:
   - n4_siglip
   - n5_ocr_easyocr
   - n5_ocr_qwen
-  - n6_recap
   - n6_bge_m3
   - n3_audio
