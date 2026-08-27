@@ -572,6 +572,41 @@ class TestBgeM3DocDungNguonCaption:
         assert keys == sorted(payload)
 
 
+    def test_model_nap_MOT_LAN_cho_ca_phien(self, tmp_path, fake_st):
+        """404 video × một lần nạp 2,2 GB là 5-16 giờ chỉ để nạp model.
+
+        Đây là đúng cái bẫy `TestModelCache` khoá cho các tầng khác, và
+        `stage_n6_bge_m3` là tầng DUY NHẤT từng quên: nó gọi
+        `SentenceTransformer(...)` thẳng trong thân hàm, tức nạp lại cho từng
+        video. Không ồn ào chút nào — mỗi video vẫn xong, marker vẫn cắm, chỉ
+        lâu gấp bội.
+        """
+        import sys
+
+        built = []
+        module = sys.modules["sentence_transformers"]
+        original = module.SentenceTransformer
+
+        def counting(checkpoint):
+            built.append(checkpoint)
+            return original(checkpoint)
+
+        module.SentenceTransformer = counting
+        try:
+            stages.unload_models()
+            for video_id in ("L21_V001", "L21_V002", "L21_V003"):
+                transport = self._Transport({f"{video_id}#000100": "a man waters plants"})
+                ctx = _ctx(tmp_path, n_frames=1)
+                ctx.video_id = video_id
+                ctx.writer = self._Writer(transport)
+                ctx.layout = self._Layout()
+                stages.stage_n6_bge_m3(ctx)
+            assert built == ["BAAI/bge-m3"], f"nap {len(built)} lan cho 3 video"
+        finally:
+            module.SentenceTransformer = original
+            stages.unload_models()
+
+
 class TestPromptKhongDayModelTaoStopword:
     """Bài học 25-08-2026, đo trên chính lượt probe của Lead.
 

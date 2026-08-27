@@ -416,6 +416,18 @@
       "text_en": "The couples ride on their backs across an open - air hurdle"
     },
     {
+      "text": "các món ăn Châu Đốc được dọn ra lần lượt: đĩa chả giò hình tam giác, đĩa cá chiên bột, rồi nồi đất cá kho",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The dishes of Chau Doc were served one after another: a triangular plate of spring rolls, a plate of fried fish, and a pot of potted fish."
+    },
+    {
+      "text": "các đội đua tính giờ lần lượt xuất hiện: đội áo vàng xanh chạy thành hàng, đội áo xanh dương thay phiên dẫn tốc, rồi đội áo đỏ nước rút về đích",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The time-taking teams were in turn: the yellow and blue teams were in line, the blue team took turns, and the red team sprinted to the finish line."
+    },
+    {
       "text": "cảnh sát đứng cạnh chiếc xe bán tải màu trắng bị hư hỏng sát đoàn tàu vào ban đêm",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -456,6 +468,30 @@
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "The rocky cluster of Hon Phu Tu rising from the sea from the shore"
+    },
+    {
+      "text": "diễn biến chặng đua trên đường ướt: đoàn đông tay đua bám sát nhau, nhóm đầu tăng tốc dọc hàng rào, rồi cả nhóm nước rút về đích",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The wet track: a crowd of runners clustered together, the first group sped up along the fence, and the rest of the water retreated to the finish line."
+    },
+    {
+      "text": "diễn biến cuối chặng đua xe đạp: đoàn đua vượt điểm trung gian đông khán giả, tay đua áo xanh bứt lên dẫn đầu, rồi nhóm đầu nước rút qua vạch đích",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The end of the race: the team overcomes the crowd-sized middle pole, the blue shirt takes the lead, and the first group sprints over the finish line."
+    },
+    {
+      "text": "diễn biến cuộc đua: đoàn chính chạy sau mô tô áo phản quang, một hàng tay đua áo xanh tách lên phía trước, rồi đoàn đông tràn qua vạch đích",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The race begins: the main group follows the reflective motorcycle, a line of blue riders splits forward, and the crowd fills the finish line."
+    },
+    {
+      "text": "diễn biến pha nước rút về đích: đoàn tay đua lao lên tranh nhau, trọng tài phất cờ ô vuông đen trắng, rồi tay đua áo vàng giơ tay ăn mừng",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The sprint to the finish line: the race is raced by the drivers, the referees are waving black and white squares, and the yellow-clad drivers are raising their arms in celebration."
     },
     {
       "text": "hai du khách đu dây zipline qua thung lũng núi",
@@ -678,6 +714,12 @@
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "The female host in a black sleeveless dress eating a bowl of noodles at the restaurant."
+    },
+    {
+      "text": "quy trình sơ chế măng rừng: dỡ giỏ măng từ xe máy xuống, ngồi lột vỏ măng, rồi bào và rửa măng trong thùng nước",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The process of pre-processing bamboo shoots: unload the bamboo basket from the motorcycle, sit and peel the stem, plan and wash the shoots in the water tank."
     },
     {
       "text": "slide Vật lí cấu tạo hạt nhân nguyên tử gồm hai loại hạt proton và neutron",
@@ -966,6 +1008,18 @@
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "The bicycle race runs over the bridge over the water."
+    },
+    {
+      "text": "đoàn đua xe đạp tiến vào cầu giàn thép, chạy qua cây cầu rộng trên mặt nước xanh, rồi các tay đua lần lượt cán vạch đích màu đỏ",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The bicycle race enters the steel gantry bridge, runs across the wide bridge over the green water, and the riders cross the red finish line one by one."
+    },
+    {
+      "text": "đoàn đua xe đạp đi qua cánh đồng lúa xanh, tiếp tục chạy dọc đường ray, rồi nước rút dưới cổng đích màu đỏ",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The bicycle race goes through the green rice field, continues along the track, and sprints under the red finish gate."
     },
     {
       "text": "đoàn đông tay đua khép lại thành cụm phía sau mô tô dẫn đường",

@@ -47,7 +47,8 @@ import yaml
 
 from mfe.contracts.ids import build_keyframe_id
 from mfe.core.cli import setup_console
-from mfe.offline.labels_vi import missing_labels, translate_labels
+from mfe.offline.labels_vi import missing_labels
+from mfe.offline.object_text import read_detections, render
 
 logger = logging.getLogger(__name__)
 
@@ -67,112 +68,28 @@ def load_ordinal_to_frame(map_dir: Path) -> dict[str, dict[int, int]]:
     return table
 
 
-#: Biên chia khung hình thành ba dải theo tâm hộp (toạ độ x đã chuẩn hoá).
-#: Ba dải chứ không phải chín ô: đề nói "bên trái", "ở giữa", "bên phải" — không
-#: đề nào nói "góc trên bên trái". Chia mịn hơn mức đề hỏi chỉ làm loãng BM25.
-ZONE_EDGES = (1 / 3, 2 / 3)
-ZONE_NAMES = ("trái", "giữa", "phải")
+def open_keyframe(keyframe_dir: Path | None, video_id: str, ordinal: int):
+    """Ảnh keyframe `{keyframe_dir}/{video}/{n:03d}.jpg`, hoặc `None`.
 
-#: Số đếm viết bằng chữ tới ngưỡng này, trên ngưỡng thì viết "nhiều". Đề dùng
-#: chữ ("ba người", "hơn 5 người") nên chỉ mục cũng phải dùng chữ — BM25 khớp
-#: token, và "3" với "ba" là hai token khác nhau.
-COUNT_WORDS = ("không", "một", "hai", "ba", "bốn", "năm", "sáu", "bảy", "tám", "chín")
-MANY = "nhiều"
+    Trả `None` **im lặng** khi thiếu ảnh, và đó là hành vi đúng: gói `objects`
+    (640 MB) không kèm ảnh, còn ảnh keyframe là 28,7 GB. Một bản chỉ mục không
+    màu vẫn đúng — nó chỉ thiếu nhóm token thứ tư. Ném ở đây sẽ biến một tính
+    năng tuỳ chọn thành một điều kiện bắt buộc.
 
-
-def count_word(n: int) -> str:
-    return COUNT_WORDS[n] if n < len(COUNT_WORDS) else MANY
-
-
-def zone_of(box: list) -> str:
-    """Dải ngang chứa TÂM hộp. `box` là `[ymin, xmin, ymax, xmax]` chuẩn hoá.
-
-    Lấy tâm chứ không lấy mép: một vật rộng chiếm cả khung sẽ có `xmin` ở dải
-    trái và `xmax` ở dải phải, và gán nó vào cả hai thì "bên trái" mất hết sức
-    phân biệt.
+    Số ảnh có màu được ĐẾM và in ra cuối lượt, nên "thiếu im lặng" không có
+    nghĩa là "thiếu mà không ai biết".
     """
+    if keyframe_dir is None:
+        return None
+    path = keyframe_dir / video_id / f"{ordinal:03d}.jpg"
+    if not path.is_file():
+        return None
     try:
-        centre = (float(box[1]) + float(box[3])) / 2.0
-    except (TypeError, ValueError, IndexError):
-        return ZONE_NAMES[1]
-    if centre < ZONE_EDGES[0]:
-        return ZONE_NAMES[0]
-    if centre < ZONE_EDGES[1]:
-        return ZONE_NAMES[1]
-    return ZONE_NAMES[2]
+        from PIL import Image  # noqa: PLC0415
 
-
-def read_detections(payload: dict, score_min: float) -> list[tuple[str, str]]:
-    """`[(nhãn, dải)]` cho mọi hộp trên ngưỡng — **không khử trùng lặp**.
-
-    Bản trước khử trùng lặp ở đây, và đó là chỗ mất trắng hai thứ BTC đã cho:
-    năm hộp `Person` thành đúng một chữ "người", nên arm này không phân biệt nổi
-    khung có 1 người với khung có 12. `detection_boxes` thì không hề được đọc.
-
-    Đo trên 49 đề chính thức: **51%** hỏi số lượng, **45%** có ràng buộc trái/
-    phải/giữa. Cả hai đều trả lời được bằng dữ liệu đã nằm sẵn trong gói zip.
-    """
-    entities = payload.get("detection_class_entities") or []
-    scores = payload.get("detection_scores") or []
-    boxes = payload.get("detection_boxes") or []
-    out: list[tuple[str, str]] = []
-    for index, (entity, score) in enumerate(zip(entities, scores, strict=False)):
-        if float(score) < score_min:
-            continue
-        name = str(entity).strip()
-        if not name:
-            continue
-        box = boxes[index] if index < len(boxes) else None
-        out.append((name, zone_of(box) if box else ZONE_NAMES[1]))
-    return out
-
-
-def render(detections: list[tuple[str, str]], *, translate: bool) -> str:
-    """Chuỗi đánh chỉ mục cho một keyframe: nhãn · số đếm · dải.
-
-    Ba phần, và mỗi phần có một lý do riêng:
-
-    1. **Nhãn (đã dịch)** lặp lại `min(n, 3)` lần. BM25 cân theo tần suất, nên
-       lặp là cách gắn số đếm vào *điểm số* chứ không chỉ vào chữ. Chặn ở 3 để
-       một khung đông người không nuốt cả bảng xếp hạng.
-    2. **Số đếm viết bằng chữ** — "ba người" — vì đề viết bằng chữ.
-    3. **Dải ngang** — "trái: người, xe máy" — cho 45% câu hỏi vị trí.
-
-    Nhãn tiếng Anh KHÔNG bị bỏ: `translate_labels` gắn thêm đồng nghĩa tiếng
-    Việt, và giữ cả hai nghĩa là một truy vấn tiếng Anh (hiếm, nhưng có) vẫn khớp.
-    """
-    if not detections:
-        return ""
-
-    counts: dict[str, int] = {}
-    zones: dict[str, set[str]] = {}
-    for name, zone in detections:
-        key = name.casefold()
-        counts[key] = counts.get(key, 0) + 1
-        zones.setdefault(zone, set()).add(name)
-    # Giữ cách viết hoa đầu tiên gặp cho mỗi nhãn.
-    display: dict[str, str] = {}
-    for name, _ in detections:
-        display.setdefault(name.casefold(), name)
-
-    parts: list[str] = []
-    for key, n in sorted(counts.items(), key=lambda kv: -kv[1]):
-        label = display[key]
-        words = translate_labels([label]) if translate else [label]
-        parts.extend(words * min(n, 3))
-        # Cum so dem dung tu TIENG VIET: truy van viet "ba nguoi", nen "ba Person"
-        # chi dong gop mot nua so token can thiet. `translate_labels` dat nhan goc
-        # o dau roi moi toi dong nghia, nen phan tu thu hai la tu tieng Viet dau.
-        head = words[1] if len(words) > 1 else words[0]
-        parts.append(f"{count_word(n)} {head}")
-
-    for zone in ZONE_NAMES:
-        if zones.get(zone):
-            names = sorted(zones[zone])
-            vi = translate_labels(names) if translate else names
-            parts.append(f"{zone}: " + " ".join(vi))
-
-    return " ".join(parts)
+        return Image.open(path)
+    except Exception:  # noqa: BLE001 - anh hong thi coi nhu khong co mau
+        return None
 
 
 def build(
@@ -181,6 +98,7 @@ def build(
     score_min: float,
     *,
     translate: bool = True,
+    keyframe_dir: Path | None = None,
 ) -> tuple[dict[str, str], dict[str, int]]:
     ordinals = load_ordinal_to_frame(map_dir)
     logger.info("map-keyframes: %d video", len(ordinals))
@@ -188,7 +106,7 @@ def build(
     mapping: dict[str, str] = {}
     seen_labels: set[str] = set()
     counts = {"json": 0, "co_nhan": 0, "hop": 0, "gop_trung": 0,
-              "khong_map": 0, "video_la": 0}
+              "khong_map": 0, "video_la": 0, "co_mau": 0}
 
     with zipfile.ZipFile(zip_path) as archive:
         names = [n for n in archive.namelist() if n.endswith(".json")]
@@ -215,10 +133,14 @@ def build(
             counts["json"] += 1
             with archive.open(name) as handle:
                 payload = json.load(handle)
-            detections = read_detections(payload, score_min)
+            image = open_keyframe(keyframe_dir, video_id, ordinal)
+            detections = read_detections(payload, score_min, image=image)
+            if image is not None:
+                counts["co_mau"] += 1
+                image.close()
             if not detections:
                 continue
-            seen_labels.update(label for label, _ in detections)
+            seen_labels.update(hit.label for hit in detections)
             counts["co_nhan"] += 1
             counts["hop"] += len(detections)
             key = build_keyframe_id(video_id, frame_idx)
@@ -257,6 +179,17 @@ def main() -> None:
     parser.add_argument("--out", default=DEFAULT_OUT)
     parser.add_argument("--config", default=DEFAULT_CONFIG)
     parser.add_argument(
+        "--keyframes",
+        help=(
+            "Thu muc anh `{video}/{n:03d}.jpg` de tinh MAU trong tung hop. "
+            "⚠️ DO NGAY 26-08-2026 TREN 6.441 HOP THAT: KHONG DUNG DUOC — "
+            "mau ra `nau` 50%% + `hong` 27%% vi bang 11 mau dat MAU DA nguoi "
+            "giua hai mau do, con vang/do/xanh chi 0-2%%. Xem "
+            "`mfe.offline.object_text.dominant_colour`. Co nay giu lai de do "
+            "lai khi co phep uoc luong khac, khong phai de dung."
+        ),
+    )
+    parser.add_argument(
         "--no-translate", action="store_true",
         help="Giu nhan tieng Anh. Chi de doi chieu — truy van tieng Viet se truot.",
     )
@@ -267,7 +200,9 @@ def main() -> None:
     logger.info("score_min = %.2f (doc tu %s)", score_min, args.config)
 
     mapping, counts = build(
-        Path(args.zip), Path(args.maps), score_min, translate=not args.no_translate
+        Path(args.zip), Path(args.maps), score_min,
+        translate=not args.no_translate,
+        keyframe_dir=Path(args.keyframes) if args.keyframes else None,
     )
 
     out = Path(args.out)
@@ -277,10 +212,11 @@ def main() -> None:
     logger.info(
         "%s: %d keyframe co nhan / %d json doc duoc · %d hop tren nguong "
         "(%.1f hop/keyframe) · gop %d cap trung frame_idx · khong map %d, "
-        "video la %d · %.0f MB",
+        "video la %d · %d keyframe co MAU · %.0f MB",
         out, len(mapping), counts["json"], counts["hop"],
         counts["hop"] / max(1, counts["co_nhan"]), counts["gop_trung"],
-        counts["khong_map"], counts["video_la"], out.stat().st_size / 2**20,
+        counts["khong_map"], counts["video_la"], counts["co_mau"],
+        out.stat().st_size / 2**20,
     )
 
 

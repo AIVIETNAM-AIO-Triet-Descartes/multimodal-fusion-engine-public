@@ -1995,8 +1995,17 @@ def stage_n6_bge_m3(ctx: StageContext) -> dict:
     # `sorted` chu khong phai thu tu file: `write_vector_part` gan `ids` voi
     # `vectors` theo VI TRI, nen hai lan chay phai duyet cung mot thu tu.
     keys = sorted(captions)
+    # `cached_model` chu KHONG phai `SentenceTransformer(...)` thang.
+    #
+    # Bge-m3 nang ~2,2 GB. Nap trong than vong lap la nap lai cho TUNG video —
+    # 404 lan voi `trong`, 469 voi `quang` — trong khi phan viec that cua mot
+    # video la nhung vai tram cau ngan. Do la dung cai bay
+    # `tests/unit/offline/test_multipass_bundle.py::TestModelCache` do duoc o
+    # cac tang khac: **5-16 gio moi nguoi chi de nap model**.
+    #
+    # Va no khong on ao: moi video van xong, marker van cam, chi la lau gap boi.
+    model = cached_model(f"bge-m3 {checkpoint}", lambda: SentenceTransformer(checkpoint))
     with Stopwatch() as timer:
-        model = SentenceTransformer(checkpoint)
         vectors = model.encode(
             [captions[k] for k in keys],
             normalize_embeddings=True,
