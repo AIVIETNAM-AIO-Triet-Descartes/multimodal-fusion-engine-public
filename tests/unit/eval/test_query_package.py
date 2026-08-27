@@ -13,6 +13,7 @@ from mfe.contracts.errors import ContractError
 from mfe.eval.query_package import (
     load_package,
     load_query,
+    parse_query,
     parse_query_type,
     split_events,
 )
@@ -184,3 +185,55 @@ class TestBoDeThat:
             if query.type == "TRAKE":
                 assert query.n_events == 4, query.query_id
                 assert len(query.searches()) == 4
+
+
+class TestDeTaiLen:
+    """`parse_query` — đường vào cho file TẢI LÊN, không có đường dẫn trên đĩa.
+
+    `app/submit_lab.py` nhận `UploadedFile` (tên + bytes). Luật đọc đề phải là
+    **một bản duy nhất**: nếu UI tự đoán dạng đề thì một hôm hai đường phân kỳ,
+    và file QA xuất ra thiếu hẳn cột đáp án mà vẫn nộp được.
+    """
+
+    def test_doc_duoc_de_kis_tu_bo_nho(self):
+        query = parse_query("query-p1-7-kis.txt", "  Cảnh cà rốt luộc trong nồi.  ")
+        assert query.query_id == "query-p1-7-kis"
+        assert query.type == "KIS"
+        assert query.csv_name == "query-p1-7-kis.csv"
+        assert query.text == "Cảnh cà rốt luộc trong nồi."
+
+    def test_hau_to_la_van_la_LOI_o_duong_tai_len(self):
+        with pytest.raises(ContractError):
+            parse_query("query-p1-9-vqa.txt", "nội dung gì đó")
+
+    def test_de_rong_la_loi(self):
+        with pytest.raises(ContractError):
+            parse_query("query-p1-1-kis.txt", "   \n  ")
+
+    def test_trake_tach_su_kien_y_nhu_doc_tu_dia(self):
+        body = "Nhảy sào.\nE1 chạy đà\nE2 giậm nhảy\nE3 qua xà"
+        query = parse_query("query-p1-16-trake.txt", body)
+        assert query.type == "TRAKE"
+        assert query.n_events == 3
+        assert query.preamble == "Nhảy sào."
+        assert query.searches() == [
+            "Nhảy sào. chạy đà", "Nhảy sào. giậm nhảy", "Nhảy sào. qua xà",
+        ]
+
+    def test_hai_duong_cho_cung_ket_qua(self, tmp_path):
+        """Đọc từ đĩa và đọc từ bộ nhớ phải trùng nhau ở MỌI trường trừ đường dẫn."""
+        body = "Nhảy sào.\nE1 chạy đà\nE2 giậm nhảy"
+        path = write(tmp_path, "query-p1-16-trake.txt", body)
+        tu_dia = load_query(path)
+        tu_bo_nho = parse_query(path.name, body)
+        assert tu_dia.query_id == tu_bo_nho.query_id
+        assert tu_dia.type == tu_bo_nho.type
+        assert tu_dia.text == tu_bo_nho.text
+        assert tu_dia.events == tu_bo_nho.events
+        assert tu_dia.preamble == tu_bo_nho.preamble
+
+    def test_doc_tu_dia_VAN_giu_duong_dan_day_du(self, tmp_path):
+        """`load_query` phải giữ đường dẫn thật để còn mở lại file gốc — gộp hai
+        đường mà đánh rơi nó là một lần thụt lùi im lặng."""
+        path = write(tmp_path, "query-p1-1-kis.txt", "một cảnh gì đó")
+        assert load_query(path).source_path == path

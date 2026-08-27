@@ -39,15 +39,57 @@ DATA = Path("data/sample_2026")
 DEFAULT_OUT = Path(".cache/contact")
 
 
+#: Relational Map — nguồn dự phòng khi thiếu `map-keyframes/{video}.csv`.
+#:
+#: `data/sample_2026/map-keyframes/` chỉ có **16** file, đúng bằng bộ video mẫu
+#: ban đầu; kho phẳng thì có cả **873** video. Không có đường dự phòng này thì
+#: contact sheet — công cụ viết ground truth — chỉ dùng được cho 1,8% số video,
+#: và bộ dev vĩnh viễn bị nhốt trong đúng 16 video ấy.
+#:
+#: **Đã kiểm trước khi tin:** fps trong bảng `videos` khớp CSV ở **16/16** video
+#: đối chiếu được, và phân bố toàn kho (25,0 × 781 · 30,0 × 61 · 29,97 × 30 ·
+#: 26,44 × 1) trùng khít con số CLAUDE.md §2 ghi. Tức DB lấy fps **từ** CSV chứ
+#: không từ container — đúng thứ §2 đòi.
+RELATIONAL_DB = Path("stores/btc_b1/relational/app.db")
+
+
+def _from_db(video_id: str) -> tuple[float, list[tuple[int, float, int]]] | None:
+    """`(fps, [(n, pts_time, frame_idx)])` từ Relational Map, hoặc `None`."""
+    if not RELATIONAL_DB.is_file():
+        return None
+    import sqlite3  # noqa: PLC0415 - chi can khi thieu CSV
+
+    with sqlite3.connect(RELATIONAL_DB) as con:
+        row = con.execute(
+            "select fps from videos where video_id = ?", (video_id,)
+        ).fetchone()
+        if row is None or not row[0]:
+            return None
+        rows = con.execute(
+            "select keyframe_index, pts_time, frame_idx from keyframes "
+            "where video_id = ? order by keyframe_index",
+            (video_id,),
+        ).fetchall()
+    if not rows:
+        return None
+    return float(row[0]), [(int(n), float(t), int(f)) for n, t, f in rows]
+
+
 def fps_of(video_id: str) -> float:
     """fps từ `map-keyframes`, KHÔNG từ container.
 
     CSV mang đúng con số BTC dùng để sinh `frame_idx` — container "đúng hơn" mà
-    lệch CSV thì frame mình lệch frame họ (CLAUDE.md §2).
+    lệch CSV thì frame mình lệch frame họ (CLAUDE.md §2). Thiếu CSV thì rơi về
+    Relational Map, vốn cũng chép từ CSV — xem `RELATIONAL_DB`.
     """
     path = DATA / "map-keyframes" / f"{video_id}.csv"
     if not path.is_file():
-        raise SystemExit(f"khong thay {path}")
+        found = _from_db(video_id)
+        if found is None:
+            raise SystemExit(
+                f"khong thay {path}, va Relational Map cung khong co {video_id}"
+            )
+        return found[0]
     with path.open(encoding="utf-8", newline="") as handle:
         values = {float(row["fps"]) for row in csv.DictReader(handle)}
     if len(values) != 1:
@@ -58,6 +100,9 @@ def fps_of(video_id: str) -> float:
 def keyframe_times(video_id: str) -> list[tuple[int, float, int]]:
     """`[(n, pts_time, frame_idx)]` — để đánh dấu ô nào có keyframe của kho."""
     path = DATA / "map-keyframes" / f"{video_id}.csv"
+    if not path.is_file():
+        found = _from_db(video_id)
+        return found[1] if found else []
     with path.open(encoding="utf-8", newline="") as handle:
         return [
             (int(r["n"]), float(r["pts_time"]), int(r["frame_idx"]))

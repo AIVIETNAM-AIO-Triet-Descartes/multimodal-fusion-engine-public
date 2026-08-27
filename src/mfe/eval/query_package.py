@@ -167,10 +167,24 @@ def split_events(text: str) -> tuple[str | None, tuple[str, ...]]:
     return (head or None), events
 
 
-def load_query(path: str | Path) -> PackagedQuery:
-    """Đọc một file đề."""
-    path = Path(path)
-    text = path.read_text(encoding="utf-8").strip()
+def parse_query(
+    name: str, text: str, *, source_path: Path | None = None
+) -> PackagedQuery:
+    """Một đề đã ở trong bộ nhớ — dùng cho file **tải lên**, không có đường dẫn.
+
+    Tách khỏi `load_query` vì giao diện nhận `UploadedFile` (tên + bytes) chứ
+    không nhận một file trên đĩa. Nhưng **luật đọc đề chỉ có một bản**: `name`
+    vẫn đi qua `parse_query_type`, nên hậu tố lạ vẫn là lỗi ở đây y như khi đọc
+    từ thư mục. Nhân bản luật đó vào UI là cách để hai đường phân kỳ, rồi một
+    hôm file nộp QA ra thiếu cột đáp án mà vẫn nộp được.
+
+    `source_path` mặc định là tên file trần (`Path(name)`) — với file tải lên thì
+    **không** có file nào để mở lại, và không chỗ nào trong `PackagedQuery` đọc
+    lại nó. `load_query` truyền đường dẫn thật vào để đường đọc-từ-đĩa giữ nguyên
+    khả năng mở lại file gốc.
+    """
+    path = Path(name)
+    text = text.strip()
     if not text:
         raise ContractError(ErrorCode.INVALID_ARGUMENT, f"{path.name}: file rong")
 
@@ -184,9 +198,17 @@ def load_query(path: str | Path) -> PackagedQuery:
         query_id=path.stem,
         type=query_type,
         text=text,
-        source_path=path,
+        source_path=source_path or path,
         preamble=preamble,
         events=events,
+    )
+
+
+def load_query(path: str | Path) -> PackagedQuery:
+    """Đọc một file đề từ đĩa."""
+    path = Path(path)
+    return parse_query(
+        path.name, path.read_text(encoding="utf-8"), source_path=path
     )
 
 

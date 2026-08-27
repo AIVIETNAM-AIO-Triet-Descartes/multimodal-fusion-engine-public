@@ -61,7 +61,20 @@ COLPALI_MODEL = "vidore/colpali"
 NVIDIA_VLM_MODEL = "meta/llama-3.2-90b-vision-instruct"
 #: `gemini-2.5-flash` cua ban goc tra ve 404 "no longer available to new users".
 #: Cung lop loi da gap o phien 21-08 voi bay diem goi Gemini khac.
-GEMINI_VLM_MODEL = "gemini-3.6-flash"
+#:
+#: **`gemini-3.6-flash` free tier cho dung 20 request MOI NGAY** — do duoc
+#: 27-08: `quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier, limit:
+#: 20`. Do la ly do that su cua ca hai lan `vlm` do do dang: 22/42 cau (24-08)
+#: va dung 20 cau roi 429 (27-08). Khong phai ngau nhien, khong phai mang cham
+#: — la mot tran quota theo NGAY, nen "chay lai sau" khong sua duoc gi trong
+#: cung mot ngay.
+#:
+#: `MFE_GEMINI_VLM_MODEL` de doi sang model co quota khac ma khong phai sua ma:
+#: `gemini-flash-lite-latest` kiem duoc 200 cung luc `gemini-3.6-flash` da 429,
+#: tuc no co tran RIENG. No YEU hon, nen mot bang do chay bang no phai ghi ro
+#: ten model — hai model khac nhau duoi cung mot cai ten `vlm` la cach de hai
+#: con so tron vao nhau.
+GEMINI_VLM_MODEL = os.getenv("MFE_GEMINI_VLM_MODEL", "gemini-3.6-flash")
 
 #: NVIDIA NIM chỉ nhận MỘT ảnh mỗi request. Bản của Bảo có `if ... <= 1` cho
 #: chuyện này, nên trên thực tế rerank nhiều ảnh của bạn ấy luôn rơi xuống
@@ -217,10 +230,22 @@ class ColPaliTier:
             )
 
             device = self.device or ("cuda" if torch.cuda.is_available() else "cpu")
-            logger.info("nap ColPali %s tren %s (~6 GB)", self.model_name, device)
+            # `device_map` NGAY trong `from_pretrained`, KHONG phai `.to(device)`
+            # sau do. transformers doi moi nap trong so vao thiet bi `meta` roi
+            # moi vat sang, va `.to()` tren tensor meta nem
+            # "Cannot copy out of meta tensor; no data!". Bat duoc 26-08-2026
+            # ngay lan dau tang nay chay that.
+            #
+            # `float16` tren GPU: ColPali la PaliGemma-3B, float32 la ~12 GB va
+            # RTX 4060 Laptop chi co 8 GiB. Tren CPU thi giu float32 — nhieu ban
+            # torch khong cai dat float16 cho CPU.
+            dtype = torch.float16 if device.startswith("cuda") else torch.float32
+            logger.info(
+                "nap ColPali %s tren %s (%s)", self.model_name, device, dtype
+            )
             self._model = ColPali.from_pretrained(
-                self.model_name, torch_dtype=torch.float32
-            ).to(device).eval()
+                self.model_name, dtype=dtype, device_map=device
+            ).eval()
             self._processor = ColPaliProcessor.from_pretrained(self.model_name)
             self.device = device
         return self._model, self._processor
