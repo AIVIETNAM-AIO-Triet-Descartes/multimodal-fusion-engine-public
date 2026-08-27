@@ -2023,6 +2023,39 @@ def stage_n6_bge_m3(ctx: StageContext) -> dict:
         elapsed_s=timer.seconds,
     )
 
+def stage_n7_bge_m3_subtitles(ctx: StageContext) -> dict:
+    """Subtitles -> BGE-M3 (Dense Vector)."""
+    from sentence_transformers import SentenceTransformer  # noqa: PLC0415
+
+    checkpoint = "BAAI/bge-m3"
+    local = ctx.workdir / f"subtitles_{ctx.video_id}.json"
+    ctx.writer.transport.get(ctx.layout.part("subtitles", ctx.video_id), local)
+    captions = json.loads(local.read_text(encoding="utf-8"))
+    if not captions:
+        raise RuntimeError(
+            f"{ctx.video_id}: chua co subtitles — chay n2_subtitles truoc"
+        )
+
+    keys = sorted(captions)
+    model = cached_model(f"bge-m3 {checkpoint}", lambda: SentenceTransformer(checkpoint))
+    with Stopwatch() as timer:
+        vectors = model.encode(
+            [captions[k] for k in keys],
+            normalize_embeddings=True,
+            batch_size=ctx.params.get("batch_size", 16),
+            convert_to_numpy=True,
+        )
+
+    return ctx.writer.write_vector_part(
+        "subtitles_dense",
+        ctx.video_id,
+        keys,
+        np.asarray(vectors, dtype=np.float32),
+        model=checkpoint,
+        params={"normalize": True, "source": "subtitles"},
+        elapsed_s=timer.seconds,
+    )
+
 
 STAGES = {
     "n0_import_btc": stage_n0_import_btc,
@@ -2038,6 +2071,7 @@ STAGES = {
     "n6_caption_qwen": stage_n6_caption_qwen,
     "n6_ocr_qwen25": stage_n6_ocr_qwen25,
     "n6_bge_m3": stage_n6_bge_m3,
+    "n7_bge_m3_subtitles": stage_n7_bge_m3_subtitles,
 }
 
 
