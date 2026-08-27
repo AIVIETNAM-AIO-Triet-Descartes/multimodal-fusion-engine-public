@@ -123,25 +123,19 @@ def collect_evidence(cascade: Cascade, queries, coarse_topk: int, en_source: str
         else:
             searches = [query.text]
 
-        if en_source == "none":
-            text_en = None
-        elif en_source == "manual":
-            text_en = query.text_en
-        else:
-            # Dịch chuỗi ĐANG TÌM, không dịch `query.text`. Với QA hai thứ đó
-            # khác nhau: `text` là câu hỏi ("mặc áo màu gì?"), `retrieval_text`
-            # là bản viết lại thành mô tả. SigLIP huấn luyện trên caption chứ
-            # không trên câu hỏi, nên dịch câu hỏi rồi đưa cho nó là để arm mạnh
-            # nhất tìm bằng một chuỗi mà 6 arm còn lại không dùng.
-            #
-            # `Cascade.search` vốn đã làm đúng — nó gọi `resolve_english` trên
-            # chính `query_text`. Chỗ này từng lệch khỏi nó, nên bảng trọng số
-            # chỉnh trên một hệ khác với hệ đem đi thi.
-            text_en = cascade.resolve_english(searches[0], None)
+        texts_en = []
+        for text in searches:
+            if en_source == "none":
+                texts_en.append(None)
+            elif en_source == "manual":
+                texts_en.append(query.text_en)
+            else:
+                # Translate the SPECIFIC search string, not just the first one.
+                texts_en.append(cascade.resolve_english(text, None))
 
         per_event = [
-            cascade.arms.run(text, coarse_topk, query.query_id, query_text_en=text_en)
-            for text in searches
+            cascade.arms.run(text, coarse_topk, query.query_id, query_text_en=t_en)
+            for text, t_en in zip(searches, texts_en)
         ]
         evidences.append(QueryEvidence(query=query, per_event=per_event))
         logger.info(
