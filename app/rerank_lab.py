@@ -368,7 +368,7 @@ if go and query_vi.strip():
         with slot:
             path = images.get(candidate.keyframe_id) if show_images else None
             if path:
-                st.image(str(path), use_container_width=True)
+                st.image(str(path), width="stretch")
             was = rank_before.get(candidate.keyframe_id)
             delta = ""
             if was and was != position:

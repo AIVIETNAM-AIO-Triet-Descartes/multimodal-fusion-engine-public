@@ -646,3 +646,55 @@ def apply_tiers(
         outcomes.append(outcome)
         logger.info("%s", outcome.summary())
     return current, outcomes
+
+
+# ---------------------------------------------------------------------------
+# Dựng tầng theo tên
+# ---------------------------------------------------------------------------
+
+#: Độ sâu mặc định mỗi tầng chạm tới. `vlm` nông hơn hẳn vì nó gửi **ảnh thật**
+#: cho một API tính phí: 20 ảnh/câu × 49 đề đã là 980 ảnh một lượt nộp.
+DEFAULT_DEPTH = {"ta": 100, "colpali": 50, "hf_cross": 50, "vlm": 20}
+
+
+class AssetShim:
+    """Cho `Reranker` thứ nó chờ đợi: `get_asset(keyframe_id) -> bytes`.
+
+    `Reranker` được viết để đọc Asset Store thật. Đường phẳng không có store nào,
+    chỉ có ảnh cache trên đĩa — nên chỗ nối nằm ở đây, và `Reranker` không phải
+    biết gì về chuyện đó.
+    """
+
+    def __init__(self, images: ImageProvider) -> None:
+        self.images = images
+
+    def get_asset(self, keyframe_id: str) -> bytes:
+        path = self.images.get(keyframe_id)
+        if path is None:
+            raise FileNotFoundError(keyframe_id)
+        return path.read_bytes()
+
+
+def build_tier(name: str, images: ImageProvider, budget_ms: int = 600000):
+    """Dựng một tầng theo tên. `ValueError` với tên lạ — không đoán.
+
+    **Một bản duy nhất**, dùng bởi `scripts/measure_rerank.py`,
+    `app/rerank_lab.py` và `Cascade._rerank_tiers`. Ba chỗ tự dựng lấy là ba chỗ
+    có thể phân kỳ, rồi hai bên báo hai con số dưới cùng một cái tên tầng — và
+    bảng đo sẽ không còn nói gì về hệ đem đi thi.
+    """
+    if name == "ta":
+        from mfe.online.rerank import Reranker  # noqa: PLC0415 - vong import
+
+        return OurRerankTier(
+            Reranker(asset_store=AssetShim(images), budget_ms=budget_ms)
+        )
+    if name == "colpali":
+        return ColPaliTier()
+    if name == "hf_cross":
+        return HfCrossEncoderTier()
+    if name == "vlm":
+        return VlmTier()
+    raise ValueError(
+        f"khong co tang rerank nao ten {name!r}; co: ta, colpali, hf_cross, vlm"
+    )

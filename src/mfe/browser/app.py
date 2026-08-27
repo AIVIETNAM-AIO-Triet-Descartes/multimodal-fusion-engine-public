@@ -204,7 +204,7 @@ def render_grid(candidates: list[Candidate], kind: str, on_pick) -> None:
                     st.caption(f"frame `{frame_id}` · điểm `{candidate.score:.4f}`")
                 image = get_keyframe_image(candidate.keyframe_id)
                 if image is not None:
-                    st.image(image, use_container_width=True)
+                    st.image(image, width="stretch")
                 pick_cols = st.columns(2)
                 with pick_cols[0]:
                     if st.button("🎞️ lân cận", key=f"nb_{kind}_{candidate.keyframe_id}"):
@@ -234,7 +234,7 @@ def render_timeline(kind: str) -> None:
                 st.caption(f"`{row.keyframe_id}`")
                 image = get_keyframe_image(row.keyframe_id, 160, 90)
                 if image is not None:
-                    st.image(image, use_container_width=True)
+                    st.image(image, width="stretch")
     if st.button("Đóng timeline", key=f"close_tl_{kind}"):
         st.session_state[f"timeline_{kind}"] = None
         st.rerun()
@@ -435,7 +435,7 @@ def tab_qa(top_k: int) -> None:
                 with cols[0]:
                     image = get_keyframe_image(item.keyframe_id, 260, 146)
                     if image is not None:
-                        st.image(image, use_container_width=True)
+                        st.image(image, width="stretch")
                 with cols[1]:
                     if not item.texts:
                         st.warning("Không có văn bản nào cho keyframe này.")
@@ -574,7 +574,7 @@ def tab_trake(top_k: int, penalty: float) -> None:
                         st.caption(f"SK{index + 1} · frame `{keyframe.frame_id}`")
                         image = get_keyframe_image(keyframe.keyframe_id, 200, 112)
                         if image is not None:
-                            st.image(image, use_container_width=True)
+                            st.image(image, width="stretch")
 
         if st.button(f"➕ Lấy cả {min(len(alignments), MAX_ANSWERS)} video vào giỏ", key="tr_all"):
             for item in alignments[:MAX_ANSWERS]:

@@ -65,6 +65,60 @@ retrieval:
   rerank_topk: 100                   # = trần 100 đáp án/truy vấn của BTC (§2.2)
   fusion:
     mode: rrf
+  # ═══ Thiên kiến THỨ TỰ CẢNH cho KIS nhiều cảnh — bật 28-08-2026 ═══
+  #
+  # Tách câu thành mệnh đề, truy hồi từng mệnh đề, rồi thưởng video nào kể được
+  # câu chuyện ĐÚNG THỨ TỰ THỜI GIAN (`mfe.online.scene_order` + `dante.align`).
+  #
+  # Đo trên 14 câu KIS ba cảnh (`eval/queryset_order_l30.jsonl`, video L30 chưa
+  # câu dev/heldout nào đụng tới):
+  #
+  #                       RỘNG          hạng TB     lên/xuống
+  #   nền                 0,800         10,3        —
+  #   scene_order 0,5     0,843         4,2         4 / 0
+  #
+  # DANTE xếp ĐÚNG VIDEO lên hạng nhất ở 14/14 câu, trên 873 video. Kiểm chéo
+  # qua `mfe.eval.official` (đường chạy thật, không phải script đo): 0,771 →
+  # 0,814, cùng Δ +0,043.
+  #
+  # KHÔNG LÀM HỎNG, đo chứ không suy: trên 189 câu dev tầng chạm 4 câu (+0,050),
+  # 111 câu KIS còn lại GIỮ NGUYÊN TỪNG CON SỐ. Trên heldout: 0/36 câu chạm tới.
+  #
+  # ĐỘ PHỦ THẤP, và đó là giới hạn thật: chỉ câu tách được ≥3 mệnh đề mới kích
+  # hoạt (`MIN_CLAUSES_FOR_PRIOR`), vì câu 2 mệnh đề đo được là LUÔN gây hại —
+  # với 2 mệnh đề, hai vị trí bất kỳ trong một video xếp đúng thứ tự với xác
+  # suất ~½ nên ràng buộc tăng dần gần như không lọc gì. Đếm trên 38 đề KIS
+  # thật: 21 câu có từ nối, 14 câu tách được ≥2, nhưng chỉ **3 câu** đạt ≥3.
+  # Nút thắt là bộ luật tách dè dặt, không phải cơ chế — người vận hành tách tay
+  # ở giao diện (`scene_order.clauses_from_texts`) là đường nâng độ phủ.
+  #
+  # GIÁ: chạy lại tầng A một lần MỖI MỆNH ĐỀ, tức 3× chi phí truy hồi — nhưng
+  # chỉ trên câu thật sự kích hoạt; 111/115 câu dev thoát ra trước đó.
+  scene_order_weight: 0.5
+
+  # ═══ Tầng rerank cho LƯỢT NỘP — bật `vlm` 28-08-2026 (Lead quyết) ═══
+  #
+  # Đo lại 27-08 trên 163 câu dev, đúng nền đang dùng (0,515 · hạng TB 11,6):
+  #
+  #   vlm        0,530   +0,015   hạng TB 11,3   161/163   27,6 s/câu
+  #   ta         0,506   −0,010   hạng TB 12,6   163/163   15,3 s/câu
+  #   hf_cross   0,486   −0,029   hạng TB 13,2   138/163    8,8 s/câu
+  #   colpali    0,482   −0,033   hạng TB 13,2   163/163   36,6 s/câu
+  #
+  # `vlm` là tầng DUY NHẤT dương. Ba tầng kia âm, nên danh sách này có đúng một
+  # tên — không phải vì chưa thử, mà vì đã thử cả bốn.
+  #
+  # ⚠ PHẢI đặt `MFE_GEMINI_VLM_MODEL=gemini-flash-lite-latest` khi chạy.
+  #   Mặc định của module là `gemini-3.6-flash`, mà free tier của nó cho **20
+  #   request MỖI NGÀY** — với 49 đề thì nó chết ở câu thứ 21 và 28 câu còn lại
+  #   giữ nguyên thứ tự cũ mà KHÔNG có gì đỏ lên trong file nộp. Con số +0,015
+  #   ở trên đo bằng `flash-lite`, nên đó cũng là model duy nhất bảng này nói về.
+  #
+  # GIÁ: 20 ảnh/câu gửi lên API tính phí. 49 đề = 980 ảnh, ~23 phút cho cả lượt
+  # nộp. Chấp nhận được cho một lượt nộp, KHÔNG chấp nhận được cho vòng lặp thử.
+  rerank_tiers: [vlm]
+  rerank_tier_depth: 20
+
   # KHAI ĐỦ mọi arm, kể cả cái đang bằng 1.0 và cái chưa có dữ liệu.
   # `tune_weights.py` chỉ quét những khoá CÓ MẶT trong file này, nên arm không
   # khai là arm không bao giờ được chỉnh.

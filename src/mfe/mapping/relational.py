@@ -26,8 +26,22 @@ class RelationalMap:
     adding Postgres — see backends/README.md."""
 
     def __init__(self, db_path: str) -> None:
+        """`check_same_thread=False` là BẮT BUỘC cho giao diện Streamlit.
+
+        Streamlit chạy **mỗi lần vẽ lại trong một luồng khác**, còn
+        `@st.cache_resource` thì giữ nguyên đối tượng qua các lần đó. Mặc định
+        `sqlite3` cấm dùng một connection ngoài luồng đã tạo ra nó, nên lần vẽ
+        đầu chạy được rồi mọi thao tác sau ném `ProgrammingError: SQLite objects
+        created in a thread can only be used in that same thread` — đúng lúc
+        người dùng bấm nút xuất file. Đã xảy ra thật ở `app/submit_lab.py`.
+
+        An toàn ở đây vì mọi lối dùng đều **tuần tự**: Streamlit chạy một lần vẽ
+        tại một thời điểm cho mỗi phiên, còn ingest thì một luồng. Nới cờ này
+        KHÔNG cho phép ghi đồng thời; nếu sau này có hai luồng cùng ghi thì phải
+        thêm khoá, chứ không phải gỡ cờ này ra.
+        """
         self.db_path = db_path
-        self._conn = sqlite3.connect(self.db_path)
+        self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA foreign_keys = ON;")
 

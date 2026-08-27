@@ -59,52 +59,9 @@ from mfe.mapping.relational import RelationalMap
 from mfe.online.cascade import Cascade
 from mfe.online.flat_arms import build_flat_cascade, load_flat_bundle
 from mfe.online.keyframe_images import KeyframeImages
-from mfe.online.rerank_tiers import (
-    ColPaliTier,
-    HfCrossEncoderTier,
-    OurRerankTier,
-    VlmTier,
-    apply_tiers,
-)
+from mfe.online.rerank_tiers import DEFAULT_DEPTH, apply_tiers, build_tier
 
 logger = logging.getLogger("measure_rerank")
-
-#: Độ sâu mặc định mỗi tầng chạm tới. `vlm` nông hơn hẳn vì nó gửi **ảnh thật**
-#: cho một API tính phí: 20 ảnh/câu × 42 câu đã là 840 ảnh một lượt đo.
-DEFAULT_DEPTH = {"ta": 100, "colpali": 50, "hf_cross": 50, "vlm": 20}
-
-
-class _AssetShim:
-    """Cho `Reranker` thứ nó chờ đợi: `get_asset(keyframe_id) -> bytes`.
-
-    `Reranker` được viết để đọc Asset Store thật. Đường phẳng không có store nào,
-    chỉ có ảnh cache trên đĩa — nên chỗ nối nằm ở đây, và `Reranker` không phải
-    biết gì về chuyện đó.
-    """
-
-    def __init__(self, images: KeyframeImages) -> None:
-        self.images = images
-
-    def get_asset(self, keyframe_id: str) -> bytes:
-        path = self.images.get(keyframe_id)
-        if path is None:
-            raise FileNotFoundError(keyframe_id)
-        return path.read_bytes()
-
-
-def build_tier(name: str, images: KeyframeImages, budget_ms: int):
-    if name == "ta":
-        from mfe.online.rerank import Reranker
-
-        return OurRerankTier(Reranker(asset_store=_AssetShim(images), budget_ms=budget_ms))
-    if name == "colpali":
-        return ColPaliTier()
-    if name == "hf_cross":
-        return HfCrossEncoderTier()
-    if name == "vlm":
-        return VlmTier()
-    raise SystemExit(f"khong co tang nao ten {name!r}")
-
 
 def score_of(query, candidates, relational, top_k: int):
     """`(Final RỘNG, Final HẸP | None, hạng đáp án đúng đầu tiên | None)`."""

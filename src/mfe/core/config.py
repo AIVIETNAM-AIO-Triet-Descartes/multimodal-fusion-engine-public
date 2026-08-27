@@ -199,6 +199,40 @@ class RetrievalConfig(_Section):
             "the fused ranking is left alone — see Cascade.group"
         ),
     )
+    #: Scene-order prior for multi-scene KIS (`mfe.online.scene_order`, read by
+    #: `Cascade._scene_order`). The query is split into clauses, each clause is
+    #: retrieved on its own, and videos that tell the story **in temporal order**
+    #: have their whole cluster multiplied by `1 + weight · prior`.
+    #:
+    #: Measured on 14 three-scene KIS queries (`eval/queryset_order_l30.jsonl`,
+    #: on L30 videos no other query touches): **wide 0.800 -> 0.843, mean rank
+    #: 10.3 -> 4.2, 4 up / 0 down**, with DANTE putting the right video first in
+    #: 14/14 across 873 videos. On the 189-query dev set it touches 4 queries
+    #: (+0.050) and leaves the other 111 KIS queries bit-identical.
+    #:
+    #: **Costs 3x stage-A retrieval on the queries it fires for** — it re-runs
+    #: every arm once per clause. Only queries that split into
+    #: `MIN_CLAUSES_FOR_PRIOR`+ clauses pay that; on dev, 111/115 exit before it.
+    #:
+    #: 0.0 by default: the gain above is real but measured on 14 queries, and
+    #: turning it on changes retrieval for the whole run.
+    scene_order_weight: float = Field(default=0.0, ge=0.0)
+    #: Rerank tiers to run after stage B, **in order**, by name
+    #: (`mfe.online.rerank_tiers`): `ta` · `colpali` · `hf_cross` · `vlm`.
+    #: Empty = none, which was the shipped behaviour before this field existed.
+    #:
+    #: Measured 27-08 on 163 dev queries against the tuned baseline (0.515):
+    #: only **vlm** is positive (+0.015); `ta` −0.010, `hf_cross` −0.029,
+    #: `colpali` −0.033. The 24-08 table that made `hf_cross` look best was run
+    #: against the *untuned* weights — see CLAUDE.md §4.
+    #:
+    #: Each tier costs real seconds per query and `vlm` sends images to a paid
+    #: API, so this list is a deliberate submission-time choice, not a default.
+    rerank_tiers: list[str] = Field(default_factory=list)
+    #: How deep the `rerank_tiers` chain reaches. `vlm` was measured at 20; going
+    #: deeper multiplies both cost and API spend without any measurement behind
+    #: it — 20 images/query is already 980 images for a 49-query paper.
+    rerank_tier_depth: int = Field(default=20, gt=0)
     clip_checkpoint: str = Field(
         default="clip-ViT-B-32",
         description="Image tower; named in official PDF §3, verified at cosine ~0.999",

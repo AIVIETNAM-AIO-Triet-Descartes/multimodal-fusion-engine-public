@@ -131,18 +131,47 @@ WEAK_CUES: dict[str, bool] = {
     "roi": False,
 }
 
-#: Đòi ít nhất ngần này mệnh đề tự tìm được vị trí của chính nó. DANTE cho phép
+#: Số mệnh đề tối thiểu phải **tự** tìm được vị trí của chính nó. DANTE cho phép
 #: một sự kiện "đi nhờ" vị trí do sự kiện khác tìm ra (S = 0) — với TRAKE điều đó
-#: có ích, nhưng ở đây một video mà chỉ **một** mệnh đề nhận ra thì nó chưa chứng
-#: minh được trình tự nào cả, và trình tự đúng là thứ duy nhất tầng này thưởng.
-MIN_SUPPORT = 2
+#: có ích, nhưng ở đây một mệnh đề đi nhờ không chứng minh được trình tự nào cả,
+#: mà trình tự đúng là thứ duy nhất tầng này thưởng.
+#:
+#: `None` = **đòi mọi mệnh đề**, và đó là mặc định vì một hằng số cố định có
+#: nghĩa khác nhau tuỳ số mệnh đề:
+#:
+#:     2 mệnh đề · MIN_SUPPORT=2  ->  2/2, không ai đi nhờ
+#:     3 mệnh đề · MIN_SUPPORT=2  ->  2/3, MỘT mệnh đề đi nhờ miễn phí
+#:     4 mệnh đề · MIN_SUPPORT=2  ->  2/4, HAI mệnh đề đi nhờ
+#:
+#: Nghịch lý: câu 3 mệnh đề — đúng loại câu duy nhất mà ràng buộc trình tự có
+#: nghĩa — lại bị nới lỏng nhất. Đo trên bộ dev cũ, câu 3 mệnh đề **không bao
+#: giờ tệ đi** (3→1, 2→2 ở cả ba cấu hình) còn câu 2 mệnh đề **luôn** tệ đi, và
+#: lý do là số học: với 2 mệnh đề, hai vị trí bất kỳ trong một video xếp đúng
+#: thứ tự với xác suất ~½, nên ràng buộc gần như không lọc gì.
+MIN_SUPPORT: int | None = None
 
-#: Bán kính thưởng, tính bằng **keyframe** quanh mỗi vị trí DANTE đã ghép. Một
-#: cảnh trải dài vài keyframe chứ không nằm gọn trong một khung, nên thưởng đúng
-#: một vị trí thì bỏ lỡ chính khung mà người chấm chọn. Nhưng nới rộng ra thì
-#: quay về thưởng cả video, tức là cách đã đo được là **tệ hơn nền** — xem
-#: `apply_prior`.
-WINDOW = 3
+#: Số mệnh đề tối thiểu để tầng này được chạy. Dưới ngưỡng thì `video_prior` trả
+#: rỗng và `apply_prior` thành phép không-làm-gì — xem `MIN_SUPPORT` về việc vì
+#: sao 2 mệnh đề không đủ để ràng buộc tăng dần nói được điều gì.
+MIN_CLAUSES_FOR_PRIOR = 3
+
+#: Bán kính thưởng, tính bằng **keyframe** quanh mỗi vị trí DANTE đã ghép.
+#: `None` = thưởng **cả video**, và đó là mặc định vì nó **thắng ở cả hai bộ đo**:
+#:
+#:     bộ dò 14 câu 3 cảnh   cả video: hạng TB 4,2 · 4 lên / 0 xuống
+#:                           window 3: hạng TB 8,8 · 3 lên / 1 xuống
+#:     8 câu dev tách tay    cả video: hạng TB 26,2 (nền 22,2)
+#:                           window 3: hạng TB 27,6
+#:
+#: Trực giác ban đầu của tôi ngược lại — "bằng chứng về một khoảnh khắc thì đừng
+#: thưởng cả video" — và nó SAI, đo hai lần đều sai. Lý do: `Alignment.hits` chỉ
+#: là *một* cách ghép chuỗi tăng dần, không phải toàn bộ vùng cảnh; siết quanh ba
+#: vị trí ấy thì bỏ lỡ chính khung mà người chấm chọn. Còn thưởng cả video thì
+#: nhân đều nên **giữ nguyên thứ hạng bên trong video** — các arm vẫn quyết định
+#: khung nào lên trước, trình tự chỉ quyết định video nào lên trước.
+#:
+#: Giữ tham số lại để đo hai bản cạnh nhau, không phải để dùng.
+WINDOW: int | None = None
 
 _WORD = re.compile(r"[^\W\d_]+", re.UNICODE)
 _LEAD_PUNCT = re.compile(r"^[\s,.;:–—-]+")
@@ -346,7 +375,8 @@ def video_prior(
     per_clause: Sequence[Sequence[EventHit]],
     *,
     penalty: float = dante.PENALTY,
-    min_support: int = MIN_SUPPORT,
+    min_support: int | None = MIN_SUPPORT,
+    min_clauses: int = MIN_CLAUSES_FOR_PRIOR,
 ) -> dict[str, ScenePrior]:
     """`{video_id: ScenePrior}` cho video ghép được chuỗi tăng dần.
 
@@ -362,11 +392,18 @@ def video_prior(
     Chia cho điểm cao nhất để prior nằm trong (0, 1] bất kể thang điểm arm — cùng
     lý do `dante.normalise_events` chuẩn hoá, và nó làm `weight` của
     `apply_prior` đọc được giữa các cấu hình.
+
+    Dưới `min_clauses` mệnh đề thì trả rỗng ngay, không gọi DANTE: với 2 mệnh đề
+    ràng buộc tăng dần lọc được ~½ số video, tức gần như không lọc gì, và mọi
+    lần đo đều cho thấy nó **hại**.
     """
-    if len(per_clause) < 2:
+    if len(per_clause) < max(2, min_clauses):
         return {}
     alignments = dante.align(
-        list(per_clause), penalty=penalty, min_support=min_support
+        list(per_clause),
+        penalty=penalty,
+        # `None` = doi MOI menh de co bang chung that. Xem `MIN_SUPPORT`.
+        min_support=len(per_clause) if min_support is None else min_support,
     )
     if not alignments:
         return {}
@@ -395,22 +432,21 @@ def apply_prior(
     Nhân chứ không cộng: cộng một hằng số đẩy mọi khung được thưởng lên bằng
     nhau, xoá thứ hạng mà các arm đã dựng bên trong cụm đó.
 
-    **`window` là bài học của lượt đo đầu.** Bản đầu bỏ `Alignment.hits` và nhân
-    prior vào *mọi* khung của video. Đo trên 8 câu KIS tách tay, trọng số 0,5:
-    RỘNG đứng yên (0,400) còn hạng TB **xấu đi 22,2 → 26,2**. Nhìn từng câu thì
-    rõ vì sao: `trong_kis_58` có prior **0,994 đúng video** mà vẫn tụt 17 → 32 —
-    một video sai đạt 1,0 nâng cả ~50 khung của nó lên trên khung đúng. Thưởng
-    cả video biến một bằng chứng *về khoảnh khắc* thành một cơn lũ.
+    **Mặc định thưởng CẢ VIDEO** (`window=None`), và đó là kết quả đo chứ không
+    phải mặc định cho tiện — `WINDOW` ghi cả hai bảng số. Trực giác ngược lại
+    ("bằng chứng về một khoảnh khắc thì đừng thưởng cả video") đã được thử và
+    **thua ở cả hai bộ đo**: `hits` của DANTE chỉ là *một* cách ghép chuỗi tăng
+    dần, không phải toàn bộ vùng cảnh, nên siết quanh ba vị trí ấy làm bỏ lỡ
+    chính khung người chấm chọn. Nhân đều lên cả video thì giữ nguyên thứ hạng
+    *bên trong* video — arm vẫn quyết khung nào lên trước, trình tự chỉ quyết
+    video nào lên trước.
 
-    `hits` của DANTE chỉ đúng những khoảnh khắc mệnh đề mô tả, nên thưởng gói
-    trong `window` keyframe quanh chúng. `window=None` khôi phục hành vi cũ —
-    giữ lại để đo được hai bản cạnh nhau, không phải để dùng.
-
-    `ordinal_of` tra `keyframe_index` từ `keyframe_id`; chỉ `RelationalMap` biết
-    số đó (`frame_idx` KHÁC `n`, xem `mfe.contracts.ids`), nên nó được truyền
-    vào chứ không tự tra ở đây. Thiếu nó thì `window` không áp được và hàm quay
-    về thưởng cả video — **và nó nói ra bằng cách đòi `window=None` tường minh**,
-    chứ không lặng lẽ rơi về bản đã đo là tệ hơn.
+    `window` là một số thì thưởng gói trong ngần ấy keyframe quanh mỗi vị trí đã
+    ghép. Khi ấy cần `ordinal_of` để tra `keyframe_index` từ `keyframe_id` — chỉ
+    `RelationalMap` biết số đó (`frame_idx` KHÁC `n`, xem `mfe.contracts.ids`).
+    Thiếu nó thì **ném**, chứ không lặng lẽ bỏ qua `window`: bỏ qua trong im
+    lặng sẽ cho ra một phép đo của cấu hình khác với cấu hình người đo tưởng
+    mình đang đo.
 
     `weight <= 0` hoặc `prior` rỗng trả lại đúng danh sách cũ, **cùng thứ tự** —
     đường mặc định của mọi câu không kể trình tự phải là một phép không-làm-gì

@@ -875,8 +875,30 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _load_env_file(path: str = ".env") -> None:
+    """Đưa `.env` vào môi trường, **không** đè lên biến đã đặt sẵn.
+
+    `retrieval.rerank_tiers` có thể gọi những tầng đọc thẳng `os.environ`:
+    `vlm` cần `GEMINI_API_KEY`, `hf_cross` cần `HF_TOKEN`. Thiếu bước này thì
+    tầng **báo đúng** ("chua co GEMINI_API_KEY") và lượt chạy vẫn xong, in ra
+    một điểm số trông bình thường — nghĩa là "tầng không giúp gì" đọc giống hệt
+    "tầng không chạy". Đây là đường **NỘP BÀI**, nên hậu quả nặng hơn hẳn một
+    bảng đo lệch: nó tạo ra một file nộp không hề rerank mà không ai biết.
+
+    `measure_rerank.py` đã mất một lượt đo vì đúng chuyện này (CLAUDE.md §5), và
+    bản sửa hôm đó chỉ vá cho script đo — đường nộp vẫn thiếu cho tới 28-08.
+    """
+    import os  # noqa: PLC0415
+
+    from mfe.offline.transport import load_dotenv  # noqa: PLC0415
+
+    for key, value in load_dotenv(path).items():
+        os.environ.setdefault(key, value)
+
+
 def main() -> None:
     setup_console()
+    _load_env_file()
     args = build_parser().parse_args()
     run(
         config_path=args.config,

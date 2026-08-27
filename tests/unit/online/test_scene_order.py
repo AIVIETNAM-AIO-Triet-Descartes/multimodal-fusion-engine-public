@@ -212,13 +212,14 @@ def _hit(video: str, ordinal: int, score: float) -> EventHit:
 def test_prior_thuong_video_dung_thu_tu():
     per_clause = [
         [_hit("L01_V001", 5, 1.0), _hit("L02_V002", 40, 1.0)],
-        [_hit("L01_V001", 20, 1.0), _hit("L02_V002", 10, 1.0)],
+        [_hit("L01_V001", 20, 1.0), _hit("L02_V002", 25, 1.0)],
+        [_hit("L01_V001", 30, 1.0), _hit("L02_V002", 10, 1.0)],
     ]
     prior = video_prior(per_clause)
-    # V001: 5 -> 20 tang dan, ca hai menh de tu tim duoc cho cua no.
+    # V001: 5 -> 20 -> 30 tang dan, ca ba menh de tu tim duoc cho cua no.
     assert "L01_V001" in prior
-    # V002: 40 -> 10 nguoc chieu; phep gan tang dan duy nhat dat hai menh de vao
-    # cho CUA NHAU, nen chi mot menh de co bang chung that -> duoi `MIN_SUPPORT`.
+    # V002: 40 -> 25 -> 10 nguoc chieu hoan toan; khong phep gan tang dan nao
+    # cho ca ba menh de bang chung that -> truot `MIN_SUPPORT`.
     assert "L02_V002" not in prior
 
 
@@ -228,18 +229,48 @@ def test_prior_mang_theo_vi_tri_da_ghep():
     per_clause = [
         [_hit("L01_V001", 5, 1.0)],
         [_hit("L01_V001", 20, 1.0)],
+        [_hit("L01_V001", 30, 1.0)],
     ]
-    assert video_prior(per_clause)["L01_V001"].ordinals == (5, 20)
+    assert video_prior(per_clause)["L01_V001"].ordinals == (5, 20, 30)
 
 
 def test_prior_rong_khi_chi_co_mot_menh_de():
     assert video_prior([[_hit("L01_V001", 5, 1.0)]]) == {}
 
 
+def test_prior_rong_voi_HAI_menh_de():
+    """Hai mệnh đề thì ràng buộc tăng dần lọc được ~½ số video — gần như không
+    lọc gì. Đo trên bộ dev cũ: câu 2 mệnh đề tệ đi ở **cả ba** cấu hình, câu 3
+    mệnh đề không bao giờ tệ đi. `MIN_CLAUSES_FOR_PRIOR` là chỗ ghi lại điều đó.
+    """
+    per_clause = [
+        [_hit("L01_V001", 5, 1.0)],
+        [_hit("L01_V001", 20, 1.0)],
+    ]
+    assert video_prior(per_clause) == {}
+    # Ha nguong xuong thi no chay lai — de do duoc hai ban canh nhau.
+    assert video_prior(per_clause, min_clauses=2) != {}
+
+
+def test_min_support_None_doi_MOI_menh_de_co_bang_chung():
+    """Một hằng số cố định có nghĩa khác nhau tuỳ số mệnh đề: `MIN_SUPPORT=2`
+    trên câu 3 mệnh đề cho **một** mệnh đề đi nhờ miễn phí."""
+    # Ba vi tri duoc truy hoi (5, 20, 30) nhung menh de 2 KHONG tim ra cai nao —
+    # no phai "di nho" vi tri 20 do menh de 3 tim ra, voi S = 0.
+    per_clause = [
+        [_hit("L01_V001", 5, 1.0)],
+        [],
+        [_hit("L01_V001", 20, 1.0), _hit("L01_V001", 30, 1.0)],
+    ]
+    assert video_prior(per_clause) == {}
+    assert video_prior(per_clause, min_support=2) != {}
+
+
 def test_prior_nam_trong_khoang_don_vi():
     per_clause = [
         [_hit("L01_V001", 5, 1.0), _hit("L02_V002", 6, 0.4)],
         [_hit("L01_V001", 20, 1.0), _hit("L02_V002", 21, 0.4)],
+        [_hit("L01_V001", 30, 1.0), _hit("L02_V002", 31, 0.4)],
     ]
     prior = video_prior(per_clause)
     assert max(p.score for p in prior.values()) == pytest.approx(1.0)
@@ -277,14 +308,25 @@ def test_trong_so_khong_thi_giu_nguyen_thu_tu():
 
 
 def test_window_can_ordinal_of_va_noi_ra_khi_thieu():
-    """Thiếu `ordinal_of` KHÔNG được lặng lẽ rơi về bản thưởng cả video.
+    """Đòi `window` mà quên `ordinal_of` thì NÉM, không lặng lẽ bỏ qua `window`.
 
-    Bản đó đã đo được là tệ hơn nền (hạng TB 22,2 -> 26,2), nên rơi về nó trong
-    im lặng là để một phép đo hỏng trông như một phép đo.
+    Bỏ qua trong im lặng sẽ cho ra một phép đo của cấu hình **khác** với cấu
+    hình người đo tưởng mình đang đo.
     """
     items = [_cand("L01_V001", 1, 0.9)]
     with pytest.raises(ContractError):
-        apply_prior(items, {"L01_V001": _prior(1.0, 1)}, weight=0.5)
+        apply_prior(items, {"L01_V001": _prior(1.0, 1)}, weight=0.5, window=3)
+
+
+def test_mac_dinh_la_thuong_CA_VIDEO():
+    """`WINDOW = None` — đo được là thắng ở cả hai bộ, xem docstring của nó.
+
+    Nên đường mặc định KHÔNG cần `ordinal_of`, và đó là chuyện có ích: phần gọi
+    không phải cầm `RelationalMap` chỉ để bật tầng này.
+    """
+    items = [_cand("L01_V001", 99, 0.79)]
+    out = apply_prior(items, {"L01_V001": _prior(1.0, 10)}, weight=0.5)
+    assert out[0].score == pytest.approx(0.79 * 1.5)
 
 
 def test_chi_thuong_khung_gan_vi_tri_da_ghep():

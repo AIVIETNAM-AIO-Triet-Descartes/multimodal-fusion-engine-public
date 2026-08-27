@@ -40,6 +40,7 @@ def run_package(
     *,
     pool_k: int,
     penalty: float = dante.PENALTY,
+    clauses: Mapping[str, Sequence[str]] | None = None,
     on_progress: Callable[[int, PackagedQuery], None] | None = None,
 ) -> dict[str, list]:
     """Chạy cả gói đề. `{query_id: kết quả}`.
@@ -53,7 +54,12 @@ def run_package(
     `cascade` nên đến từ `mfe.online.flat_arms.build_flat_cascade` — cùng đường
     mà `scripts/measure_rerank.py` và `mfe.eval.official` chạy. Tự ghép arm bằng
     tay sẽ cho một giao diện đo một hệ khác với hệ đem đi thi.
+
+    `clauses` là `{query_id: [mệnh đề theo trình tự thời gian]}` do người vận
+    hành tách tay — nó **thay** bộ luật `scene_order.split_clauses` cho đúng câu
+    đó. Chỉ có nghĩa với KIS/QA; TRAKE đã có danh sách sự kiện tường minh.
     """
+    clauses = clauses or {}
     out: dict[str, list] = {}
     for index, query in enumerate(queries, start=1):
         if on_progress is not None:
@@ -64,7 +70,8 @@ def run_package(
             )
         else:
             out[query.query_id] = cascade.search(
-                query_text=query.text, top_k=pool_k, run_id=query.query_id
+                query_text=query.text, top_k=pool_k, run_id=query.query_id,
+                clauses=clauses.get(query.query_id),
             )
     return out
 

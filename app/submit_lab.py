@@ -61,6 +61,10 @@ from mfe.offline.transport import load_dotenv  # noqa: E402
 from mfe.online import dante  # noqa: E402
 from mfe.online.flat_arms import build_flat_cascade, load_flat_bundle  # noqa: E402
 from mfe.online.keyframe_images import KeyframeImages  # noqa: E402
+from mfe.online.scene_order import (  # noqa: E402
+    MIN_CLAUSES_FOR_PRIOR,
+    split_clauses,
+)
 
 CONFIG = ROOT / "config" / "btc_b1.yaml"
 FLAT_ROOT = ROOT / "stores" / "flat"
@@ -119,9 +123,91 @@ def run_all(queries: list[PackagedQuery], pool_k: int, penalty: float) -> dict[s
     out = run_package(
         cascade, relational, queries,
         pool_k=pool_k, penalty=penalty, on_progress=tick,
+        clauses={
+            q.query_id: found for q in queries
+            if (found := manual_clauses(q.query_id))
+        },
     )
     bar.progress(1.0, text=f"Xong {len(queries)} câu")
     return out
+
+
+# ---------------------------------------------------------------------------
+# Mệnh đề do người tách — cần gạt độ phủ của tầng thứ tự cảnh
+# ---------------------------------------------------------------------------
+
+
+def manual_clauses(query_id: str) -> list[str] | None:
+    return st.session_state.get(f"clauses_{query_id}")
+
+
+def render_clause_editor(query: PackagedQuery, pool_k: int, penalty: float) -> None:
+    """Ô sửa mệnh đề + nút chạy lại RIÊNG câu này.
+
+    **Đây là cần gạt độ phủ, không phải tiện ích.** Tầng thứ tự cảnh đo được
+    RỘNG 0,800 → 0,843 (hạng TB 10,3 → 4,2, 4 lên / 0 xuống) và DANTE xếp đúng
+    video hạng nhất **14/14** câu — nhưng nó chỉ chạy cho câu tách được **≥3**
+    mệnh đề, và trên 38 đề KIS thật bộ luật chỉ đạt ngưỡng đó ở **3 câu**. 21
+    câu có từ nối trình tự; 18 câu còn lại mất vì luật phải dè dặt để không xé
+    nhầm câu một-khoảnh-khắc. Người đọc không có đánh đổi đó, và lúc thi thì có
+    người ngồi ở bàn phím.
+
+    Chạy lại **một câu** chứ không cả gói: mỗi mệnh đề là một lượt chạy lại tầng
+    A, nên sửa một câu rồi chạy lại 49 câu là trả giá cho 48 câu không đổi gì.
+    """
+    weight = load_engine()[0].retrieval.scene_order_weight
+    auto = [c.text for c in split_clauses(query.text)]
+    current = manual_clauses(query.query_id) or auto
+    enough = len(current) >= MIN_CLAUSES_FOR_PRIOR
+
+    label = f"✂️ Mệnh đề ({len(current)})"
+    label += " — tầng thứ tự cảnh ĐANG chạy" if enough and weight > 0 else ""
+    with st.expander(label, expanded=False):
+        if weight <= 0:
+            st.warning(
+                "`scene_order_weight = 0` trong config — tách mệnh đề ở đây sẽ "
+                "**không đổi gì**. Đặt nó > 0 rồi mới dùng ô này."
+            )
+        st.caption(
+            f"Mỗi dòng một cảnh, **theo trình tự thời gian** (với 'Trước đó là "
+            f"cảnh X' thì X lên đầu). Cần ít nhất **{MIN_CLAUSES_FOR_PRIOR}** "
+            "dòng: câu hai cảnh đo được là luôn gây hại, nên tầng tự tắt."
+        )
+        typed = st.text_area(
+            "Mệnh đề", value="\n".join(current), height=150,
+            key=f"clause_text_{query.query_id}", label_visibility="collapsed",
+        )
+        lines = [line.strip() for line in typed.splitlines() if line.strip()]
+        if len(lines) < MIN_CLAUSES_FOR_PRIOR:
+            st.caption(
+                f":orange[{len(lines)} dòng — dưới {MIN_CLAUSES_FOR_PRIOR}, "
+                "tầng sẽ ngồi ngoài.]"
+            )
+
+        left, right = st.columns(2)
+        with left:
+            if st.button("▶️ Chạy lại câu này", key=f"rerun_{query.query_id}"):
+                st.session_state[f"clauses_{query.query_id}"] = lines
+                # Thu tu tay cu la cua mot danh sach ung vien KHAC — giu lai se
+                # dua len dau nhung keyframe khong con lien quan.
+                st.session_state.pop(f"order_{query.query_id}", None)
+                _, cascade, relational = load_engine()
+                with st.spinner(f"{len(lines)} mệnh đề — chạy lại tầng A …"):
+                    st.session_state["results"] = {
+                        **st.session_state["results"],
+                        **run_package(
+                            cascade, relational, [query], pool_k=pool_k,
+                            penalty=penalty, clauses={query.query_id: lines},
+                        ),
+                    }
+                st.rerun()
+        with right:
+            if manual_clauses(query.query_id) and st.button(
+                "↩️ Trả về bộ luật", key=f"reset_clause_{query.query_id}"
+            ):
+                st.session_state.pop(f"clauses_{query.query_id}", None)
+                st.session_state.pop(f"clause_text_{query.query_id}", None)
+                st.rerun()
 
 
 # ---------------------------------------------------------------------------
@@ -253,6 +339,10 @@ if query.type == "TRAKE":
     for index, event in enumerate(query.events, start=1):
         st.caption(f"  E{index}: {event}")
 
+# --- tách mệnh đề cho câu nhiều cảnh ----------------------------------------
+if query.type != "TRAKE":
+    render_clause_editor(query, pool_k, penalty)
+
 # --- tải trước ảnh của câu đang xem ----------------------------------------
 images = load_images()
 if show_images and query.type != "TRAKE":
@@ -328,7 +418,7 @@ else:
             if show_images:
                 path = images.get(candidate.keyframe_id)
                 if path:
-                    st.image(str(path), use_container_width=True)
+                    st.image(str(path), width="stretch")
             was = machine_rank.get(candidate.keyframe_id)
             moved = f"  ✋ (máy xếp {was})" if was and was != position else ""
             try:

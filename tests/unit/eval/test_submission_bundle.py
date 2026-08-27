@@ -251,3 +251,56 @@ class TestZipCaGoi:
             second = z.read("query-p1-2-kis.csv").decode("utf-8").splitlines()
         assert first[0] == "L01_V001,35"   # da keo len dau
         assert second[0] == "L02_V002,7"   # giu nguyen thu tu may
+
+
+class TestMenhDeTachTay:
+    """`run_package(clauses=…)` — cần gạt độ phủ của tầng thứ tự cảnh.
+
+    Bộ luật chỉ đạt ngưỡng ≥3 mệnh đề ở **3/38** đề KIS thật, nên đường người
+    tách tay là chỗ tầng này lấy lại độ phủ. Test khoá việc nó **tới được**
+    `Cascade.search`, vì một tham số rơi giữa đường sẽ im lặng: giao diện vẫn
+    hiện mệnh đề đã gõ, còn truy hồi thì chạy bằng bộ luật.
+    """
+
+    class FakeCascade:
+        def __init__(self):
+            self.calls = []
+
+        def search(self, *, query_text, top_k, run_id, clauses=None):
+            self.calls.append((query_text, clauses))
+            return [cand("L01_V001", 1)]
+
+    def test_menh_de_tay_di_TOI_cascade(self, relational):
+        from mfe.eval.submission_bundle import run_package
+
+        cascade = self.FakeCascade()
+        query = parse_query("query-p1-1-kis.txt", "cảnh A rồi cảnh B rồi cảnh C")
+        run_package(
+            cascade, relational, [query], pool_k=10,
+            clauses={"query-p1-1-kis": ["cảnh A", "cảnh B", "cảnh C"]},
+        )
+        assert cascade.calls == [
+            ("cảnh A rồi cảnh B rồi cảnh C", ["cảnh A", "cảnh B", "cảnh C"])
+        ]
+
+    def test_khong_tach_tay_thi_truyen_None(self, relational):
+        from mfe.eval.submission_bundle import run_package
+
+        cascade = self.FakeCascade()
+        query = parse_query("query-p1-1-kis.txt", "một cảnh")
+        run_package(cascade, relational, [query], pool_k=10)
+        assert cascade.calls == [("một cảnh", None)]
+
+    def test_menh_de_cua_cau_khac_KHONG_lan_sang(self, relational):
+        from mfe.eval.submission_bundle import run_package
+
+        cascade = self.FakeCascade()
+        queries = [
+            parse_query("query-p1-1-kis.txt", "câu một"),
+            parse_query("query-p1-2-kis.txt", "câu hai"),
+        ]
+        run_package(
+            cascade, relational, queries, pool_k=10,
+            clauses={"query-p1-2-kis": ["a", "b", "c"]},
+        )
+        assert cascade.calls == [("câu một", None), ("câu hai", ["a", "b", "c"])]

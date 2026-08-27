@@ -27,6 +27,7 @@ instead of discarding it.
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from typing import Any
 
 from mfe.contracts.tools import Candidate
@@ -252,6 +253,7 @@ class Cascade:
         run_id: str = "cascade_run",
         query_text_en: str | None = None,
         ocr_keywords: str | None = None,
+        clauses: Sequence[str] | None = None,
     ) -> list[Candidate]:
         """Run stage A -> B -> C and return a ranked candidate list.
 
@@ -265,6 +267,15 @@ class Cascade:
                 out without it — see `Arm.query_language`. Left unset, a
                 configured translator fills it in (`mfe.online.translate`).
             ocr_keywords: Optional Vietnamese keywords for text/OCR arms.
+            clauses: Scene clauses in **narrative order**, supplied by a person
+                (or an LLM) instead of letting `scene_order.split_clauses` cut
+                the query itself. This is the *better* source, not a fallback:
+                on 38 real BTC KIS papers, 21 carry sequence cues but the rule
+                only reaches ≥3 clauses on **3**, because the guards that stop
+                it shredding a single-moment query also stop it splitting hard
+                cases. A reader has no such trade-off, and at competition time
+                there is a person at the keyboard. Ignored for TRAKE, whose
+                events are already an explicit ordered list.
         """
         top_k = top_k or self._cfg("rerank_topk", 100)
         query_text_en = self.resolve_english(query_text, query_text_en)
@@ -276,7 +287,10 @@ class Cascade:
         if not coarse:
             return []
 
+        coarse = self._scene_order(coarse, query_text, run_id=run_id, clauses=clauses)
         grouped = self.group(coarse)
+
+        grouped = self._rerank_tiers(grouped, query_text, query_text_en)
 
         if self.reranker is None:
             return grouped[:top_k]
@@ -354,6 +368,175 @@ class Cascade:
             normalizer=normalizer,
             rrf_k=rrf_k,
         )
+
+    def _scene_order(
+        self, coarse: list[Candidate], query_text: str, run_id: str,
+        clauses: Sequence[str] | None = None,
+    ) -> list[Candidate]:
+        """Thiên kiến thứ tự cảnh cho KIS nhiều cảnh (`mfe.online.scene_order`).
+
+        Đề KIS thật của BTC thường tả một *đoạn* chứ không một khung — 21/38 đề
+        KIS mang từ nối trình tự. Ta đánh chỉ mục từng khung rời nên cấu trúc đó
+        bị vứt: hai mệnh đề đi vào cùng một túi từ, và một video có *một* trong
+        hai cảnh ghi điểm y như video có **cả hai, đúng thứ tự**.
+
+        Đo trên 14 câu KIS ba cảnh (`eval/queryset_order_l30.jsonl`, video L30
+        chưa câu nào khác đụng tới): **RỘNG 0,800 → 0,843 · hạng TB 10,3 → 4,2 ·
+        4 lên / 0 xuống**, và DANTE xếp **đúng video lên hạng nhất ở 14/14 câu**
+        trên 873 video. Trên 189 câu dev: 4 câu bị chạm, +0,050; **111 câu còn
+        lại giữ nguyên từng con số**.
+
+        **Ba cửa thoát sớm, theo thứ tự rẻ dần** — vì hàm này chạy lại tầng A
+        cho *từng* mệnh đề, tức nhân chi phí truy hồi lên 3 lần:
+
+        1. `scene_order_weight <= 0` — tắt, và đây là mặc định.
+        2. Câu tách ra dưới `MIN_CLAUSES_FOR_PRIOR` mệnh đề. Đây là đường ra của
+           **111/115** câu KIS bộ dev, nên phép tách phải đứng trước mọi thứ đắt.
+        3. Không video nào ghép được chuỗi tăng dần -> `prior` rỗng ->
+           `apply_prior` là phép không-làm-gì thật sự.
+
+        **Cần `RelationalMap`**, và không có thì tầng này **ngồi ngoài kèm cảnh
+        báo** chứ không chạy bằng số khác. `EventHit.ordinal` phải là
+        `keyframe_index`: `dante` nhân λ với nó, và nếu đưa *thứ hạng trong danh
+        sách* vào thay thì hai keyframe cách nhau 200 frame bị phạt y như hai
+        keyframe liền nhau (xem docstring `mfe.online.dante` §1). Đưa `frame_idx`
+        vào cũng sai theo kiểu khác: khoảng cách gấp ~25 lần nên λ = 0,001 hoá ra
+        mạnh gấp 25, tức một cấu hình chưa ai đo.
+        """
+        weight = float(self._cfg("scene_order_weight", 0.0) or 0.0)
+        if weight <= 0:
+            return coarse
+
+        from mfe.online import scene_order  # noqa: PLC0415 - chi khi bat
+
+        # Mệnh đề người/LLM tách sẵn thắng bộ luật — xem `search(clauses=…)`.
+        # Ngưỡng ≥3 vẫn áp cho **cả hai** nguồn: nó nói về *số cảnh*, không nói
+        # về cách tách, và câu hai cảnh đo được là luôn gây hại dù ai tách.
+        split = (
+            scene_order.clauses_from_texts(clauses) if clauses
+            else scene_order.split_clauses(query_text)
+        )
+        if len(split) < scene_order.MIN_CLAUSES_FOR_PRIOR:
+            return coarse
+
+        relational = self._relational_map()
+        if relational is None:
+            logger.warning(
+                "thu tu canh: bat (%.2f) nhung khong mo duoc Relational Map — "
+                "tang ngoi ngoai. Can `keyframe_index` cho phep phat cua DANTE.",
+                weight,
+            )
+            return coarse
+
+        per_clause = []
+        for index, clause in enumerate(split):
+            # `-c{i}`, KHONG `#c{i}`: `run_id` di thang vao `evidence_id`, va `#`
+            # truot pattern cua `Candidate` -> `ArmRegistry.run` nuot
+            # `ValidationError` roi ghi "arm ... returned nothing". Moi arm tra
+            # rong ma khong co gi do len. Da mat mot luot do vi dung chuyen nay.
+            hits = self._coarse(
+                clause.text, run_id=f"{run_id}-c{index}",
+                query_text_en=self.resolve_english(clause.text, None),
+            )
+            events = []
+            for candidate in hits:
+                try:
+                    row = relational.get_keyframe(candidate.keyframe_id)
+                except Exception:  # noqa: BLE001 - keyframe la thi bo qua rieng no
+                    continue
+                events.append(scene_order.EventHit(
+                    keyframe_id=candidate.keyframe_id,
+                    video_id=candidate.video_id,
+                    ordinal=row.keyframe_index,
+                    frame_id=row.frame_idx,
+                    score=float(candidate.score),
+                ))
+            per_clause.append(events)
+
+        prior = scene_order.video_prior(per_clause)
+        if not prior:
+            return coarse
+        logger.info(
+            "thu tu canh: %d menh de, %d video ghep duoc chuoi tang dan",
+            len(split), len(prior),
+        )
+        return scene_order.apply_prior(coarse, prior, weight=weight)
+
+    def _rerank_tiers(
+        self, grouped: list[Candidate], query_text: str, query_text_en: str | None
+    ) -> list[Candidate]:
+        """Các tầng trong `retrieval.rerank_tiers`, chạy theo đúng thứ tự khai.
+
+        **Rỗng theo mặc định** — đó là hành vi đã chạy từ trước khi có trường
+        này, và ba trong bốn tầng đo được là ÂM trên nền đã hiệu chỉnh (163 câu
+        dev, 27-08): `ta` −0,010 · `hf_cross` −0,029 · `colpali` −0,033. Chỉ
+        `vlm` dương, **+0,015 với 27,6 giây/câu**.
+
+        Một tầng không chạy được thì **ghi cảnh báo rồi đi tiếp**, không ném:
+        `TierOutcome.reason` nói vì sao (thiếu khoá API, hết quota, không lấy
+        được ảnh), và mất một tầng còn hơn mất cả lượt nộp. Nhưng nó phải **nói
+        ra** — một tầng im lặng không chạy in ra `+0,000` giống hệt một tầng
+        chạy mà vô ích, và cột `chạy` là chỗ duy nhất phân biệt (CLAUDE.md §4).
+        """
+        names = self._cfg("rerank_tiers", None) or []
+        if not names:
+            return grouped
+
+        from mfe.online.keyframe_images import KeyframeImages  # noqa: PLC0415
+        from mfe.online.rerank_tiers import apply_tiers, build_tier  # noqa: PLC0415
+
+        if getattr(self, "_tier_cache", None) is None:
+            self._tier_images = KeyframeImages()
+            self._tier_cache = [build_tier(name, self._tier_images) for name in names]
+
+        depth = self._cfg("rerank_tier_depth", 20)
+        texts = None
+        if self.flat_bundle is not None:
+            def texts(keyframe_id: str) -> str:  # noqa: E306 - dong bo voi tren
+                parts = [
+                    self.flat_bundle.texts[source].get(keyframe_id, "")
+                    for source in self.flat_bundle.texts
+                ]
+                return " ".join(p for p in parts if p)
+
+        after, outcomes = apply_tiers(
+            grouped, self._tier_cache,
+            query_vi=query_text, query_en=query_text_en,
+            images=self._tier_images, texts=texts, depth=depth,
+        )
+        for outcome in outcomes:
+            if outcome.ran:
+                logger.info("%s", outcome.summary())
+            else:
+                logger.warning("tang %s NGOI NGOAI: %s", outcome.tier, outcome.reason)
+        return after
+
+    def _relational_map(self) -> Any:
+        """Relational Map, mở một lần rồi giữ. `None` khi không mở được.
+
+        Mở **lười** chứ không trong `__init__`: `Cascade` dựng được ở nhiều chỗ
+        không có CSDL (test, bàn thử), và bắt nó mở bản đồ ngay lúc dựng sẽ biến
+        một tính năng tuỳ chọn thành một điều kiện bắt buộc.
+
+        Giữ cả lần thất bại (`False`) để không thử lại mỗi truy vấn — một câu
+        cảnh báo mỗi lượt chạy là đủ, một câu mỗi truy vấn là rác.
+        """
+        cached = getattr(self, "_relational_cache", None)
+        if cached is not None:
+            return cached or None
+        path = getattr(getattr(self.config, "paths", None), "relational_db", None)
+        if not path:
+            self._relational_cache = False
+            return None
+        try:
+            from mfe.mapping.relational import RelationalMap  # noqa: PLC0415
+
+            self._relational_cache = RelationalMap(path)
+        except Exception as err:  # noqa: BLE001
+            logger.warning("khong mo duoc Relational Map tu %s: %s", path, err)
+            self._relational_cache = False
+            return None
+        return self._relational_cache
 
     def _vector_arm(
         self, query_text: str, top_k: int, run_id: str

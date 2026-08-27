@@ -133,9 +133,12 @@ def collect_evidence(cascade: Cascade, queries, coarse_topk: int, en_source: str
                 # Translate the SPECIFIC search string, not just the first one.
                 texts_en.append(cascade.resolve_english(text, None))
 
+        # `strict=True`: hai danh sách này dựng song song ngay ở trên, nên lệch
+        # độ dài là lỗi lập trình. `zip` mặc định sẽ **cắt im lặng** — với TRAKE
+        # đó nghĩa là mất hẳn một sự kiện khỏi chuỗi mà không có gì báo.
         per_event = [
             cascade.arms.run(text, coarse_topk, query.query_id, query_text_en=t_en)
-            for text, t_en in zip(searches, texts_en)
+            for text, t_en in zip(searches, texts_en, strict=True)
         ]
         evidences.append(QueryEvidence(query=query, per_event=per_event))
         logger.info(
