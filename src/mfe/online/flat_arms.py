@@ -56,6 +56,7 @@ from mfe.contracts.ids import parse_keyframe_id
 from mfe.contracts.tools import Candidate
 from mfe.online.arms import Arm
 from mfe.online.dense_arms import DENSE_ARM_SPECS, encode_query
+from mfe.online.object_query import QUERY_REWRITERS
 from mfe.online.text_arms import TEXT_ARM_SPECS
 from mfe.online.tools.evidence import create_evidence_id
 from mfe.stores.inverted.index import _normalize_text, _tokenize
@@ -395,7 +396,11 @@ def build_flat_text_arms(bundle: FlatBundle, weights=None, enabled=None) -> list
             model = bundle.build_bm25(_source)
             if model is None:
                 return []
-            tokens = _tokenize(q)
+            # Một số nguồn đánh chỉ mục bằng token GHÉP (`ba_người`), nên truy
+            # vấn phải được viết lại theo cùng quy tắc — nếu không hai bên không
+            # còn một token chung nào. Hiện chỉ `object` có mặt trong bảng này.
+            rewriter = QUERY_REWRITERS.get(_source)
+            tokens = _tokenize(rewriter(q) if rewriter else q)
             if not tokens:
                 return []
             scores = model.get_scores(tokens)
