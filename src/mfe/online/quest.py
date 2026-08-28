@@ -51,7 +51,14 @@ logger = logging.getLogger(__name__)
 #: docstring module: nó trả 404 cho khoá của nhóm. `-lite-latest` nhanh gấp ~6
 #: lần nhưng đây là bước viết lại truy vấn, chạy một lần mỗi truy vấn, nên chất
 #: lượng đáng giá hơn 5 giây.
-GEMINI_MODEL = "gemini-3.6-flash"
+#:
+#: Đổi được bằng `MFE_GEMINI_QUEST_MODEL`, và cần đổi cho mọi lượt chạy **cả bộ**:
+#: free tier của `gemini-3.6-flash` là **20 request MỖI NGÀY**
+#: (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`), nên một phép đo 47 câu
+#: chết ở câu 21 và 27 câu còn lại lặng lẽ rơi về `fallback` — tức là về đúng câu
+#: hỏi gốc, tức là phép đo báo "quest không cải thiện gì". Đã mất hai lượt đo
+#: `vlm` vì đúng trần này. `gemini-flash-lite-latest` có trần riêng.
+GEMINI_MODEL = os.getenv("MFE_GEMINI_QUEST_MODEL", "gemini-3.6-flash")
 
 QUEST_EXPAND_PROMPT = """You are a query analyst for a Vietnamese news-video search engine.
 

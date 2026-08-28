@@ -27,10 +27,42 @@ from mfe.contracts.tools import Candidate
 from mfe.eval.metrics.final_score import MAX_ANSWERS_PER_QUERY
 from mfe.eval.metrics.trake import TRAKESubmission
 from mfe.eval.official import to_event_hits, to_kis_submissions, to_qa_submissions
-from mfe.eval.query_package import PackagedQuery
+from mfe.eval.query_package import PackagedQuery, is_adhoc
 from mfe.eval.submission import AnySubmission, to_csv_text
 from mfe.mapping.relational import RelationalMap
 from mfe.online import dante
+
+
+@dataclass(frozen=True)
+class SearchText:
+    """Chuỗi người vận hành muốn hệ đi TÌM bằng, thay cho nguyên văn câu đề.
+
+    Vì sao cần ghi đè
+    ------------------
+    `PackagedQuery` không có `retrieval_text` — `searches()` trả thẳng `self.text`.
+    Nhưng **48/48** câu QA của `queryset_dev.jsonl` và **15/15** của
+    `queryset_heldout.jsonl` đều có `retrieval_text` viết tay khác `text`, nên
+    mọi con số QA từng công bố đều đo trên một chuỗi mà đường nộp không dựng được.
+
+    Đo trên 47 câu QA dev có ground truth, cùng kho, chỉ đổi chuỗi tìm: pool 500
+    phủ **40/47** khi tìm bằng `retrieval_text` so với **32/47** khi tìm bằng
+    `text`, hạng trung vị 21 so với 39, và **10 câu rơi hẳn khỏi pool 500**.
+
+    Ca cụ thể `query-p1-9-qa` (đợt 1, đáp án `L21_V003#026220`): envit5 dịch
+    *"xe ô tô lội nước"* thành *"the trucks wading"*, và cái đuôi câu hỏi làm
+    loãng vector. Hạng SigLIP **540** — ngoài pool 500. Sửa một chữ `trucks` →
+    `cars` ra 71; bỏ thêm câu hỏi ra **12**.
+
+    `en` đi thẳng vào tháp text SigLIP, **không** qua envit5. Đó là nửa quan trọng
+    hơn: bản dịch máy chính là một trong hai nguyên nhân, nên một ô ghi đè chỉ
+    sửa được tiếng Việt sẽ không chạm tới nó.
+    """
+
+    vi: str
+    #: Bản tiếng Anh đưa tay. `None` = để tầng dịch tự lo.
+    en: str | None = None
+    #: Từ khoá tiếng Việt riêng cho các arm OCR/phụ đề.
+    ocr_keywords: str | None = None
 
 
 def run_package(
@@ -41,6 +73,7 @@ def run_package(
     pool_k: int,
     penalty: float = dante.PENALTY,
     clauses: Mapping[str, Sequence[str]] | None = None,
+    searches: Mapping[str, SearchText] | None = None,
     on_progress: Callable[[int, PackagedQuery], None] | None = None,
 ) -> dict[str, list]:
     """Chạy cả gói đề. `{query_id: kết quả}`.
@@ -58,8 +91,13 @@ def run_package(
     `clauses` là `{query_id: [mệnh đề theo trình tự thời gian]}` do người vận
     hành tách tay — nó **thay** bộ luật `scene_order.split_clauses` cho đúng câu
     đó. Chỉ có nghĩa với KIS/QA; TRAKE đã có danh sách sự kiện tường minh.
+
+    `searches` là `{query_id: SearchText}` — chuỗi đi tìm, ghi đè `query.text`.
+    **Chỉ đổi thứ hệ đi tìm, không đổi `query_id`**, nên tên file nộp vẫn là tên
+    đề BTC ra. Xem `SearchText` để biết vì sao cần và nó đáng bao nhiêu.
     """
     clauses = clauses or {}
+    searches = searches or {}
     out: dict[str, list] = {}
     for index, query in enumerate(queries, start=1):
         if on_progress is not None:
@@ -68,11 +106,15 @@ def run_package(
             out[query.query_id] = _run_trake(
                 cascade, relational, query, pool_k, penalty
             )
-        else:
-            out[query.query_id] = cascade.search(
-                query_text=query.text, top_k=pool_k, run_id=query.query_id,
-                clauses=clauses.get(query.query_id),
-            )
+            continue
+        override = searches.get(query.query_id)
+        out[query.query_id] = cascade.search(
+            query_text=override.vi if override else query.text,
+            top_k=pool_k, run_id=query.query_id,
+            query_text_en=override.en if override else None,
+            ocr_keywords=override.ocr_keywords if override else None,
+            clauses=clauses.get(query.query_id),
+        )
     return out
 
 
@@ -200,6 +242,11 @@ def build_zip(
 
     Một câu hỏng **không** làm hỏng cả gói. Ném ra giữa chừng nghĩa là 48 câu
     đúng cũng không tải về được chỉ vì câu thứ 49 quên gõ đáp án.
+
+    Câu **tự gõ để dò** (`is_adhoc`) cũng không có file, và đây không phải một
+    thiếu sót mà là luật: tên file nộp phải là tên đề BTC ra. Nó vẫn được đếm vào
+    `skipped` kèm lý do, vì một câu biến mất khỏi ZIP mà không ai nói gì trông
+    y hệt một câu chạy hỏng.
     """
     manual_orders = manual_orders or {}
     answers = answers or {}
@@ -207,6 +254,11 @@ def build_zip(
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         for query in queries:
+            if is_adhoc(query.query_id):
+                skipped[query.query_id] = (
+                    "cau tu go de do, khong phai de BTC — khong vao goi nop"
+                )
+                continue
             result = results.get(query.query_id)
             if not result:
                 skipped[query.query_id] = "chua chay, hoac chay ra 0 ung vien"

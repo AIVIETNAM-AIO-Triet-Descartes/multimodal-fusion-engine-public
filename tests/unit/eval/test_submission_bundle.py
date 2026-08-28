@@ -265,9 +265,17 @@ class TestMenhDeTachTay:
     class FakeCascade:
         def __init__(self):
             self.calls = []
+            self.kwargs = []
 
-        def search(self, *, query_text, top_k, run_id, clauses=None):
+        def search(
+            self, *, query_text, top_k, run_id, clauses=None,
+            query_text_en=None, ocr_keywords=None,
+        ):
             self.calls.append((query_text, clauses))
+            self.kwargs.append({
+                "query_text": query_text, "run_id": run_id,
+                "query_text_en": query_text_en, "ocr_keywords": ocr_keywords,
+            })
             return [cand("L01_V001", 1)]
 
     def test_menh_de_tay_di_TOI_cascade(self, relational):
@@ -304,3 +312,111 @@ class TestMenhDeTachTay:
             clauses={"query-p1-2-kis": ["a", "b", "c"]},
         )
         assert cascade.calls == [("câu một", None), ("câu hai", ["a", "b", "c"])]
+
+
+class TestChuoiTimGhiDe:
+    """`run_package(searches=…)` — ô ghi đè chuỗi tìm ở bàn nộp.
+
+    Đo được vì sao cần: pool 500 phủ **40/47** câu QA dev khi tìm bằng
+    `retrieval_text` viết tay, so với **32/47** khi tìm bằng nguyên văn câu đề —
+    và `PackagedQuery` không có `retrieval_text`. Test khoá hai thứ: chuỗi ghi đè
+    **tới được** cascade, và `run_id` **không** đổi theo nó (đổi là đổi tên file
+    nộp).
+    """
+
+    def test_chuoi_ghi_de_thay_query_text_nhung_giu_run_id(self, relational):
+        from mfe.eval.submission_bundle import SearchText, run_package
+
+        cascade = TestMenhDeTachTay.FakeCascade()
+        query = parse_query("query-p1-9-qa.txt", "Xe lội nước. Biển ghi số mấy?")
+        run_package(
+            cascade, relational, [query], pool_k=10,
+            searches={"query-p1-9-qa": SearchText(vi="Xe lội nước")},
+        )
+        call = cascade.kwargs[0]
+        assert call["query_text"] == "Xe lội nước"
+        # run_id di thang vao evidence_id VA quyet dinh ten file nop.
+        assert call["run_id"] == "query-p1-9-qa"
+
+    def test_tieng_anh_dua_tay_di_TOI_cascade(self, relational):
+        """Nửa quan trọng hơn: envit5 chính là một trong hai nguyên nhân."""
+        from mfe.eval.submission_bundle import SearchText, run_package
+
+        cascade = TestMenhDeTachTay.FakeCascade()
+        query = parse_query("query-p1-9-qa.txt", "Xe ô tô lội nước")
+        run_package(
+            cascade, relational, [query], pool_k=10,
+            searches={
+                "query-p1-9-qa": SearchText(
+                    vi="Xe ô tô lội nước", en="cars wading through water",
+                    ocr_keywords="biển báo",
+                )
+            },
+        )
+        call = cascade.kwargs[0]
+        assert call["query_text_en"] == "cars wading through water"
+        assert call["ocr_keywords"] == "biển báo"
+
+    def test_khong_ghi_de_thi_dung_nguyen_van_va_KHONG_dat_tieng_anh(self, relational):
+        """`None` phải tới cascade, không phải chuỗi rỗng.
+
+        Chuỗi rỗng sẽ được `Cascade` hiểu là "đã có bản dịch" và tầng dịch ngồi
+        ngoài — arm `siglip` mất luôn, mà nó là arm trọng số 2,0.
+        """
+        from mfe.eval.submission_bundle import run_package
+
+        cascade = TestMenhDeTachTay.FakeCascade()
+        query = parse_query("query-p1-9-qa.txt", "Xe lội nước")
+        run_package(cascade, relational, [query], pool_k=10)
+        call = cascade.kwargs[0]
+        assert call["query_text"] == "Xe lội nước"
+        assert call["query_text_en"] is None
+        assert call["ocr_keywords"] is None
+
+    def test_ghi_de_cua_cau_khac_KHONG_lan_sang(self, relational):
+        from mfe.eval.submission_bundle import SearchText, run_package
+
+        cascade = TestMenhDeTachTay.FakeCascade()
+        queries = [
+            parse_query("query-p1-1-kis.txt", "câu một"),
+            parse_query("query-p1-2-kis.txt", "câu hai"),
+        ]
+        run_package(
+            cascade, relational, queries, pool_k=10,
+            searches={"query-p1-2-kis": SearchText(vi="ghi đè hai")},
+        )
+        assert [c["query_text"] for c in cascade.kwargs] == ["câu một", "ghi đè hai"]
+
+
+class TestCauTuGoKhongVaoZip:
+    """Câu `tim-tay-*` là để dò, không phải đề BTC — nó không được vào gói nộp.
+
+    Tên file nộp phải là tên đề BTC ra. Một file `tim-tay-1-qa.csv` trong ZIP là
+    thứ BTC không hỏi, và nó lọt vào im lặng vì câu tự gõ đi qua đúng
+    `parse_query` như đề thật.
+    """
+
+    def test_tim_tay_bi_loai_khoi_zip_va_co_ly_do(self, relational):
+        real = parse_query("query-p1-1-kis.txt", "cảnh thật")
+        adhoc = parse_query("tim-tay-1-kis.txt", "dò thử")
+        results = {
+            "query-p1-1-kis": [cand("L01_V001", 1)],
+            "tim-tay-1-kis": [cand("L01_V002", 2)],
+        }
+        bundle = build_zip([real, adhoc], results, relational)
+        with zipfile.ZipFile(io.BytesIO(bundle.payload)) as archive:
+            assert archive.namelist() == ["query-p1-1-kis.csv"]
+        # Bien mat KEM ly do: mot cau vang mat khong loi giai thich trong y het
+        # mot cau chay hong.
+        assert "tim-tay-1-kis" in bundle.skipped
+        assert "khong vao goi nop" in bundle.skipped["tim-tay-1-kis"]
+
+    def test_tim_tay_bi_loai_ke_ca_khi_chay_ra_ket_qua_tot(self, relational):
+        """Loại theo TÊN, không theo việc nó có kết quả hay không."""
+        adhoc = parse_query("tim-tay-3-qa.txt", "dò thử")
+        bundle = build_zip(
+            [adhoc], {"tim-tay-3-qa": [cand("L01_V001", i) for i in range(1, 51)]},
+            relational, answers={"tim-tay-3-qa": "một đáp án hợp lệ"},
+        )
+        with zipfile.ZipFile(io.BytesIO(bundle.payload)) as archive:
+            assert archive.namelist() == []

@@ -58,6 +58,14 @@ QueryType = Literal["KIS", "QA", "TRAKE"]
 #: Hậu tố tên file -> dạng truy vấn (thể lệ §"Quy ước tên file truy vấn").
 SUFFIXES: dict[str, QueryType] = {"kis": "KIS", "qa": "QA", "trake": "TRAKE"}
 
+#: Tiền tố của câu do người vận hành tự gõ ở bàn nộp để **dò**, không phải đề BTC.
+#:
+#: Chúng đi qua đúng `parse_query` như đề thật — có `query_id`, có `csv_name`, tra
+#: được `frame_id` — vì mọi luật đọc đề chỉ nên có một bản. Cái duy nhất khác là
+#: chúng **không được vào ZIP nộp**: tên file nộp phải là tên đề BTC ra, và một
+#: file `tim-tay-1-qa.csv` trong gói là thứ BTC không hỏi.
+ADHOC_PREFIX = "tim-tay"
+
 #: `E1:`, `E 2 :`, `e3.`, và `E1 ` — BTC gõ tay nên dấu ngăn không cố định.
 #:
 #: Dấu ngăn là TUỲ CHỌN vì gói đề ngày 21-08-2026 viết `E1 Khoảnh khắc…` không
@@ -120,6 +128,15 @@ def parse_query_type(path: str | Path) -> QueryType:
             "The le quy dinh dang truy van nam o hau to ten file.",
         )
     return SUFFIXES[suffix]
+
+
+def is_adhoc(query_id: str) -> bool:
+    """Câu này do người vận hành gõ để dò, hay là đề BTC ra?
+
+    Luật nằm ở đây chứ không ở giao diện: nó quyết định file nào **có mặt trong
+    gói nộp**, và mọi luật quyết định nội dung bài nộp đều phải test được.
+    """
+    return query_id.startswith(ADHOC_PREFIX)
 
 
 def split_events(text: str) -> tuple[str | None, tuple[str, ...]]:
