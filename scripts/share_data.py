@@ -35,7 +35,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-#: Bảy file kho phẳng. Tên cố định vì `mfe.online.flat_arms` tra theo tên.
+#: File kho phẳng. Tên cố định vì `mfe.online.flat_arms` tra theo tên.
+#:
+#: Danh sách này là **phép đếm**, không phải phép liệt kê cho vui: `pack` gom cả
+#: thư mục bằng glob, nên một file mới vẫn vào zip dù không có tên ở đây — còn
+#: `verify` thì chỉ so `min_files=len(FLAT_FILES)`. Quên cập nhật ở đây nghĩa là
+#: một gói THIẾU bốn arm vẫn được báo "đủ", và người nhận chỉ biết khi mở giao
+#: diện ra thấy `caption_qwen — không chạy được`.
 FLAT_FILES = (
     "siglip_vectors.npz",
     "audio_features.npz",
@@ -44,6 +50,11 @@ FLAT_FILES = (
     "paddle_ocr.json",
     "subtitles.json",
     "viet_ocr.json",
+    # Lượt 5 + 6 + 7 (28-08-2026). Bốn file này bật thêm bốn arm:
+    "qwen_captions.json",    # caption_qwen  (BM25 trên caption Qwen2.5-VL)
+    "qwen_ocr.json",         # ocr_qwen25    (BM25 trên OCR Qwen2.5-VL)
+    "dense_vectors.npz",     # bge_m3        (nhúng CAPTION, 1024 chiều)
+    "subtitles_dense.npz",   # subtitle_bge_m3 (nhúng PHỤ ĐỀ, 1024 chiều)
 )
 
 

@@ -167,6 +167,42 @@ aic_btc_b1_v1:
     decided_by: triet
     decided_on: 2026-08-20
 
+  # ─── Nhóm 4: lệch MÔI TRƯỜNG (khoá `env.{tầng}.{gói}`) ──────────────────
+  #
+  # Khác ba nhóm trên ở chỗ đối chiếu: chúng so `artifacts.{tên}.model/params`
+  # (thứ tầng TỰ KHAI), còn hai mục dưới so `stages.{tên}.env` (phiên bản gói
+  # thật sự đã nạp). `merge.check_stage_environments` mới tra bảng này từ
+  # 28-08-2026; trước đó nửa env không có đường nào để ký duyệt.
+
+  env.n6_caption_qwen.transformers:
+    reason: >-
+      Ba bản `transformers` trên cùng một tầng: 5.15.1 (232 video, L25+L26),
+      5.16.0 (106 video, L26+L28), 5.16.1 (534 video, phần còn lại). Cả ba đều
+      chạy Qwen2.5-VL-7B qua vLLM 0.27.1 — `vllm` KHÔNG lệch, và vLLM mới là
+      thứ xếp lịch giải mã, tức thứ quyết định caption. `transformers` ở đây
+      chủ yếu cấp tokenizer/processor, và ba bản này chỉ cách nhau một patch
+      cộng một minor.
+      CHƯA ĐO ảnh hưởng lên văn bản caption — chấp nhận vì chi phí, không phải
+      vì đã chứng minh tương đương. Chạy lại 338 video của hai bản cũ là ~vài
+      chục giờ GPU, trong khi vòng sơ khảo 2 đã cận.
+      Việc phải làm khi có thời gian: lấy ~30 video của mỗi bản, sinh lại
+      caption bằng 5.16.1 rồi so bằng `scripts/compare_qwen_captions.py`. Nếu
+      lệch thật thì bundle này là hỗn hợp hai phép đo và mọi số của arm
+      `caption_qwen`/`bge_m3` phải đọc lại.
+    decided_by: triet
+    decided_on: 2026-08-28
+    videos: "232 × 5.15.1 · 106 × 5.16.0 · 534 × 5.16.1"
+
+  env.n6_ocr_qwen25.transformers:
+    reason: >-
+      CÙNG lượt chạy, cùng ba bản, cùng phân bố video như
+      `env.n6_caption_qwen.transformers` — hai tầng này chạy trong một phiên
+      vLLM. Đọc lý do và việc-phải-làm ở mục đó; khai riêng vì phép kiểm so
+      theo TỪNG tầng, và chấp nhận một tầng không được phép kéo theo tầng kia.
+    decided_by: triet
+    decided_on: 2026-08-28
+    videos: "232 × 5.15.1 · 106 × 5.16.0 · 535 × 5.16.1"
+
 # ─── KHÔNG phải lệch, đã kiểm và loại ────────────────────────────────────
 # `audio_features`: có lúc tưởng lệch cửa sổ CLAP. Không lệch.
 #   repo/Trọng  half_window_s = 5.0 -> audio[centre - 5s : centre + 5s]

@@ -388,3 +388,88 @@ def _patch_manifest(transport, tmp_path, video_id, mutate):
     mutate(manifest)
     local.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
     transport.put(local, LAYOUT.part_manifest(video_id))
+
+
+class TestLechEnvDuocKyDuyet:
+    """Lệch MÔI TRƯỜNG cũng phải có đường cho Lead ký duyệt (28-08-2026).
+
+    Trước ngày này `check_stage_environments` không tra `accepted_divergences`,
+    nên một lệch phiên bản chỉ còn hai lối thoát: chạy lại tất cả, hoặc sửa code
+    cho phép kiểm im. Đó là áp lực đẩy người ta tới lối thứ hai — và một phép
+    kiểm bị gỡ thì không quay lại.
+
+    Ca thật đã gặp: `n6_caption_qwen`/`transformers` chạy trên ba bản (5.15.1
+    trên 232 video, 5.16.0 trên 106, 5.16.1 trên 534) vì ba người cài ba lúc.
+    """
+
+    KEY = "env.n2_subtitles.faster-whisper"
+
+    def _accepted_plan(self):
+        return replace(
+            PLAN,
+            accepted_divergences={
+                self.KEY: {
+                    "reason": "ba ban patch, cung checkpoint — chay lai qua dat",
+                    "decided_by": "triet",
+                    "decided_on": "2026-08-28",
+                }
+            },
+        )
+
+    def test_khong_ky_duyet_thi_van_TU_CHOI(self, bundle, tmp_path):
+        """Mặc định phải là chặn. Thiếu mục khai KHÔNG được đọc thành 'đã duyệt'."""
+        _patch_manifest(
+            bundle, tmp_path, "L23_V001",
+            lambda m: m["stages"]["n2_subtitles"]["env"].update(
+                {"faster-whisper": "0.0.1"}
+            ),
+        )
+        report = run(bundle, tmp_path)
+        assert any(r.kind == "env_lech" for r in report.refusals)
+
+    def test_ky_duyet_roi_thi_gop_duoc(self, bundle, tmp_path):
+        _patch_manifest(
+            bundle, tmp_path, "L23_V001",
+            lambda m: m["stages"]["n2_subtitles"]["env"].update(
+                {"faster-whisper": "0.0.1"}
+            ),
+        )
+        report = run(bundle, tmp_path, plan=self._accepted_plan())
+        assert report.ok, [str(r) for r in report.refusals]
+
+    def test_ky_duyet_KHONG_phai_tat_phep_kiem(self, bundle, tmp_path):
+        """Vẫn phải biết bản nào ở video nào, và ai ký, ngày nào.
+
+        Một lệch được chấp nhận mà không còn dấu vết thì sáu tuần sau không ai
+        phân biệt được nó với một lệch chưa ai nhìn tới.
+        """
+        _patch_manifest(
+            bundle, tmp_path, "L23_V001",
+            lambda m: m["stages"]["n2_subtitles"]["env"].update(
+                {"faster-whisper": "0.0.1"}
+            ),
+        )
+        report = run(bundle, tmp_path, plan=self._accepted_plan())
+
+        entry = next(e for e in report.accepted_divergences if e["key"] == self.KEY)
+        assert entry["decided_by"] == "triet"
+        assert entry["decided_on"] == "2026-08-28"
+        assert entry["values"]["0.0.1"] == ["L23_V001"]
+        assert any("LECH ENV DA CHAP NHAN" in w for w in report.warnings)
+
+    def test_ky_duyet_mot_goi_KHONG_keo_theo_goi_khac(self, bundle, tmp_path):
+        """Phạm vi của một quyết định đúng bằng chính nó.
+
+        Khoá gồm cả tầng lẫn gói, nên duyệt `faster-whisper` không mở đường cho
+        một gói khác của cùng tầng lệch theo.
+        """
+        def two_packages(manifest: dict) -> None:
+            env = manifest["stages"]["n2_subtitles"]["env"]
+            env.update({"faster-whisper": "0.0.1", "torch": "0.0.1"})
+
+        _patch_manifest(bundle, tmp_path, "L23_V001", two_packages)
+        report = run(bundle, tmp_path, plan=self._accepted_plan())
+        assert not report.ok
+        detail = " ".join(r.detail for r in report.refusals if r.kind == "env_lech")
+        assert "n2_subtitles/torch" in detail
+        assert "faster-whisper" not in detail

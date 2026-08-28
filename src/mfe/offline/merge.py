@@ -359,7 +359,7 @@ def check_fingerprints(
             if len(models) == 1:
                 report.fingerprint_check[artifact] = next(iter(models))
 
-    check_stage_environments(manifests, report)
+    check_stage_environments(manifests, report, accepted)
 
     for package in OTHER_PACKAGES:
         seen_versions = {
@@ -432,7 +432,11 @@ def stage_env(manifest: dict, stage: str) -> dict[str, str] | None:
     return None
 
 
-def check_stage_environments(manifests: dict[str, dict], report: MergeReport) -> None:
+def check_stage_environments(
+    manifests: dict[str, dict],
+    report: MergeReport,
+    accepted: dict[str, dict] | None = None,
+) -> None:
     """Per stage, every shard that ran it must have run it in the same versions.
 
     Compared **per stage** rather than per manifest because one bundle is filled
@@ -449,7 +453,19 @@ def check_stage_environments(manifests: dict[str, dict], report: MergeReport) ->
     Stages a manifest never recorded are reported as **unknown**, not as
     agreement and not as a refusal. Nothing can be proved about them either way,
     and pretending otherwise in either direction is worse than saying so.
+
+    `accepted` là cùng bảng `config/accepted_divergences.yaml` mà nửa
+    `model`/`params` dùng, chỉ khác khoá: **`env.{tầng}.{gói}`**. Trước
+    28-08-2026 nửa env này **không** tra bảng đó, nên một lệch phiên bản không
+    có đường nào để Lead ký duyệt — chỉ còn hai lựa chọn "chạy lại tất cả" hoặc
+    "sửa code cho phép kiểm im". Đó là áp lực đẩy người ta tới lựa chọn thứ hai,
+    và một phép kiểm bị gỡ thì không quay lại.
+
+    Chấp nhận **không phải** làm im phép kiểm: nó vẫn chạy, vẫn in đủ ba phiên
+    bản và video nào mang bản nào, và lý do Lead viết được chép vào manifest của
+    bản gộp. Cái duy nhất thay đổi là nó không chặn nữa.
     """
+    accepted = accepted or {}
     stages = sorted({s for m in manifests.values() for s in (m.get("stages") or {})})
     for stage in stages:
         packages = STAGE_PACKAGES.get(stage)
@@ -473,7 +489,27 @@ def check_stage_environments(manifests: dict[str, dict], report: MergeReport) ->
                 detail = "; ".join(
                     f"{v} <- {', '.join(sorted(vids))}" for v, vids in sorted(versions.items())
                 )
-                report.refuse("env_lech", f"{stage}/{package}: {detail}")
+                key = f"env.{stage}.{package}"
+                decision = accepted.get(key)
+                if decision is None:
+                    report.refuse("env_lech", f"{stage}/{package}: {detail}")
+                    continue
+                report.accepted_divergences.append(
+                    {
+                        "key": key,
+                        "values": {v: sorted(vids) for v, vids in sorted(versions.items())},
+                        "detail": detail,
+                        **{k: decision[k] for k in ("reason", "decided_by", "decided_on")},
+                    }
+                )
+                report.warnings.append(
+                    f"LECH ENV DA CHAP NHAN {key}: "
+                    + "; ".join(
+                        f"{v} <- {len(vids)} video" for v, vids in sorted(versions.items())
+                    )
+                    + f" — {decision['reason']} "
+                    f"({decision['decided_by']}, {decision['decided_on']})"
+                )
             elif versions:
                 report.env_check.setdefault(stage, {})[package] = next(iter(versions))
 
