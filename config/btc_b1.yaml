@@ -138,81 +138,111 @@ retrieval:
   # khai là arm không bao giờ được chỉnh.
   #
   fusion_weights:
-    # ═══ ĐO ĐƯỢC 24-08-2026 trên KHO PHẲNG, không đoán ═══
+    # ═══ ĐO LẠI 28-08-2026 trên kho phẳng 12 ARM — bảng 24-08 ĐÃ CŨ ═══
     #
-    # Coordinate ascent trên 42 câu `eval/dev/*` (KIS+QA; 9 câu TRAKE để ngoài vì
-    # chúng ghép qua DANTE), rồi CÔNG BỐ trên `eval/heldout/*` chưa từng đụng tới.
+    # Bốn nguồn mới về cùng lúc (lượt 5+6+7): `qwen_captions`, `qwen_ocr`,
+    # `dense_vectors`, `subtitles_dense`. Kho đi từ 7 lên 11 file, arm chạy được
+    # từ 8 lên 12. Bảng trọng số cũ được leo dốc trên một hệ KHÔNG có bốn arm
+    # đó, nên nó không còn mô tả hệ nào đang chạy.
     #
-    #                       dev RỘNG   dev hạngTB   dev trúng | held RỘNG  held HẸP
-    #   đều 1.0 (siglip=2)    0,529        12,6        32/42   |   0,493     0,393
-    #   sau leo dốc           0,610         9,4        34/42   |   0,563     0,430
+    # Coordinate ascent trên 163 câu `eval/queryset_dev.jsonl` (KIS+QA; 26 câu
+    # TRAKE để ngoài vì chúng ghép qua DANTE).
     #
-    # Heldout theo dạng đề: KIS 0,444→0,511 · QA 0,733→0,833 · TRAKE 0,156→0,178.
-    # Thắng ở CẢ BA dạng, nên đây không phải một cấu hình vừa khít bộ dev.
+    #                          RỘNG    HẸP    hạngTB   trúng
+    #   trọng số 24-08         0,530   0,412   15,2   124/163
+    #   sau leo dốc 28-08      0,583   0,442   12,1   129/163
+    #
+    # +0,053. **CHƯA CÔNG BỐ**: chỉnh trên dev, phải đo lại trên
+    # `eval/queryset_heldout.jsonl`.
+    #
+    # ĐỪNG so 0,583 với 0,610 của bảng cũ — 0,610 đo trên **42 câu** của bộ dev
+    # cũ, còn đây là **163 câu**. Hai bộ khác nhau thì hai con số không nói
+    # chuyện được với nhau; con số so được nằm ngay trên: 0,530 → 0,583 trên
+    # CÙNG 163 câu, CÙNG kho.
     #
     # Tái lập:
-    #   python scripts/tune_weights.py --config config/btc_b1.yaml \
-    #     --queryset eval/queryset_dev.jsonl --skip-types TRAKE \
-    #     --flat-root stores/flat --en-source auto \
-    #     --evidence-cache .cache/tune/dev-kisqa-v2.json
+    #   python scripts/tune_weights.py --config config/btc_b1.yaml
+    #     --queryset eval/queryset_dev.jsonl --skip-types TRAKE
+    #     --flat-root stores/flat --en-source auto
+    #     --evidence-cache .cache/tune/dev-kisqa-v3.json
     #
-    # Lưới quét (0 · 0,5 · 1 · 2 · 4) + OFF, dừng sau 3 vòng. Đây là cực trị ĐỊA
-    # PHƯƠNG trên lưới thô đó, không phải giá trị tối ưu; lưới mịn chưa quét.
+    # Cache PHẢI là file mới (`v3`). Vân tay của `--evidence-cache` chỉ bắt
+    # config/queryset/topk/en-source — KHÔNG bắt nội dung kho. Dùng lại `v2` là
+    # leo dốc trên kết quả của kho 8 arm và vẫn in ra một bảng đẹp.
+    #
+    # Lưới (0 · 0,5 · 1 · 2 · 4) + OFF, dừng sau 3 vòng. Cực trị ĐỊA PHƯƠNG trên
+    # lưới thô đó; lưới mịn vẫn chưa quét.
     #
     # ── vì sao từng con số ───────────────────────────────────────────────────
     clip: 1.0
     bm25: 1.0
 
-    # siglip 2.0 — arm gánh cả hệ. Chạy một mình: 34/42. Tắt nó đi thì Final tụt
-    # 0,529 → 0,305 và chỉ còn 17/42. Ba arm văn bản DÌM nó khi trọng số đều nhau.
-    # Quét: OFF 0,300 · 0,5 0,362 · 1,0 0,495 · 2,0 0,610 · 4,0 0,557.
+    # siglip 2.0 — vẫn là arm gánh cả hệ, và bốn arm mới KHÔNG thay được nó.
+    # Quét vòng 3: OFF 0,357 · 0,5 0,453 · 1,0 0,540 · 2,0 0,583 · 4,0 0,553.
+    # Tắt nó đi mất 0,226 — lớn hơn tổng đóng góp của mọi arm còn lại.
     siglip: 2.0
 
+    # bge_m3 1.0 — nhúng CAPTION Qwen2.5-VL. Lần đầu có dữ liệu để đo.
+    # Quét: OFF 0,533 · 0,5 0,568 · 1,0 0,583 · 2,0 0,567 · 4,0 0,503.
+    # Tắt mất 0,050 — arm mạnh thứ hai sau siglip.
     bge_m3: 1.0
-    subtitle_partial: 1.0
+
+    # subtitle_bge_m3 1.0 — nhúng PHỤ ĐỀ, arm thêm 28-08. Không phải bản sao của
+    # `bge_m3` (cái kia nhúng thứ NHÌN thấy, cái này nhúng thứ NGHE thấy) cũng
+    # không phải bản sao của hai arm subtitle kia (chúng khớp CHỮ, nó khớp NGHĨA).
+    # Quét vòng 1: 0,0 0,567 -> 1,0 0,575. Vòng 3: OFF 0,562 · 1,0 0,583.
+    subtitle_bge_m3: 1.0
+
+    # caption_qwen 1.0 — BM25 trên chính caption tiếng Anh mà `bge_m3` nhúng.
+    # Hai arm trên cùng một văn bản mà KHÔNG dìm nhau: quét OFF 0,568 · 1,0 0,583.
+    # Khớp chữ và khớp nghĩa bắt được hai loại câu khác nhau.
+    caption_qwen: 1.0
+
+    # ocr_qwen25 1.0 — OCR bằng Qwen2.5-VL. Quét: OFF 0,579 · 1,0 0,583.
+    # Đóng góp nhỏ hơn ba arm trên, nhưng DƯƠNG — khác hẳn hai bộ OCR cũ.
+    ocr_qwen25: 1.0
+
+    # subtitle_partial 1.0 -> 0.5. Quét vòng 3: 0,0 0,580 · 0,5 0,583 · 1,0 0,573.
+    # Bị `subtitle_bge_m3` chia việc: cùng nguồn `subtitles.json`, một bên khớp
+    # chữ một bên khớp nghĩa, nên giữ cả hai ở phiếu đầy đủ là đếm hai lần.
+    subtitle_partial: 0.5
+
+    # subtitle_exact 1.0 — KHÔNG THAM GIA lượt quét: trên 163 câu này nó không
+    # trả về gì. Khớp nguyên văn cả cụm sau chuẩn hoá gần như không bao giờ trúng
+    # một câu đề viết lại. Giữ 1.0 vì chưa có số để đổi, không phải vì đã đo.
     subtitle_exact: 1.0
+
+    # caption 1.0 — `dense_captions.json` của Bảo, KHÔNG tầng nào sinh ra nên arm
+    # vĩnh viễn tối trên kho này. Cũng không tham gia quét. Giữ khoá để đọc được
+    # bundle của Bảo nếu có (CLAUDE.md §4).
     caption: 1.0
 
-    # subtitle_bge_m3 0.0 — CHƯA ĐO. Nguồn `subtitles_dense.npz` (tầng
-    # `n7_bge_m3_subtitles`) mới có trên Volume, chưa gộp về kho phẳng.
-    #
-    # Để 0,0 chứ không bỏ khoá: `build_flat_dense_arms` mặc định `weights.get(
-    # name, 1.0)`, nên một arm mới KHÔNG khai ở đây sẽ lặng lẽ chạy ở trọng số
-    # 1,0 và đổi hệ đem đi thi mà không ai quyết định điều đó. Khai 0,0 là cách
-    # duy nhất để "đã thêm arm" khác với "đã chốt arm".
-    #
-    # `tune_weights.py` sẽ chốt con số thật trong lượt quét chung với
-    # `caption_qwen` + `ocr_qwen25` sau khi lượt 5+6 gộp xong.
-    subtitle_bge_m3: 0.0
-
-    # ocr 0.0 — easyocr. KHÔNG phải "arm vô dụng": chạy một mình nó vẫn 17/42.
-    # Nhưng trong hợp nhất nó đóng góp ÂM — bỏ đi Final tăng 0,529 → 0,571. Ba bộ
-    # OCR đọc cùng những khung ấy, nên cái nhiễu nhất chỉ thêm phiếu cho thứ hạng
-    # sai. Để 0.0 chứ không OFF: ứng viên của nó vẫn vào pool (bám đuôi, không
-    # ghi điểm), tức vẫn lấp được chỗ trống ở trần 100 dòng của BTC.
+    # ocr 0.0 — easyocr, giữ nguyên từ 24-08 và lượt quét mới xác nhận lại:
+    # vòng 3 OFF 0,583 · 0,5 0,566 · 1,0 0,531. Bật lên là mất điểm.
     ocr: 0.0
 
-    # ocr_paddle 0.5 — rụng dấu thanh (35,3% token có dấu) nên đọc kém, nhưng nó
-    # đọc SẠCH logo và đồng hồ mà hai bộ kia làm hỏng. Nửa phiếu là đúng vai đó.
-    ocr_paddle: 0.5
-    ocr_vietocr: 1.0
+    # ocr_paddle 0.5 -> 0.0. ĐẢO so với 24-08, và lý do là `ocr_qwen25`.
+    # Vai của paddle hồi đó là "đọc sạch logo và đồng hồ mà hai bộ kia làm hỏng";
+    # Qwen2.5-VL giờ làm việc đó tốt hơn, nên phiếu của paddle chỉ còn là nhiễu.
+    # Quét vòng 3: 0,0 0,583 · 0,5 0,568 · 1,0 0,544.
+    ocr_paddle: 0.0
 
-    # object 0.0 — bản có SỐ ĐẾM và VỊ TRÍ, đo ngày 24-08. Chạy một mình 2/42, và
-    # cả hai câu đó siglip đã tìm ra ở hạng 2 và 7. Trong hợp nhất: bỏ nó đi đổi
-    # Final +0,000; để 1.0 thì MẤT 0,024.
-    #
-    # Nguyên nhân KHÔNG phải "lặp nhãn làm tài liệu dài". Đo idf trên chính chỉ
-    # mục 168.009 tài liệu: `một` có mặt ở 91,0% (idf 0,09), `giữa` 89,4% (0,11),
-    # `trái`/`phải` ~63% (0,45/0,47) — hai thứ vừa thêm vào là STOPWORD. Và chúng
-    # là token TỰ DO: "bốn thức ăn" tách thành `bốn`+`thức`+`ăn`, nên `bốn` khớp
-    # mọi khung có bốn *thứ gì đó*. Muốn có tác dụng phải ghép vào nhãn thành một
-    # token (`ba_người`, `trái_người`) và viết lại truy vấn theo — chưa làm.
-    object: 0.0
+    # ocr_vietocr 1.0 -> 0.5. Cùng lý do: ba bộ OCR cũ giờ phải chia chỗ với
+    # `ocr_qwen25`. Quét vòng 3: 0,0 0,577 · 0,5 0,583 · 1,0 0,569.
+    ocr_vietocr: 0.5
 
-    # clap 0.5 — nó NGHE, không nhìn. Trên bộ dev toàn mô tả thị giác nó chạy một
-    # mình chỉ 1/42, và 0,5 thắng 1,0 đúng 0,005 tức trong vùng nhiễu. Chưa có
-    # câu hỏi nào về tiếng động để đo arm này bằng.
-    clap: 0.5
+    # object 0.0 -> 0.5. ĐẢO so với 24-08, lần đầu arm này ăn được trọng số.
+    # Không phải vì `object` đổi — nó vẫn là bản token ghép của 26-08. Đổi là ở
+    # NỀN: khi ba bộ OCR cũ hạ xuống, chỗ trống trong hợp nhất đủ để nửa phiếu
+    # của `object` có tác dụng. Quét vòng 2: 0,0 0,582 · 0,5 0,583 · 1,0 0,575.
+    # Chênh 0,001 — nằm trong vùng nhiễu, giữ vì leo dốc chọn nó, không vì tin nó.
+    object: 0.5
+
+    # clap 0.5 -> 0.0. Nó NGHE, và giờ `subtitle_bge_m3` cũng trả lời phần "câu
+    # này nói về cái gì" bằng một tín hiệu sạch hơn hẳn. Quét vòng 3: OFF 0,583 ·
+    # 0,5 0,582 · 1,0 0,579. Vẫn CHƯA có câu hỏi nào về tiếng động để đo arm này
+    # bằng — 0,0 nghĩa là "không đóng góp trên bộ đề này", không phải "vô dụng".
+    clap: 0.0
   rerank_budget_ms: 20000
   rerank_depth: 100
   temporal_window_frames: 640
