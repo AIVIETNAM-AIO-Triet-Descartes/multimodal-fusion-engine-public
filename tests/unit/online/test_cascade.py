@@ -5,6 +5,7 @@ relying on the old self-generated mock candidates.
 """
 
 import numpy as np
+import pytest
 
 from mfe.contracts.tools import Candidate
 from mfe.online.cascade import Cascade
@@ -125,3 +126,51 @@ def test_cascade_keeps_the_tail_for_deep_recall():
 
 def test_cascade_returns_empty_without_stores():
     assert Cascade().search(query_text="anything", top_k=5) == []
+
+
+class TestGhiDeTamConfig:
+    """`Cascade.overriding` — đường duy nhất để giao diện đổi tuỳ chọn theo câu.
+
+    `RetrievalConfig` là `frozen=True`, và dựng lại cả `Cascade` cho mỗi lựa
+    chọn là nạp lại 1,2 GB kho phẳng. Nên có context manager này, và nó phải
+    trả nguyên trạng KỂ CẢ khi truy vấn ném — một lượt ghi đè quên gỡ sẽ âm
+    thầm áp cho mọi câu sau đó.
+    """
+
+    def _cascade(self, **retrieval):
+        from types import SimpleNamespace
+
+        from mfe.online.cascade import Cascade
+
+        return Cascade(config=SimpleNamespace(retrieval=SimpleNamespace(**retrieval)))
+
+    def test_ghi_de_roi_tra_lai(self):
+        cascade = self._cascade(rerank_tiers=["vlm"], scene_order_weight=0.5)
+        assert cascade._cfg("rerank_tiers", None) == ["vlm"]
+        with cascade.overriding(rerank_tiers=[]):
+            assert cascade._cfg("rerank_tiers", None) == []
+        assert cascade._cfg("rerank_tiers", None) == ["vlm"]
+
+    def test_None_KHONG_ghi_de(self):
+        """`None` nghĩa là "theo cấp trên", không phải "đặt thành None".
+
+        `Options` dùng `None` cho ô chưa chọn, nên nếu nó ghi đè thì một phạm vi
+        bỏ trống sẽ XOÁ lựa chọn của cấp trên thay vì kế thừa.
+        """
+        cascade = self._cascade(rerank_tiers=["vlm"])
+        with cascade.overriding(rerank_tiers=None):
+            assert cascade._cfg("rerank_tiers", None) == ["vlm"]
+
+    def test_tra_lai_ke_ca_khi_nem(self):
+        cascade = self._cascade(scene_order_weight=0.5)
+        with pytest.raises(RuntimeError), cascade.overriding(scene_order_weight=0.0):
+            raise RuntimeError("truy van hong")
+        assert cascade._cfg("scene_order_weight", None) == 0.5
+
+    def test_long_nhau_thi_lop_trong_thang(self):
+        cascade = self._cascade(scene_order_weight=0.5)
+        with cascade.overriding(scene_order_weight=0.2):
+            with cascade.overriding(scene_order_weight=0.9):
+                assert cascade._cfg("scene_order_weight", None) == 0.9
+            assert cascade._cfg("scene_order_weight", None) == 0.2
+        assert cascade._cfg("scene_order_weight", None) == 0.5

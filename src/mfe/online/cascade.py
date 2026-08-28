@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
+from contextlib import contextmanager
 from typing import Any
 
 from mfe.contracts.tools import Candidate
@@ -111,6 +112,9 @@ class Cascade:
         #: Fills in `query_text_en` when the caller has none. None means the only
         #: English is hand-written, which is where the pilot started.
         self.translator = translator
+        #: Ghi đè tạm vài khoá `retrieval` — xem `overriding()`. Không phải chỗ
+        #: để cấu hình lâu dài; cấu hình thật nằm trong `config/*.yaml`.
+        self._overrides: dict[str, Any] = {}
         self.arms = self._build_arms(config)
         # Still no *default* reranker: stage C is the last word on order, so a
         # scorer that is missing, mis-wired or wrong is strictly worse than no
@@ -496,11 +500,31 @@ class Cascade:
         from mfe.online.keyframe_images import KeyframeImages  # noqa: PLC0415
         from mfe.online.rerank_tiers import apply_tiers, build_tier  # noqa: PLC0415
 
-        if getattr(self, "_tier_cache", None) is None:
-            self._tier_images = KeyframeImages()
+        # Khoá cache theo ĐÚNG danh sách tên: `overriding(rerank_tiers=[…])`
+        # đổi danh sách giữa hai lượt, và một cache chỉ-kiểm-None sẽ lặng lẽ
+        # chạy lại bộ tầng cũ — tức đo một cấu hình khác cấu hình đã chọn.
+        if getattr(self, "_tier_key", None) != tuple(names):
+            self._tier_images = getattr(self, "_tier_images", None) or KeyframeImages()
             self._tier_cache = [build_tier(name, self._tier_images) for name in names]
+            self._tier_key = tuple(names)
 
         depth = self._cfg("rerank_tier_depth", 20)
+
+        # Tải ảnh SONG SONG trước khi tầng chạy. `VlmTier` lấy ảnh bằng một list
+        # comprehension — tức 20 lượt tải TUẦN TỰ, mỗi lượt một vòng mạng tới
+        # Modal. Đo được trên bộ dò 14 câu: **21,0 s/câu khi ảnh đã cache** so
+        # với **55,5 s/câu khi chưa**, và chênh lệch đó gần như toàn bộ là mạng.
+        # Với 49 đề thì đó là ~23 phút so với ~45 phút cho một lượt nộp.
+        if any(getattr(t, "needs_images", False) for t in self._tier_cache):
+            ready = self._tier_images.prefetch(
+                [c.keyframe_id for c in grouped[:depth]]
+            )
+            if ready < min(depth, len(grouped)):
+                logger.warning(
+                    "chi lay duoc %d/%d anh cho rerank — ung vien thieu anh giu "
+                    "nguyen cho", ready, min(depth, len(grouped)),
+                )
+
         texts = None
         if self.flat_bundle is not None:
             def texts(keyframe_id: str) -> str:  # noqa: E306 - dong bo voi tren
@@ -608,7 +632,30 @@ class Cascade:
     # --- config plumbing ---------------------------------------------------
 
     def _cfg(self, name: str, default: Any) -> Any:
+        if name in self._overrides:
+            return self._overrides[name]
         return getattr(getattr(self.config, "retrieval", None), name, default)
+
+    @contextmanager
+    def overriding(self, **values: Any):
+        """Đổi tạm vài khoá `retrieval` cho **một** lượt truy vấn.
+
+        `RetrievalConfig` là `frozen=True` — đúng, vì cấu hình đem đi thi không
+        nên sửa được lúc chạy. Nhưng giao diện cần hỏi "câu này nếu tắt `vlm`
+        thì sao", và trả lời bằng cách dựng lại cả `Cascade` là nạp lại 1,2 GB
+        kho phẳng cho một lần bấm nút.
+
+        Là **context manager** chứ không phải một setter: một lượt ghi đè quên
+        gỡ sẽ âm thầm áp cho mọi câu sau đó, và bảng kết quả khi ấy trộn hai cấu
+        hình dưới một cái tên. `finally` trả lại nguyên trạng kể cả khi truy vấn
+        ném lỗi.
+        """
+        previous = dict(self._overrides)
+        self._overrides.update({k: v for k, v in values.items() if v is not None})
+        try:
+            yield self
+        finally:
+            self._overrides = previous
 
     def _build_arms(self, config: Any) -> ArmRegistry:
         """Register the arms this cascade can run.

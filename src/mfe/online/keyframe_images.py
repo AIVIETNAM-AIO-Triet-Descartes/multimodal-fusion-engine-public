@@ -122,6 +122,20 @@ class KeyframeImages:
             return None
         return target if target.is_file() and target.stat().st_size > 0 else None
 
+    def cached(self, keyframe_id: str) -> Path | None:
+        """Ảnh **đã có trên đĩa**, hoặc `None`. KHÔNG bao giờ ra mạng.
+
+        Dùng sau `prefetch`. `get` tải khi thiếu, và khi nó nằm trong một vòng
+        lặp dựng giao diện thì mỗi ảnh thiếu là một lượt tải **tuần tự** chèn
+        vào giữa việc vẽ trang — đúng thứ `prefetch` vừa bỏ công song song hoá
+        để tránh. Ở đây thiếu ảnh thì ô đó trống, và đó là lựa chọn đúng: người
+        vận hành cần trang hiện ra ngay, không cần đủ 100 ảnh.
+        """
+        target = self.local_path(keyframe_id)
+        if target is None or not target.is_file() or target.stat().st_size == 0:
+            return None
+        return target
+
     def prefetch(self, keyframe_ids: Iterable[str], workers: int = 8) -> int:
         """Tải song song. Trả về số ảnh sẵn sàng.
 

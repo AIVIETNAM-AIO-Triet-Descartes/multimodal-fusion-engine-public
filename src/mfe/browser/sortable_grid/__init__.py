@@ -53,6 +53,10 @@ def _data_uri(path: Path, width: int = THUMB_WIDTH) -> str | None:
     Trả `None` **im lặng** là đúng ở đây: thiếu một ảnh thì ô đó hiện chữ
     "khong co anh" và vẫn kéo được. Ném sẽ biến một ảnh lỗi thành một lưới
     trắng, tức mất luôn 99 ô còn xem được.
+
+    Đo được **14 ms/ảnh** (1,43 s cho 100 ảnh) — nhỏ một lần, nhưng Streamlit
+    vẽ lại toàn bộ trang sau **mỗi** thao tác, nên không cache thì mỗi lần kéo
+    một tấm là trả lại 1,4 giây cho 99 tấm không đổi. `_cached_uri` bọc nó.
     """
     try:
         from io import BytesIO  # noqa: PLC0415
@@ -67,6 +71,22 @@ def _data_uri(path: Path, width: int = THUMB_WIDTH) -> str | None:
         return "data:image/jpeg;base64," + base64.b64encode(buffer.getvalue()).decode()
     except Exception:  # noqa: BLE001 - anh hong thi o do khong co hinh, the thoi
         return None
+
+
+def _cached_uri(path_str: str, mtime: float, width: int) -> str | None:
+    """`_data_uri` có nhớ, khoá theo (đường dẫn, mtime, bề rộng).
+
+    `mtime` nằm trong khoá chứ không phải để trang trí: ảnh keyframe được tải
+    dần từ Modal vào đúng đường dẫn cũ, nên một khoá chỉ-đường-dẫn sẽ giữ mãi
+    bản đọc hỏng của lần tải dở.
+    """
+    import streamlit as st  # noqa: PLC0415
+
+    @st.cache_data(show_spinner=False, max_entries=2048)
+    def _inner(path_str: str, mtime: float, width: int) -> str | None:
+        return _data_uri(Path(path_str), width)
+
+    return _inner(path_str, mtime, width)
 
 
 def sortable_grid(
@@ -93,9 +113,15 @@ def sortable_grid(
     items = []
     for keyframe_id in keyframe_ids:
         path = image_of(keyframe_id)
+        src = None
+        if path is not None:
+            try:
+                src = _cached_uri(str(path), path.stat().st_mtime, THUMB_WIDTH)
+            except OSError:
+                src = None
         items.append({
             "id": keyframe_id,
-            "src": _data_uri(path) if path is not None else None,
+            "src": src,
             "was": machine_rank.get(keyframe_id),
         })
     return _declare()(items=items, cols=cols, key=key, default=None)
