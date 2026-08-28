@@ -78,9 +78,16 @@ SOURCE_FILE = {
 }
 
 #: Tên arm dense -> tên file phẳng.
+#:
+#: `bge_m3` đọc `dense_vectors.npz` (nhúng CAPTION) còn `subtitle_bge_m3` đọc
+#: `subtitles_dense.npz` (nhúng PHỤ ĐỀ). Cùng model, cùng số chiều 1024, khác
+#: nguồn — nên nếu hai dòng này trỏ nhầm nhau thì mọi thứ vẫn chạy, cosine vẫn
+#: hợp lý, và không có gì báo. Tên file lấy từ `Artifact` trong
+#: `mfe.offline.bundle`, đừng gõ lại theo trí nhớ.
 DENSE_FILE = {
     "siglip": "siglip_vectors.npz",
     "bge_m3": "dense_vectors.npz",
+    "subtitle_bge_m3": "subtitles_dense.npz",
     "clap": "audio_features.npz",
 }
 

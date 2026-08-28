@@ -16,7 +16,12 @@ tay từng câu.
 
 from __future__ import annotations
 
+import logging
 import re
+from collections.abc import Callable
+from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 #: Ngắt câu ở `.`, `?`, `!` rồi khoảng trắng. Không dùng thư viện tách câu: câu đề
 #: BTC là một hai câu ngắn, và một phụ thuộc mới cho việc này là không xứng.
@@ -52,3 +57,66 @@ def has_description(text: str) -> bool:
     trông y hệt một nút hỏng.
     """
     return strip_questions(text) != text.strip()
+
+
+@dataclass(frozen=True)
+class Rewrite:
+    """Câu hỏi đã được LLM viết lại thành chuỗi đi tìm.
+
+    `ok=False` nghĩa là **chưa viết lại được** — chưa có khoá, API hỏng, hoặc
+    model trả về thứ không đọc nổi. Lúc đó `vi`/`en` vẫn dùng được (đường luật
+    tự cắt), nhưng giao diện phải nói rõ là nó đang cầm bản dự phòng.
+    """
+
+    vi: str
+    en: str | None = None
+    ok: bool = False
+    reason: str | None = None
+
+
+def quest_rewrite(
+    question: str, decompose: Callable[[str], dict] | None = None
+) -> Rewrite:
+    """Viết lại một câu hỏi QA thành chuỗi tìm, qua `quest.quest_decompose`.
+
+    Vì sao cần một lớp bọc thay vì gọi thẳng
+    -----------------------------------------
+    `quest_decompose` **rơi về chính câu hỏi gốc mà không báo gì** khi API hỏng.
+    Một nút bấm xong không đổi gì trông y hệt một nút chạy rồi mà vô ích, nên
+    lớp này so kết quả với đầu vào và trả `ok=False` kèm lý do.
+
+    Phân vai hai chuỗi là điểm chính, không phải chi tiết: `search_hint` đã là
+    **tiếng Anh** nên đi thẳng vào tháp SigLIP, bỏ qua envit5 — mà envit5 chính
+    là một trong hai nguyên nhân làm `query-p1-9-qa` rơi khỏi pool. Còn
+    `ocr_keywords` là tiếng Việt, dành cho các arm BM25.
+
+    Đo trên 47 câu QA dev: pool 500 phủ **38/47** so với 36/47 của nguyên văn,
+    hạng trung vị **14** so với 18 — nhưng `R@5` **giảm** 17 → 15. Nó cứu các câu
+    hỏng nặng và làm hỏng vài câu đang tốt, nên đây là cần gạt **từng câu**,
+    không phải mặc định cho cả gói.
+
+    `decompose` tiêm được để test không cần mạng.
+    """
+    if decompose is None:
+        from mfe.online.quest import quest_decompose  # noqa: PLC0415
+
+        decompose = quest_decompose
+
+    question = question.strip()
+    try:
+        parts = decompose(question)
+    except Exception as err:  # noqa: BLE001 - chay trong vong ve giao dien
+        logger.warning("quest_rewrite: %s: %s", type(err).__name__, err)
+        return Rewrite(
+            vi=strip_questions(question),
+            reason=f"{type(err).__name__}: {str(err)[:160]}",
+        )
+
+    hint = str(parts.get("search_hint") or "").strip()
+    keywords = str(parts.get("ocr_keywords") or "").strip()
+    if not hint or hint == question:
+        return Rewrite(
+            vi=strip_questions(question),
+            reason="quest tra ve chinh cau hoi — API hong hoac thieu khoa",
+        )
+    return Rewrite(vi=keywords or strip_questions(question), en=hint, ok=True)

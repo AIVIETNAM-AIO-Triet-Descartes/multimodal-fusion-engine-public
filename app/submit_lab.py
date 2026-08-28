@@ -84,7 +84,11 @@ from mfe.online.query_options import (  # noqa: E402
     Options,
     resolve,
 )
-from mfe.online.query_text import has_description, strip_questions  # noqa: E402
+from mfe.online.query_text import (  # noqa: E402
+    has_description,
+    quest_rewrite,
+    strip_questions,
+)
 from mfe.online.rerank_tiers import DEFAULT_DEPTH  # noqa: E402
 from mfe.online.scene_order import MIN_CLAUSES_FOR_PRIOR, split_clauses  # noqa: E402
 from mfe.online.vqa_answer import DEFAULT_DEPTH as VQA_DEPTH  # noqa: E402
@@ -286,7 +290,7 @@ def render_search_editor(query: PackagedQuery, pool_k: int, penalty: float) -> N
                  "thành `the trucks wading` và làm hạng tụt từ 71 xuống 540.",
         )
 
-        buttons = st.columns([2, 2, 2])
+        buttons = st.columns([2, 2, 2, 2])
         with buttons[0], st.container():
             if st.button(
                 "▶️ Tìm lại câu này", key=f"research_{query.query_id}",
@@ -314,6 +318,23 @@ def render_search_editor(query: PackagedQuery, pool_k: int, penalty: float) -> N
                 st.session_state[f"search_fill_vi_{query.query_id}"] = cut
                 st.rerun()
         with buttons[2], st.container():
+            # Cùng kỷ luật với nút cắt: ĐIỀN, không tự chạy. Ở đây còn quan trọng
+            # hơn vì quest đo ra vừa cứu vừa hại — R@5 giảm 17→15 trên 47 câu QA
+            # dev trong khi pool 500 tăng 36→38. Người vận hành phải đọc chuỗi
+            # trước khi nó thành kết quả.
+            if st.button(
+                "🪄 Quest viết lại", key=f"quest_{query.query_id}",
+                help="Gọi LLM viết lại câu hỏi thành MÔ TẢ (tiếng Anh, vào thẳng "
+                     "SigLIP) + từ khoá tiếng Việt cho BM25. Chưa chạy — bấm "
+                     "Tìm lại sau khi xem. Tốn 1 request Gemini.",
+            ):
+                with st.spinner("Quest đang viết lại …"):
+                    rewrite = quest_rewrite(query.text)
+                st.session_state[f"quest_out_{query.query_id}"] = rewrite
+                st.session_state[f"search_fill_vi_{query.query_id}"] = rewrite.vi
+                st.session_state[f"search_fill_en_{query.query_id}"] = rewrite.en or ""
+                st.rerun()
+        with buttons[3], st.container():
             if override and st.button(
                 "↩️ Trả về câu đề gốc", key=f"reset_search_{query.query_id}"
             ):
@@ -324,8 +345,17 @@ def render_search_editor(query: PackagedQuery, pool_k: int, penalty: float) -> N
                 # sau, nhưng đường ghi thì vẫn là đường Streamlit cấm.
                 st.session_state[f"search_fill_vi_{query.query_id}"] = query.text
                 st.session_state[f"search_fill_en_{query.query_id}"] = ""
+                st.session_state.pop(f"quest_out_{query.query_id}", None)
                 run_queries([query], pool_k, penalty)
                 st.rerun()
+
+        rewrite = st.session_state.get(f"quest_out_{query.query_id}")
+        if rewrite is not None and not rewrite.ok:
+            # Quest hỏng mà im lặng thì hai ô vẫn được điền (bằng đường luật tự
+            # cắt) và trông y hệt một lượt quest thành công.
+            st.warning(f"🪄 Quest KHÔNG chạy — đã điền bản tự cắt. {rewrite.reason}")
+        elif rewrite is not None:
+            st.caption(":green[🪄 Quest đã viết lại — đọc hai ô trên rồi bấm Tìm lại.]")
 
     if override:
         # Ngoài expander, vì kết quả đang hiện KHÔNG phải của câu đề hiện phía

@@ -7,6 +7,10 @@ and because the models answer different questions:
              a Vietnamese query matches an English caption without any
              translation step, which is why this arm carries `query_language`
              "any" and why it was worth doing before SigLIP.
+    subtitle_bge_m3
+             The same model over the **subtitles**. Same checkpoint, different
+             source: one embeds what the frame shows, the other what the frame
+             says.
     siglip   google/siglip-so400m-patch14-384 over the keyframe images. Its text
              tower is English-only, so the arm declares "en" and stays dark
              unless the query supplies an English form.
@@ -38,6 +42,23 @@ DENSE_ARM_SPECS: dict[str, tuple[str, int, str, str, str]] = {
         "BAAI/bge-m3",
         "any",
         "Ngữ nghĩa caption qua BGE-M3 — đa ngữ, không cần dịch truy vấn",
+    ),
+    # Cùng model, KHÁC nguồn: `bge_m3` nhúng caption Qwen (thứ NHÌN thấy trong
+    # khung), còn arm này nhúng **phụ đề** (thứ NGHE thấy). Nên nó không phải
+    # bản sao — hai arm trả lời hai câu hỏi khác nhau, và câu QA của BTC hay hỏi
+    # về lời người dẫn chương trình nói hơn là về vật trong khung.
+    #
+    # Nó cũng KHÁC `subtitle_partial`/`subtitle_exact` trên cùng `subtitles.json`:
+    # hai arm kia khớp CHỮ (BM25 và nguyên văn), arm này khớp NGHĨA. Truy vấn
+    # "người dẫn nói về ô nhiễm không khí" không trùng token nào với "chất lượng
+    # môi trường đang xấu đi", nhưng cosine thì gần.
+    "subtitle_bge_m3": (
+        "aic_keyframe_subtitle_bge_m3_v1",
+        1024,
+        "BAAI/bge-m3",
+        "any",
+        "Ngữ nghĩa PHỤ ĐỀ qua BGE-M3 — khớp nghĩa, không khớp chữ như hai arm "
+        "subtitle kia",
     ),
     "siglip": (
         "aic_keyframe_siglip_v1",
