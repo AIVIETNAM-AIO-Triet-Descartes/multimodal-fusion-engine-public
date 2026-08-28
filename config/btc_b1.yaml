@@ -116,6 +116,33 @@ retrieval:
   #
   # GIÁ: 20 ảnh/câu gửi lên API tính phí. 49 đề = 980 ảnh, ~23 phút cho cả lượt
   # nộp. Chấp nhận được cho một lượt nộp, KHÔNG chấp nhận được cho vòng lặp thử.
+  #
+  # ═══ ⚠ 28-08 (tối): ĐO TRÊN HELDOUT, `vlm` MẤT ĐIỂM. CHỜ LEAD QUYẾT ═══
+  #
+  # Cùng config, cùng 60 câu heldout, đổi đúng dòng này:
+  #
+  #                RỘNG    HẸP  |  KIS    QA     TRAKE
+  #   vlm BẬT     0,509  0,393  | 0,500  0,667   0,285
+  #   vlm TẮT     0,536  0,413  | 0,517  0,733   0,285
+  #
+  # −0,027 RỘNG · −0,020 HẸP. Nặng nhất ở QA: 0,733 → 0,667.
+  #
+  # Đây là bằng chứng THỨ HAI cùng chiều. Thứ nhất: trên 14 câu KIS ba cảnh,
+  # thứ tự cảnh đưa 0,771 → 0,814 rồi `vlm` kéo về lại 0,771 (khối
+  # `rerank_skip_when_scene_order` bên dưới).
+  #
+  # Còn con số +0,015 làm cơ sở bật `vlm`? Nó đến từ `measure_rerank.py`, vốn
+  # gộp lại từ cache evidence và KHÔNG gọi `Cascade.search` — nên nó tả một hệ
+  # không có thứ tự cảnh, và giờ cũng không có bốn arm mới. Nghi ngờ này đã ghi
+  # sẵn ở khối dưới từ 28-08; giờ có số cho nó.
+  #
+  # Log cho thấy `vlm` dời 17–20 trong 20 ứng viên mỗi câu — nó VIẾT LẠI thứ tự
+  # đầu chứ không tinh chỉnh. Với một tầng chỉ +0,015 trên dev, mức can thiệp
+  # đó là đặt cược, không phải lớp an toàn.
+  #
+  # GIỮ NGUYÊN `[vlm]` cho tới khi Lead quyết lại — bật `vlm` là quyết định đã
+  # ký ngày 28-08, và đổi nó trong im lặng thì lần sau không ai biết bảng nào
+  # đang có hiệu lực. Muốn tắt: đổi dòng dưới thành `rerank_tiers: []`.
   rerank_tiers: [vlm]
   rerank_tier_depth: 20
 
@@ -152,8 +179,34 @@ retrieval:
     #   trọng số 24-08         0,530   0,412   15,2   124/163
     #   sau leo dốc 28-08      0,583   0,442   12,1   129/163
     #
-    # +0,053. **CHƯA CÔNG BỐ**: chỉnh trên dev, phải đo lại trên
-    # `eval/queryset_heldout.jsonl`.
+    # +0,053 trên dev.
+    #
+    # ── CÔNG BỐ trên heldout 60 câu (KIS 36 · QA 15 · TRAKE 9) ───────────────
+    #
+    # Bốn lượt, CÙNG kho, CÙNG bộ đề, mỗi lượt đổi đúng một thứ:
+    #
+    #                                  RỘNG    HẸP  |  KIS    QA    TRAKE
+    #   trọng số 24-08, vlm BẬT        0,499  0,369 | 0,478  0,680  0,285
+    #   trọng số 28-08, vlm BẬT        0,509  0,393 | 0,500  0,667  0,285
+    #   trọng số 28-08, vlm TẮT        0,536  0,413 | 0,517  0,733  0,285
+    #   ~8 arm cũ, vlm TẮT             0,541  0,391 | 0,533  0,693  0,320
+    #
+    # Đọc bảng này theo BA kết luận, và chỉ một trong ba là về trọng số:
+    #
+    # 1. Bảng mới THẮNG bảng cũ khi so đúng nền: +0,010 RỘNG · +0,024 HẸP.
+    # 2. `vlm` MẤT 0,027 RỘNG trên heldout — xem khối `rerank_tiers` ở trên.
+    # 3. Bốn arm mới KHÔNG cho lợi rõ trên RỘNG (0,541 → 0,536, trong vùng
+    #    nhiễu ±0,005 trên 60 câu) dù dev tăng +0,053. Chúng thắng ở HẸP
+    #    (+0,022) và ở QA (+0,040), thua ở KIS và TRAKE. Dev tăng nhiều hơn
+    #    heldout là dấu hiệu leo dốc bám bộ dev — chưa đủ để bỏ, đủ để KHÔNG
+    #    nói rằng bốn nguồn mới đã cải thiện hệ.
+    #
+    # ⚠ ĐỪNG so với con số 0,563 ghi hồi 24-08. Nó KHÔNG tái lập được từ chính
+    # bảng theo dạng của nó trên bộ heldout hiện tại:
+    #   (0,511×36 + 0,833×15 + 0,178×9)/60 = 0,542 ≠ 0,563
+    # trong khi bảng hôm nay khớp khít: (0,517×36 + 0,733×15 + 0,285×9)/60
+    # = 0,536. Tức 0,563 đo trên một bộ heldout KHÁC. So với nó là lặp lại đúng
+    # cái sai mà bảng rerank 24-08 đã mắc.
     #
     # ĐỪNG so 0,583 với 0,610 của bảng cũ — 0,610 đo trên **42 câu** của bộ dev
     # cũ, còn đây là **163 câu**. Hai bộ khác nhau thì hai con số không nói
