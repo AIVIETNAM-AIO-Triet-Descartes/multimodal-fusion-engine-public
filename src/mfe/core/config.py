@@ -233,6 +233,25 @@ class RetrievalConfig(_Section):
     #: deeper multiplies both cost and API spend without any measurement behind
     #: it — 20 images/query is already 980 images for a 49-query paper.
     rerank_tier_depth: int = Field(default=20, gt=0)
+    #: Skip `rerank_tiers` on queries where the scene-order prior fired.
+    #:
+    #: The two features **fight** on exactly the queries scene-order targets.
+    #: Measured 28-08 through `mfe.eval.official` on the 14 three-scene KIS
+    #: probes: scene-order alone 0.771 → **0.814**; adding `vlm` on top drops it
+    #: straight back to **0.771**. `vlm` moves 16 of the top 20 candidates per
+    #: query, so whatever scene-order lifted, it reshuffles away.
+    #:
+    #: The cause is structural, not a tuning accident: scene-order works at the
+    #: **video** level (it lifts the whole cluster of the video that tells the
+    #: story in order), while `vlm` reranks 20 frames knowing nothing about
+    #: sequence — it only compares one image against the query.
+    #:
+    #: **What is NOT yet measured:** `vlm` and scene-order together on the
+    #: 163-query dev set. `vlm`'s +0.015 came from `measure_rerank.py`, which
+    #: fuses a cached evidence set and never calls `Cascade.search` — so that
+    #: number describes a system with **no** scene order. Until that run exists,
+    #: skipping is the conservative reading of the only evidence we have.
+    rerank_skip_when_scene_order: bool = True
     clip_checkpoint: str = Field(
         default="clip-ViT-B-32",
         description="Image tower; named in official PDF §3, verified at cosine ~0.999",

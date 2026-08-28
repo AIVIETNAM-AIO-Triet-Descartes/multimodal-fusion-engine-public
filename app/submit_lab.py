@@ -44,6 +44,7 @@ import streamlit as st
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from mfe.browser.sortable_grid import sortable_grid  # noqa: E402
 from mfe.contracts.errors import ContractError  # noqa: E402
 from mfe.contracts.tools import Candidate  # noqa: E402
 from mfe.core.config import load_config  # noqa: E402
@@ -76,12 +77,6 @@ st.set_page_config(page_title="Bàn nộp — AIC 2026", page_icon="📦", layou
 for _key, _value in load_dotenv(ROOT / ".env").items():
     os.environ.setdefault(_key, _value)
 
-try:
-    from streamlit_sortables import sort_items
-
-    HAS_SORTABLES = True
-except ImportError:  # pragma: no cover - phu thuoc tuy chon
-    HAS_SORTABLES = False
 
 
 # ---------------------------------------------------------------------------
@@ -266,12 +261,6 @@ penalty = st.sidebar.select_slider(
     options=[0.0, 0.001, 0.003, 0.01, 0.03], value=dante.PENALTY,
 )
 
-if not HAS_SORTABLES:
-    st.sidebar.warning(
-        "Chưa có `streamlit-sortables` nên phần kéo thả thay bằng ô nhập thứ tự.\n\n"
-        "`pip install --no-deps streamlit-sortables`"
-    )
-
 # ---------------------------------------------------------------------------
 # Thân
 # ---------------------------------------------------------------------------
@@ -373,35 +362,41 @@ if query.type == "TRAKE":
         )
 else:
     ranked = ordered(picked_id, result)
-    depth = st.number_input(
-        "Xếp tay bao nhiêu dòng đầu", 5, min(100, len(ranked)),
-        min(20, len(ranked)), 5,
-        help="Chỉ phần đầu đáng xếp: R@k thưởng nặng nhất ở k nhỏ.",
+    machine_rank = {c.keyframe_id: i for i, c in enumerate(result, start=1)}
+
+    # Mặc định phủ CẢ 100 dòng nộp. R@k thưởng nặng nhất ở k nhỏ, nhưng k chạy
+    # tới 100 và đáp án đúng ở dòng 100 vẫn ăn 1/5 số điểm — nên không có lý do
+    # để chặn người vận hành ở dòng 20.
+    depth = st.slider(
+        "Xếp tay bao nhiêu dòng đầu", 10, min(MAX_ANSWERS_PER_QUERY, len(ranked)),
+        min(MAX_ANSWERS_PER_QUERY, len(ranked)), 10,
+        help="Cả 100 dòng đều vào Final Score (k = 1, 5, 20, 50, 100).",
     )
     head = ranked[: int(depth)]
 
-    st.subheader(f"✋ Xếp tay — {int(depth)} dòng đầu")
-    if HAS_SORTABLES:
-        new_order = sort_items(
-            [c.keyframe_id for c in head],
-            direction="vertical", key=f"sort_{picked_id}_{depth}",
-        )
-        if new_order and new_order != [c.keyframe_id for c in head]:
-            st.session_state[f"order_{picked_id}"] = new_order + [
-                c.keyframe_id for c in ranked[int(depth):]
-            ]
-            st.rerun()
-    else:
-        typed = st.text_area(
-            "Thứ tự mong muốn — mỗi dòng một `keyframe_id`",
-            value="\n".join(c.keyframe_id for c in head), height=240,
-            key=f"typed_{picked_id}",
-        )
-        if st.button("Áp thứ tự này", key=f"apply_{picked_id}"):
-            st.session_state[f"order_{picked_id}"] = [
-                line.strip() for line in typed.splitlines() if line.strip()
-            ] + [c.keyframe_id for c in ranked[int(depth):]]
-            st.rerun()
+    st.subheader(f"✋ Kéo thả để xếp hạng — {len(head)} khung đầu")
+    st.caption(
+        "Kéo **chính tấm ảnh** sang chỗ mới. Mép đỏ báo nó sẽ chèn vào trước hay "
+        "sau ô đang thả. Số góc trái là hạng nộp; `✋ máy N` chỉ hiện ở khung bạn "
+        "đã dời."
+    )
+    if show_images:
+        with st.spinner(f"Tải {len(head)} ảnh …"):
+            images.prefetch([c.keyframe_id for c in head])
+
+    dragged = sortable_grid(
+        [c.keyframe_id for c in head],
+        images.get if show_images else (lambda _: None),
+        machine_rank=machine_rank, cols=grid_cols,
+        key=f"grid_{picked_id}_{depth}",
+    )
+    if dragged and dragged != [c.keyframe_id for c in head]:
+        # Phần đuôi ngoài `depth` giữ nguyên thứ tự máy và vẫn được nộp — cắt nó
+        # đi là vứt bốn trong năm số hạng của Final Score.
+        st.session_state[f"order_{picked_id}"] = list(dragged) + [
+            c.keyframe_id for c in ranked[int(depth):]
+        ]
+        st.rerun()
 
     if st.session_state.get(f"order_{picked_id}") and st.button(
         "↩️ Trả về thứ tự máy", key=f"reset_{picked_id}"
@@ -409,16 +404,8 @@ else:
         st.session_state.pop(f"order_{picked_id}")
         st.rerun()
 
-    # --- lưới ảnh -----------------------------------------------------------
-    st.subheader(f"🖼 Keyframe hệ thống truy được ({len(ranked)})")
-    machine_rank = {c.keyframe_id: i for i, c in enumerate(result, start=1)}
-    columns = st.columns(grid_cols)
-    for position, candidate in enumerate(ranked[: int(pool_k)], start=1):
-        with columns[(position - 1) % grid_cols]:
-            if show_images:
-                path = images.get(candidate.keyframe_id)
-                if path:
-                    st.image(str(path), width="stretch")
+    with st.expander(f"📄 Toạ độ nộp — {len(ranked)} khung"):
+        for position, candidate in enumerate(ranked[: int(pool_k)], start=1):
             was = machine_rank.get(candidate.keyframe_id)
             moved = f"  ✋ (máy xếp {was})" if was and was != position else ""
             try:
@@ -427,7 +414,7 @@ else:
             except Exception:  # noqa: BLE001
                 frame_text = ":red[không tra được frame_id]"
             st.markdown(
-                f"**{position}.** `{candidate.keyframe_id}`{moved}  \n{frame_text}"
+                f"**{position}.** `{candidate.keyframe_id}` — {frame_text}{moved}"
             )
 
 # --- xuất -------------------------------------------------------------------

@@ -364,3 +364,48 @@ def test_video_khong_co_prior_giu_nguyen_diem():
 
 def _words(text: str) -> int:
     return len([w for w in text.split() if any(ch.isalpha() for ch in w)])
+
+
+# --------------------------------------------------------------------------
+# Xung đột với rerank_tiers
+# --------------------------------------------------------------------------
+
+
+class TestBoQuaRerankKhiCoThuTuCanh:
+    """`vlm` xoá đúng phần thứ tự cảnh vừa được — nên nó phải ngồi ngoài.
+
+    Đo qua `mfe.eval.official` trên 14 câu KIS ba cảnh: thứ tự cảnh một mình
+    0,771 -> 0,814; thêm `vlm` lên trên thì tụt thẳng về 0,771. `vlm` dời 16/20
+    ứng viên mỗi câu, nên phần thứ tự cảnh đẩy lên nó xáo lại hết.
+    """
+
+    def _cascade(self, **retrieval):
+        from types import SimpleNamespace
+
+        from mfe.online.cascade import Cascade
+
+        config = SimpleNamespace(retrieval=SimpleNamespace(**retrieval))
+        return Cascade(config=config)
+
+    def test_cau_CO_thu_tu_canh_thi_bo_qua_tang(self):
+        cascade = self._cascade(rerank_tiers=["vlm"], rerank_skip_when_scene_order=True)
+        items = [_cand("L01_V001", 1, 0.9)]
+        out = cascade._rerank_tiers(items, "x", None, scene_ordered=True)
+        assert out == items
+
+    def test_cau_KHONG_co_thu_tu_canh_thi_tang_van_chay(self):
+        """Nếu cửa thoát nuốt cả câu thường thì `vlm` thành vô hiệu hoàn toàn,
+        và bảng đo +0,015 trên 163 câu không còn đúng với hệ đang chạy."""
+        cascade = self._cascade(rerank_tiers=["khong_co_tang_nao"])
+        items = [_cand("L01_V001", 1, 0.9)]
+        # Ten tang la -> `build_tier` nem. Nem tuc la ĐA di qua cua thoat.
+        with pytest.raises(ValueError, match="khong co tang rerank"):
+            cascade._rerank_tiers(items, "x", None, scene_ordered=False)
+
+    def test_tat_cua_thoat_thi_tang_chay_ca_tren_cau_thu_tu_canh(self):
+        cascade = self._cascade(
+            rerank_tiers=["khong_co_tang_nao"], rerank_skip_when_scene_order=False
+        )
+        items = [_cand("L01_V001", 1, 0.9)]
+        with pytest.raises(ValueError):
+            cascade._rerank_tiers(items, "x", None, scene_ordered=True)

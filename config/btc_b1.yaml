@@ -119,6 +119,20 @@ retrieval:
   rerank_tiers: [vlm]
   rerank_tier_depth: 20
 
+  # `vlm` NGỒI NGOÀI câu đã có thiên kiến thứ tự cảnh — hai bên giẫm chân nhau.
+  # Đo qua `mfe.eval.official` trên 14 câu KIS ba cảnh:
+  #   thứ tự cảnh tắt, vlm tắt   0,771
+  #   thứ tự cảnh BẬT, vlm tắt   0,814
+  #   thứ tự cảnh bật, vlm BẬT   0,771   <- vlm xoá sạch phần vừa được
+  # `vlm` dời 16/20 ứng viên mỗi câu. Thứ tự cảnh làm việc ở mức VIDEO (đẩy cả
+  # cụm khung của video kể đúng chuyện lên), còn `vlm` xếp lại 20 khung đầu mà
+  # không biết gì về trình tự — nó chỉ so từng ảnh với câu truy vấn.
+  #
+  # CHƯA ĐO: `vlm` + thứ tự cảnh trên 163 câu dev. Con số +0,015 của `vlm` đến
+  # từ `measure_rerank.py`, vốn gộp cache evidence và KHÔNG gọi `Cascade.search`
+  # — tức nó tả một hệ KHÔNG có thứ tự cảnh. Xem `docs/triet/handoff.md` §K.
+  rerank_skip_when_scene_order: true
+
   # KHAI ĐỦ mọi arm, kể cả cái đang bằng 1.0 và cái chưa có dữ liệu.
   # `tune_weights.py` chỉ quét những khoá CÓ MẶT trong file này, nên arm không
   # khai là arm không bao giờ được chỉnh.

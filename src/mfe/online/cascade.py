@@ -254,7 +254,7 @@ class Cascade:
         query_text_en: str | None = None,
         ocr_keywords: str | None = None,
         clauses: Sequence[str] | None = None,
-    ) -> list[Candidate]:
+    ) -> tuple[list[Candidate], bool]:
         """Run stage A -> B -> C and return a ranked candidate list.
 
         Args:
@@ -287,10 +287,14 @@ class Cascade:
         if not coarse:
             return []
 
-        coarse = self._scene_order(coarse, query_text, run_id=run_id, clauses=clauses)
+        coarse, scene_ordered = self._scene_order(
+            coarse, query_text, run_id=run_id, clauses=clauses
+        )
         grouped = self.group(coarse)
 
-        grouped = self._rerank_tiers(grouped, query_text, query_text_en)
+        grouped = self._rerank_tiers(
+            grouped, query_text, query_text_en, scene_ordered=scene_ordered
+        )
 
         if self.reranker is None:
             return grouped[:top_k]
@@ -372,7 +376,7 @@ class Cascade:
     def _scene_order(
         self, coarse: list[Candidate], query_text: str, run_id: str,
         clauses: Sequence[str] | None = None,
-    ) -> list[Candidate]:
+    ) -> tuple[list[Candidate], bool]:
         """Thiên kiến thứ tự cảnh cho KIS nhiều cảnh (`mfe.online.scene_order`).
 
         Đề KIS thật của BTC thường tả một *đoạn* chứ không một khung — 21/38 đề
@@ -405,7 +409,7 @@ class Cascade:
         """
         weight = float(self._cfg("scene_order_weight", 0.0) or 0.0)
         if weight <= 0:
-            return coarse
+            return coarse, False
 
         from mfe.online import scene_order  # noqa: PLC0415 - chi khi bat
 
@@ -417,7 +421,7 @@ class Cascade:
             else scene_order.split_clauses(query_text)
         )
         if len(split) < scene_order.MIN_CLAUSES_FOR_PRIOR:
-            return coarse
+            return coarse, False
 
         relational = self._relational_map()
         if relational is None:
@@ -455,15 +459,16 @@ class Cascade:
 
         prior = scene_order.video_prior(per_clause)
         if not prior:
-            return coarse
+            return coarse, False
         logger.info(
             "thu tu canh: %d menh de, %d video ghep duoc chuoi tang dan",
             len(split), len(prior),
         )
-        return scene_order.apply_prior(coarse, prior, weight=weight)
+        return scene_order.apply_prior(coarse, prior, weight=weight), True
 
     def _rerank_tiers(
-        self, grouped: list[Candidate], query_text: str, query_text_en: str | None
+        self, grouped: list[Candidate], query_text: str, query_text_en: str | None,
+        scene_ordered: bool = False,
     ) -> list[Candidate]:
         """Các tầng trong `retrieval.rerank_tiers`, chạy theo đúng thứ tự khai.
 
@@ -480,6 +485,12 @@ class Cascade:
         """
         names = self._cfg("rerank_tiers", None) or []
         if not names:
+            return grouped
+        if scene_ordered and self._cfg("rerank_skip_when_scene_order", True):
+            logger.info(
+                "bo qua rerank_tiers: cau nay da co thien kien thu tu canh "
+                "(xem retrieval.rerank_skip_when_scene_order)"
+            )
             return grouped
 
         from mfe.online.keyframe_images import KeyframeImages  # noqa: PLC0415

@@ -1,0 +1,172 @@
+<!doctype html>
+<meta charset="utf-8" />
+<!--
+  Lưới ảnh KÉO THẢ được — component Streamlit tự viết.
+
+  Vì sao không dùng `streamlit-sortables`: nó render item ra TEXT thuần (kiểm
+  trong bundle của nó, `dangerouslySetInnerHTML` chỉ là nội bộ React). Kéo một
+  danh sách `keyframe_id` đặt cạnh lưới ảnh nghĩa là người vận hành phải tự đối
+  chiếu chữ với hình — đúng thứ cần tránh khi xếp 100 khung.
+
+  Giao thức component là postMessage thuần, không cần build step:
+    streamlit:componentReady   -> báo sẵn sàng
+    streamlit:setFrameHeight   -> xin đúng chiều cao
+    streamlit:setComponentValue-> trả thứ tự mới về Python
+  Sự kiện `streamlit:render` mang `args` từ Python xuống.
+
+  HTML5 drag-and-drop chứ không phải thư viện: 100 ô ảnh, một trang, không phụ
+  thuộc mạng. Kho phẳng chạy offline được thì giao diện cũng nên vậy.
+-->
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; font-family: "Source Sans Pro", system-ui, sans-serif; }
+  #grid {
+    display: grid; gap: 8px;
+    grid-template-columns: repeat(var(--cols, 5), minmax(0, 1fr));
+  }
+  .cell {
+    position: relative; border: 2px solid transparent; border-radius: 8px;
+    overflow: hidden; cursor: grab; background: #8883;
+    transition: border-color .12s, opacity .12s;
+  }
+  .cell:active { cursor: grabbing; }
+  .cell img { display: block; width: 100%; aspect-ratio: 16/9; object-fit: cover; }
+  .cell.dragging { opacity: .35; }
+  /* Chỉ tô mép ĐANG thả vào, không tô cả ô: người kéo cần biết nó chèn vào
+     TRƯỚC hay SAU ô này, mà một viền quanh ô thì không nói được điều đó. */
+  .cell.over-before { border-left-color: #ff4b4b; }
+  .cell.over-after  { border-right-color: #ff4b4b; }
+  .bar {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    display: flex; justify-content: space-between; gap: 4px;
+    padding: 2px 5px; font-size: 11px; line-height: 1.4;
+    background: #000a; color: #fff;
+  }
+  .rank { font-weight: 700; }
+  /* Hạng máy xếp chỉ hiện khi KHÁC hạng hiện tại — một cột số trùng nhau ở mọi
+     ô là nhiễu, còn một con số lệch là thông tin. */
+  .was { opacity: .75; }
+  .id { font-size: 10px; opacity: .6; overflow: hidden; text-overflow: ellipsis;
+        white-space: nowrap; }
+  #empty { padding: 12px; opacity: .7; font-size: 13px; }
+</style>
+
+<div id="grid"></div>
+<div id="empty" hidden>Chưa có ứng viên nào để xếp.</div>
+
+<script>
+const send = (type, extra) =>
+  window.parent.postMessage({ isStreamlitMessage: true, type, ...extra }, "*");
+
+const setValue = (value) =>
+  send("streamlit:setComponentValue", { value, dataType: "json" });
+
+let order = [];      // keyframe_id theo thứ tự hiện tại
+let dragId = null;
+
+function fit() {
+  send("streamlit:setFrameHeight", {
+    height: document.documentElement.scrollHeight,
+  });
+}
+
+// Chiều RỘNG iframe do Streamlit gán, và nó đến SAU lần vẽ đầu. Đo chiều cao
+// một lần lúc render thì gặp lúc lưới còn rộng 16px: `grid-template-columns`
+// ra `0px 0px 0px 0px`, ảnh cao 0, và iframe bị chốt ở 70px. Nó tự sửa ở lần
+// vẽ lại kế tiếp — nghĩa là lần tải đầu tiên người dùng thấy một lưới dẹp mà
+// không hiểu vì sao. Đo lại mỗi khi kích thước đổi thì không còn cửa nào cho
+// cuộc đua đó.
+new ResizeObserver(fit).observe(document.documentElement);
+window.addEventListener("resize", fit);
+
+function paint(items, cols) {
+  const grid = document.getElementById("grid");
+  grid.style.setProperty("--cols", cols);
+  grid.innerHTML = "";
+  document.getElementById("empty").hidden = items.length > 0;
+
+  order.forEach((id, index) => {
+    const item = items.find((i) => i.id === id);
+    if (!item) return;
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    cell.draggable = true;
+    cell.dataset.id = id;
+
+    const bar =
+      `<div class="bar"><span class="rank">${index + 1}</span>` +
+      (item.was && item.was !== index + 1
+        ? `<span class="was">✋ máy ${item.was}</span>`
+        : "") +
+      `</div>`;
+    cell.innerHTML = item.src
+      ? `<img src="${item.src}" alt="">${bar}<div class="id">${id}</div>`
+      : `<div style="aspect-ratio:16/9;display:grid;place-items:center;
+           font-size:11px;opacity:.6">khong co anh</div>${bar}
+         <div class="id">${id}</div>`;
+    grid.appendChild(cell);
+  });
+  fit();
+}
+
+document.addEventListener("dragstart", (e) => {
+  const cell = e.target.closest(".cell");
+  if (!cell) return;
+  dragId = cell.dataset.id;
+  cell.classList.add("dragging");
+  e.dataTransfer.effectAllowed = "move";
+});
+
+document.addEventListener("dragend", () => {
+  dragId = null;
+  document.querySelectorAll(".cell").forEach((c) =>
+    c.classList.remove("dragging", "over-before", "over-after"));
+});
+
+document.addEventListener("dragover", (e) => {
+  const cell = e.target.closest(".cell");
+  if (!cell || !dragId) return;
+  e.preventDefault();
+  const box = cell.getBoundingClientRect();
+  const before = e.clientX < box.left + box.width / 2;
+  document.querySelectorAll(".cell").forEach((c) =>
+    c.classList.remove("over-before", "over-after"));
+  cell.classList.add(before ? "over-before" : "over-after");
+});
+
+document.addEventListener("drop", (e) => {
+  const cell = e.target.closest(".cell");
+  if (!cell || !dragId) return;
+  e.preventDefault();
+  const targetId = cell.dataset.id;
+  if (targetId === dragId) return;
+
+  const box = cell.getBoundingClientRect();
+  const before = e.clientX < box.left + box.width / 2;
+  const from = order.indexOf(dragId);
+  order.splice(from, 1);
+  // Tính lại chỉ số ĐÍCH sau khi đã rút phần tử ra — tính trước khi rút thì
+  // mọi lần kéo sang phải đều lệch đúng một ô, và lỗi đó rất khó thấy.
+  const at = order.indexOf(targetId);
+  order.splice(before ? at : at + 1, 0, dragId);
+
+  setValue(order);
+  window.__items && paint(window.__items, window.__cols);
+});
+
+window.addEventListener("message", (event) => {
+  if (event.data.type !== "streamlit:render") return;
+  const args = event.data.args || {};
+  const items = args.items || [];
+  window.__items = items;
+  window.__cols = args.cols || 5;
+
+  // Thứ tự đến từ Python là NGUỒN SỰ THẬT mỗi lần vẽ lại. Giữ `order` cũ sẽ
+  // làm lưới hiện một thứ tự mà Python không biết, và bài nộp đi theo Python.
+  order = items.map((i) => i.id);
+  paint(items, window.__cols);
+});
+
+send("streamlit:componentReady", { apiVersion: 1 });
+fit();
+</script>
