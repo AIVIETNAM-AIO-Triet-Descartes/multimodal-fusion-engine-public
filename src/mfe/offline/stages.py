@@ -2031,20 +2031,21 @@ def stage_n7_bge_m3_subtitles(ctx: StageContext) -> dict:
     local = ctx.workdir / f"subtitles_{ctx.video_id}.json"
     ctx.writer.transport.get(ctx.layout.part("subtitles", ctx.video_id), local)
     captions = json.loads(local.read_text(encoding="utf-8"))
-    if not captions:
-        raise RuntimeError(
-            f"{ctx.video_id}: chua co subtitles — chay n2_subtitles truoc"
-        )
 
     keys = sorted(captions)
-    model = cached_model(f"bge-m3 {checkpoint}", lambda: SentenceTransformer(checkpoint))
-    with Stopwatch() as timer:
-        vectors = model.encode(
-            [captions[k] for k in keys],
-            normalize_embeddings=True,
-            batch_size=ctx.params.get("batch_size", 16),
-            convert_to_numpy=True,
-        )
+    if not keys:
+        vectors = np.zeros((0, 1024), dtype=np.float32)
+        elapsed = 0.0
+    else:
+        model = cached_model(f"bge-m3 {checkpoint}", lambda: SentenceTransformer(checkpoint))
+        with Stopwatch() as timer:
+            vectors = model.encode(
+                [captions[k] for k in keys],
+                normalize_embeddings=True,
+                batch_size=ctx.params.get("batch_size", 16),
+                convert_to_numpy=True,
+            )
+        elapsed = timer.seconds
 
     return ctx.writer.write_vector_part(
         "subtitles_dense",
@@ -2053,7 +2054,7 @@ def stage_n7_bge_m3_subtitles(ctx: StageContext) -> dict:
         np.asarray(vectors, dtype=np.float32),
         model=checkpoint,
         params={"normalize": True, "source": "subtitles"},
-        elapsed_s=timer.seconds,
+        elapsed_s=elapsed,
     )
 
 
