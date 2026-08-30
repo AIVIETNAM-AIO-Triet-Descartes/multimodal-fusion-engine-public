@@ -9,6 +9,16 @@ members:
   - bao
   - dat
 
+# A worker is a disjoint, deterministic byte-balanced slice of one owner's
+# videos. Keep MEMBER as the real owner for provenance/merge; change WORKER in
+# the notebook to run multiple permitted Kaggle sessions without collisions.
+workers:
+  triet: [triet1, triet2]
+  trong: [trong1, trong2]
+  quang: [quang1, quang2, quang3, quang4]
+  bao: [bao1, bao2]
+  dat: [dat1, dat2]
+
 source:
   catalogue: config/zips_batch1.yaml
   assignment_key: assignment

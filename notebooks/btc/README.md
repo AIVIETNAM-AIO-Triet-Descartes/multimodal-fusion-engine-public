@@ -14,6 +14,13 @@ kiểm tra kích thước và nhận biết notebook đang dùng cache hay fallb
 Chạy theo thứ tự, đổi `MEMBER` ở ô đầu thành `"trong"` hoặc `"quang"`. Cả ba lượt **dùng chung
 một cách chia người**, nên tên bạn cho ra cùng tập video ở mọi lượt.
 
+Notebook `10` là research producer riêng: nó đọc `keyframes-btc` chỉ để lấy mapping/FPS và ghi
+shot proposals sang volume `keyframe-augmentation-research`, không sửa bundle BTC. Notebook này
+dùng `MEMBER` là owner thật và `WORKER` là slice disjoint; Trọng dùng `trong1`/`trong2`, Quang
+dùng `quang1`–`quang4`, các owner còn lại dùng hai worker theo config. Nếu BTC host bị block,
+attach private Kaggle Dataset chứa MP4 đúng kích thước; notebook sẽ ưu tiên đọc `/kaggle/input`
+read-only trước HTTP Range.
+
 | | Notebook | Tầng | Shards | Requirements |
 |---|---|---|---|---|
 | 1 | `02-keyframes-btc-import.ipynb` | `n0_import_btc` | `…_btc.yaml` | `../requirements-kaggle-nomodel.txt` |
@@ -22,6 +29,7 @@ một cách chia người**, nên tên bạn cho ra cùng tập video ở mọi 
 | 4 | `06-btc-paddle-vietocr.ipynb` | `n5_ocr_paddle`, `n5_ocr_vietocr` | `…_btc_ocr2.yaml` | `../requirements-kaggle-btc-paddle-vietocr.txt` |
 | 5 | `08-btc-caption-ocr-qwen25.ipynb` | `n6_caption_qwen`, `n6_ocr_qwen25` | `…_btc_caption.yaml` | `../requirements-kaggle-btc-caption.txt` |
 | 6 | `09-btc-bge-m3-embed.ipynb` | `n6_bge_m3` | `…_btc_bge.yaml` | `../requirements-kaggle-btc-bge.txt` |
+| 7 | `10-btc-keyframes-argumentation-final.ipynb` | research shot proposals | `keyframe_augmentation_kaggle.yaml` | `../requirements-kaggle-keyframe-augmentation.txt` |
 
 **Mỗi lượt một file shards riêng, và đó không phải sự lộn xộn.** `merge_bundle.py` đòi ĐỦ mảnh
 cho mọi tầng có trong `plan.stages`; gộp hết vào một file là bundle bị từ chối cho tới khi lượt
