@@ -6,7 +6,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[4]
-NOTEBOOK = ROOT / "notebooks/btc/10-btc-keyframes-argumentation-final.ipynb"
+NOTEBOOK = ROOT / "notebooks/btc/10-btc-keyframes-argumentation-quang.ipynb"
 CONFIG = ROOT / "config/keyframe_augmentation_kaggle.yaml"
 
 
