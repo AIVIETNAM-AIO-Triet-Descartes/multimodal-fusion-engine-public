@@ -1,0 +1,28 @@
+# V1 research policy.  Values are locked on DEV by Gate 0/1 and never tuned on
+# held-out.  The 3% value is a pilot guardrail, not a scientific constant.
+protocol_version: btc-augmentation-v1
+dataset_version: aic2026-batch1-local-sample-16
+split_version: eval-dev-heldout-2026-08-27
+seed: 20260827
+guardrail_ratio: 0.03
+
+# Starting point; Gate 1 selects from the grids below on DEV under the cap.
+target_gap_seconds: 4.0
+k_max: 6
+target_gap_grid: [2.0, 4.0, 6.0]
+k_max_grid: [2, 4, 6]
+
+micro_shot_seconds: 0.8
+interior_margin_seconds: 0.25
+interior_margin_ratio: 0.10
+detector_confidence_min: 0.50
+
+# Locked before Gate 2.  Zero margin means no measured global regression is
+# accepted by the one-sided 95% cluster-bootstrap lower bound.
+non_inferiority_margin: 0.0
+max_p95_latency_increase_ratio: 0.10
+bootstrap_samples: 2000
+
+# Disabled until DEV human-audit calibration exists. Exact identity/SHA dedup
+# always runs and always protects BTC.
+phash_max_distance: null

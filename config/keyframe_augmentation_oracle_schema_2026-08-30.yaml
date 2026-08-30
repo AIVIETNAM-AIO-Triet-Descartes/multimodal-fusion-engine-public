@@ -1,0 +1,71 @@
+schema_version: 2
+schema_id: keyframe-augmentation-o1-evidence-v2
+status: VALIDATOR_READY_EXECUTION_BLOCKED
+row_model: mfe.offline.keyframe_augmentation.oracle.OracleEvidenceRow
+required_fields:
+  - query_id
+  - query_type
+  - video_id
+  - gt_interval_inclusive
+  - best_btc_frame_idx
+  - best_btc_rank
+  - best_btc_score_by_stage
+  - best_source_frame_idx
+  - best_source_rank
+  - best_source_score_by_stage
+  - o1_t_delta
+  - o1_s_delta
+  - o1_r_delta
+  - failure_stage
+  - provenance_hashes
+failure_stage_enum:
+  - temporal
+  - representation
+  - retrieval
+  - fusion
+  - reranker
+  - scorer
+  - none
+oracle_definitions:
+  O1-T:
+    scope: temporal_missing_slice_only
+    pipeline: decode_feature_index_retrieval_normal
+    zero_candidate_meaning: BTC_touches_interval_or_no_temporal_candidate
+    forbidden_inference: zero_candidate_is_not_NO_HEADROOM
+  O1-S:
+    scope: every_DEV_event_inclusive_ground_truth_interval
+    source_frame: best_real_source_frame_after_exact_feature_parity
+    score: frozen_B0_retrieval_fusion_reranker
+    lower_bound_rule: sampled_interval_frames_are_lower_bound_not_best
+  O1-R:
+    scope: every_DEV_event
+    intervention: force_ground_truth_answer_frame
+    ceilings:
+      - retrieval_exposure
+      - fusion_exposure
+      - final_reranker_exposure
+    interpretation: no_uplift_means_no_selector_can_fix_current_pipeline_scorer
+provenance_required:
+  - gate0_dataset_hash
+  - baseline_run_hash
+  - source_run_hash
+  - force_rank_run_hash
+  - feature_fingerprint
+  - candidate_manifest_hash
+  - selection_artifact_sha256
+validator:
+  command: >-
+    .\\.venv\\Scripts\\python.exe -m pytest
+    tests/unit/offline/keyframe_augmentation/test_execution_spec_artifacts.py
+  fail_closed_on_missing: true
+compatibility:
+  accepted_input_schema_versions: [1, 2]
+  v1_input_aliases:
+    interval: gt_interval_inclusive
+    best_btc_stage_scores: best_btc_score_by_stage
+    best_source_stage_scores: best_source_score_by_stage
+  emitted_schema_version: 2
+  test_id: test_oracle_v2_canonical_fields_and_v1_aliases_are_compatible
+execution_blocker:
+  status: BLOCKED_MISSING_CANONICAL_FEATURE_CORPUS_AND_STAGE_RANK_ARTIFACTS
+  exact_command_ref: go-no-go-unverified-2026-08-30.md#12-blocker-và-lệnh-tiếp-theo
