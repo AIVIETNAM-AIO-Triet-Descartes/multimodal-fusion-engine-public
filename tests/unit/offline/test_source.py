@@ -99,11 +99,30 @@ class TestFetchVideo:
             return CompletedProcess(command, 0, stdout=b"200", stderr=b"")
 
         monkeypatch.setattr(source.subprocess, "run", fake_run)
+        monkeypatch.setattr(source.time, "sleep", lambda _seconds: None)
         with pytest.raises(RuntimeError, match="bo qua HTTP Range"):
             source._curl_range("https://example.invalid/archive.zip", 10, 19, dest)
 
         assert not dest.exists()
         assert observed["command"][observed["command"].index("--max-filesize") + 1] == "10"
+
+    def test_retries_an_intermittent_ignored_range(self, monkeypatch, tmp_path):
+        dest = tmp_path / "video.mp4"
+        attempts = []
+
+        def fake_run(command, **_kwargs):
+            attempts.append(command)
+            output = Path(command[command.index("-o") + 1])
+            output.write_bytes(b"x" * 10)
+            status = b"200" if len(attempts) == 1 else b"206"
+            return CompletedProcess(command, 0, stdout=status, stderr=b"")
+
+        monkeypatch.setattr(source.subprocess, "run", fake_run)
+        monkeypatch.setattr(source.time, "sleep", lambda _seconds: None)
+        source._curl_range("https://example.invalid/archive.zip", 10, 19, dest)
+
+        assert len(attempts) == 2
+        assert dest.read_bytes() == b"x" * 10
 
 
 class TestCatalogue:
