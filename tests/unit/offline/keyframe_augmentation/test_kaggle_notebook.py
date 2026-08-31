@@ -63,6 +63,10 @@ def test_notebook_uses_pinned_upstream_and_separate_research_volume() -> None:
     assert "secret_values" in source
     assert "secret_values=(token,) if token else ()" in source
     assert "askpass.unlink(missing_ok=True)" in source
+    assert 'transnet_env["GIT_LFS_SKIP_SMUDGE"] = "1"' in source
+    assert '"clone", "--filter=blob:none", "--no-checkout"' in source
+    assert '"fetch", "--depth", "1", "origin", tn["commit"]' in source
+    assert '"lfs", "pull", "--include", tn["weights_relpath"], "--exclude", ""' in source
     assert 'pending_by_size[:1] if RUN_SCOPE == "PREFLIGHT"' in source
     assert "SESSION_MAX_MINUTES" in source
     assert "ordinal > 1 and session_elapsed >= SESSION_MAX_MINUTES * 60" in source
