@@ -32,7 +32,7 @@ read-only trước HTTP Range.
 
 Notebook producer TransNetV2 dùng tạm để chạy GPU theo worker nằm ở
 `tmp-kaggle-keyframe-producer-v2.ipynb`. Nó không phải một lượt được đánh số trong
-pipeline và không thay thế notebook tích hợp `10-btc-keyframe-augmentation-integrated.ipynb`.
+pipeline và không thay thế notebook chính `10-btc-keyframe-augmentation.ipynb`.
 
 **Mỗi lượt một file shards riêng, và đó không phải sự lộn xộn.** `merge_bundle.py` đòi ĐỦ mảnh
 cho mọi tầng có trong `plan.stages`; gộp hết vào một file là bundle bị từ chối cho tới khi lượt

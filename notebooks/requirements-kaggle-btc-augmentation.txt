@@ -1,4 +1,4 @@
-# Kaggle environment for 10-btc-keyframe-augmentation-integrated.ipynb.
+# Kaggle environment for notebooks/btc/10-btc-keyframe-augmentation.ipynb.
 #
 # Keep this environment separate from notebook 08 (vLLM/Qwen) and notebook 09
 # (BGE-M3): those notebooks pin a different torch stack.  The augmentation

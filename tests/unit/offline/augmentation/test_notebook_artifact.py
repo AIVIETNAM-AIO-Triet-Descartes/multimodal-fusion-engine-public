@@ -4,7 +4,7 @@ import ast
 import json
 from pathlib import Path
 
-NOTEBOOK = Path("notebooks/btc/10-btc-keyframe-augmentation-integrated.ipynb")
+NOTEBOOK = Path("notebooks/btc/10-btc-keyframe-augmentation.ipynb")
 
 
 def test_augmentation_notebook_is_valid_and_defaults_to_safe_smoke_mode():
