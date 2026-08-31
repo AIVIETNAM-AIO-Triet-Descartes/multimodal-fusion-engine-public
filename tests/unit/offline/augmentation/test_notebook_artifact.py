@@ -18,6 +18,8 @@ def test_augmentation_notebook_is_valid_and_defaults_to_safe_smoke_mode():
         if cell["cell_type"] == "code"
     )
     assert 'RUN_MODE = "SMOKE"' in source
+    assert 'REPO_REF = "feature/quang/storage"' in source
+    assert "feature/quang-trong/keyframe-integration" not in source
     assert 'MEMBER = "quang"' in source
     assert 'WORKER = "quang1"' in source
     assert '"quang": ("quang1", "quang2", "quang3", "quang4")' in source
