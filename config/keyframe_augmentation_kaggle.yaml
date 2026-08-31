@@ -37,6 +37,8 @@ transnetv2:
   repository: https://github.com/soCzech/TransNetV2.git
   commit: 85cef72af9a916bdfd7cc94a670c9cdfbf12d1ed
   source_relpath: inference-pytorch/transnetv2_pytorch.py
+  converter_relpath: inference-pytorch/convert_weights.py
+  tensorflow_weights_relpath: inference/transnetv2-weights
   weights_relpath: inference-pytorch/transnetv2-pytorch-weights.pth
   threshold: 0.5
   device: cuda
