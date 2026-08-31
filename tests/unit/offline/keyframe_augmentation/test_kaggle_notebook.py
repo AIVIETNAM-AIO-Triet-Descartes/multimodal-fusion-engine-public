@@ -37,6 +37,11 @@ def test_notebook_uses_pinned_upstream_and_separate_research_volume() -> None:
     assert config["transnetv2"]["commit"] == "85cef72af9a916bdfd7cc94a670c9cdfbf12d1ed"
     assert config["transnetv2"]["converter_relpath"] == "inference-pytorch/convert_weights.py"
     assert config["transnetv2"]["tensorflow_weights_relpath"] == "inference/transnetv2-weights"
+    assert config["transnetv2"]["tensorflow_weight_files"] == [
+        "saved_model.pb",
+        "variables/variables.data-00000-of-00001",
+        "variables/variables.index",
+    ]
     assert config["workers"] == {
         "triet": ["triet1", "triet2"],
         "trong": ["trong1", "trong2"],
@@ -75,8 +80,12 @@ def test_notebook_uses_pinned_upstream_and_separate_research_volume() -> None:
     assert 'transnet_env["GIT_LFS_SKIP_SMUDGE"] = "1"' in source
     assert '"clone", "--filter=blob:none", "--no-checkout"' in source
     assert '"fetch", "--depth", "1", "origin", tn["commit"]' in source
-    assert 'tn["tensorflow_weights_relpath"].rstrip("/") + "/**"' in source
+    assert 'tf_weights_relpath = tn["tensorflow_weights_relpath"].rstrip("/")' in source
     assert '"lfs", "pull", "--include", tf_weights_glob, "--exclude", ""' in source
+    assert '"git_lfs_pull": "UNAVAILABLE; TRY_OFFICIAL_MEDIA_CDN"' in source
+    assert "media.githubusercontent.com/media/soCzech/TransNetV2" in source
+    assert '"git", "show", f"{tn[\'commit\']}:{repo_path}"' in source
+    assert "sha256_file(partial) != spec[\"sha256\"]" in source
     assert 'str(TRANSNET_CONVERTER), "--tf_weights", str(TRANSNET_TF_WEIGHTS)' in source
     assert "TRANSNET_TF_WEIGHTS_SHA256" in source
     assert '"transnet_converter_sha256": TRANSNET_CONVERTER_SHA256' in source

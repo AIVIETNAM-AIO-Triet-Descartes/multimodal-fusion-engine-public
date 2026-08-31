@@ -39,6 +39,10 @@ transnetv2:
   source_relpath: inference-pytorch/transnetv2_pytorch.py
   converter_relpath: inference-pytorch/convert_weights.py
   tensorflow_weights_relpath: inference/transnetv2-weights
+  tensorflow_weight_files:
+    - saved_model.pb
+    - variables/variables.data-00000-of-00001
+    - variables/variables.index
   weights_relpath: inference-pytorch/transnetv2-pytorch-weights.pth
   threshold: 0.5
   device: cuda
