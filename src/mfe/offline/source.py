@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import struct
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -49,16 +50,61 @@ class VideoEntry:
 
 
 def _curl_range(url: str, start: int, end: int, dest: Path | None = None) -> bytes:
-    command = ["curl", "-sL", "--fail", "--max-time", "1800", "-r", f"{start}-{end}"]
-    if dest is not None:
-        command += ["-o", str(dest)]
-    result = subprocess.run([*command, url], capture_output=True, check=False)
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"curl that bai ({result.returncode}) khi lay {start}-{end} tu {url}: "
-            f"{result.stderr.decode('utf-8', 'replace')[:200]}"
-        )
-    return result.stdout
+    expected = end - start + 1
+    if expected <= 0:
+        raise ValueError(f"byte range khong hop le: {start}-{end}")
+
+    temporary = dest is None
+    if temporary:
+        handle = tempfile.NamedTemporaryFile(prefix="mfe-range-", delete=False)
+        handle.close()
+        output = Path(handle.name)
+    else:
+        output = Path(dest)
+
+    command = [
+        "curl",
+        "-sS",
+        "-L",
+        "--fail",
+        "--max-time",
+        "1800",
+        "--max-filesize",
+        str(expected),
+        "-r",
+        f"{start}-{end}",
+        "-o",
+        str(output),
+        "-w",
+        "%{http_code}",
+    ]
+    try:
+        result = subprocess.run([*command, url], capture_output=True, check=False)
+        status = result.stdout.decode("ascii", "replace").strip()
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"curl that bai ({result.returncode}, HTTP {status or 'unknown'}) khi lay "
+                f"{start}-{end} tu {url}: "
+                f"{result.stderr.decode('utf-8', 'replace')[:200]}"
+            )
+        if not url.startswith("file:") and status != "206":
+            raise RuntimeError(
+                f"server bo qua HTTP Range {start}-{end} (HTTP {status or 'unknown'}); "
+                "tu choi tai ca archive"
+            )
+        actual = output.stat().st_size
+        if actual != expected:
+            raise RuntimeError(
+                f"HTTP Range {start}-{end} tra ve {actual:,} byte, cho doi {expected:,}. "
+                "Da xoa file cat cut."
+            )
+        return output.read_bytes() if temporary else b""
+    except Exception:
+        output.unlink(missing_ok=True)
+        raise
+    finally:
+        if temporary:
+            output.unlink(missing_ok=True)
 
 
 def fetch_video(entry: VideoEntry, dest: Path) -> Path:

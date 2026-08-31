@@ -10,9 +10,12 @@ count differently, i.e. a wrong keyframe set rather than an error."""
 from __future__ import annotations
 
 import zipfile
+from pathlib import Path
+from subprocess import CompletedProcess
 
 import pytest
 
+from mfe.offline import source
 from mfe.offline.source import VideoEntry, fetch_video, load_catalogue
 
 
@@ -82,6 +85,25 @@ class TestFetchVideo:
                            good.header_offset + 7, good.size)
         with pytest.raises(RuntimeError, match="local file header"):
             fetch_video(wrong, tmp_path / "x.mp4")
+
+    def test_rejects_server_that_ignores_range_before_keeping_archive(
+        self, monkeypatch, tmp_path
+    ):
+        dest = tmp_path / "whole-archive.zip"
+        observed = {}
+
+        def fake_run(command, **_kwargs):
+            observed["command"] = command
+            output = Path(command[command.index("-o") + 1])
+            output.write_bytes(b"x" * 10)
+            return CompletedProcess(command, 0, stdout=b"200", stderr=b"")
+
+        monkeypatch.setattr(source.subprocess, "run", fake_run)
+        with pytest.raises(RuntimeError, match="bo qua HTTP Range"):
+            source._curl_range("https://example.invalid/archive.zip", 10, 19, dest)
+
+        assert not dest.exists()
+        assert observed["command"][observed["command"].index("--max-filesize") + 1] == "10"
 
 
 class TestCatalogue:
