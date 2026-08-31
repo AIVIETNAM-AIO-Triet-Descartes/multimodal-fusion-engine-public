@@ -8,7 +8,7 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[4]
-NOTEBOOK = ROOT / "notebooks/btc/10-btc-keyframes-argumentation-quang.ipynb"
+NOTEBOOK = ROOT / "notebooks/btc/tmp-kaggle-keyframe-producer-v2.ipynb"
 CONFIG = ROOT / "config/keyframe_augmentation_kaggle.yaml"
 
 

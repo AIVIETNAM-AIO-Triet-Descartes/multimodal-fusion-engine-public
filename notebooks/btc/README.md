@@ -29,7 +29,10 @@ read-only trước HTTP Range.
 | 4 | `06-btc-paddle-vietocr.ipynb` | `n5_ocr_paddle`, `n5_ocr_vietocr` | `…_btc_ocr2.yaml` | `../requirements-kaggle-btc-paddle-vietocr.txt` |
 | 5 | `08-btc-caption-ocr-qwen25.ipynb` | `n6_caption_qwen`, `n6_ocr_qwen25` | `…_btc_caption.yaml` | `../requirements-kaggle-btc-caption.txt` |
 | 6 | `09-btc-bge-m3-embed.ipynb` | `n6_bge_m3` | `…_btc_bge.yaml` | `../requirements-kaggle-btc-bge.txt` |
-| 7 | `10-btc-keyframes-argumentation-quang.ipynb` | research shot proposals | `keyframe_augmentation_kaggle.yaml` | `../requirements-kaggle-keyframe-augmentation.txt` |
+
+Notebook producer TransNetV2 dùng tạm để chạy GPU theo worker nằm ở
+`tmp-kaggle-keyframe-producer-v2.ipynb`. Nó không phải một lượt được đánh số trong
+pipeline và không thay thế notebook tích hợp `10-btc-keyframe-augmentation-integrated.ipynb`.
 
 **Mỗi lượt một file shards riêng, và đó không phải sự lộn xộn.** `merge_bundle.py` đòi ĐỦ mảnh
 cho mọi tầng có trong `plan.stages`; gộp hết vào một file là bundle bị từ chối cho tới khi lượt
