@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -46,6 +48,28 @@ def test_notebook_uses_pinned_upstream_and_separate_research_volume() -> None:
     assert "run_gate1" not in source
     assert 'resolve_video_source(video_id, local["video"])' in source
     assert "kaggle-input-read-only" in source
+    assert 'RUN_SCOPE = "PREFLIGHT"' in source
+    assert 'CONFIRM_SHARD = ""' in source
+    assert 'CONFIRM_SHARD != WORKER' in source
+    assert "warmup_transnet(" in source
+    assert "INFERENCE_WINDOW_BATCH_SIZE = 8" in source
+    assert "OUTPUT_ROOT_OVERRIDE = None" in source
+    assert "OUTPUT_ROOT_OVERRIDE phải là root con /sandbox/" in source
+    assert "OUTPUT_ROOT_OVERRIDE or CFG[\"output\"][\"root\"]" in source
+    assert "requirements-kaggle-keyframe-augmentation.txt" in source
+    assert "REPO_URL.replace" not in source
+    assert "https://{token}@" not in source
+    assert "GIT_ASKPASS" in source
+    assert "secret_values" in source
+    assert "secret_values=(token,) if token else ()" in source
+    assert "askpass.unlink(missing_ok=True)" in source
+    assert 'pending_by_size[:1] if RUN_SCOPE == "PREFLIGHT"' in source
+    assert "SESSION_MAX_MINUTES" in source
+    assert "ordinal > 1 and session_elapsed >= SESSION_MAX_MINUTES * 60" in source
+    assert '"session_checkpoint": "TIME_BUDGET_REACHED"' in source
+    assert '"model_cache_hit": marker["model_cache_hit"]' in source
+    assert '"inference_window_batch_size": detector_report["window_batch_size"]' in source
+    assert "eta_hours_estimate_this_todo" in source
 
 
 def test_notebook_is_a_self_contained_team_handoff() -> None:
@@ -82,5 +106,41 @@ def test_completion_marker_is_uploaded_last_after_hash_verification() -> None:
     assert shots_upload < remote_hash_check < marker_upload
     assert report_upload < remote_hash_check < marker_upload
     assert "Remote hash mismatch" in function
+    assert "unsigned_marker.pop(\"marker_payload_hash\", None)" in source
+    assert "sha256_json(unsigned_marker) != marker_payload_hash" in source
+    assert "transnet_source_sha256" in source
+    assert "not marker.get(\"shots_sha256\")" in source
+    assert "not marker.get(\"report_sha256\")" in source
     assert 'markers/{MEMBER}/{WORKER}/' in source
     assert 'worker-manifests/{WORKER}.json' in source
+
+
+def test_notebook_git_runner_redacts_secret_from_called_process_error() -> None:
+    notebook = _load_notebook()
+    source = "\n".join("".join(cell["source"]) for cell in notebook["cells"])
+    start = source.index("def _redact_text(")
+    end = source.index("def clone_repository(")
+    namespace = {"subprocess": subprocess}
+    exec(source[start:end], namespace)
+
+    secret = "ghp_adversarial_test_secret"
+
+    class _FailingSubprocess:
+        CalledProcessError = subprocess.CalledProcessError
+
+        @staticmethod
+        def run(*_args, **_kwargs):
+            raise subprocess.CalledProcessError(
+                128,
+                ["git", "clone", secret],
+                output=f"stdout contains {secret}",
+                stderr=f"stderr contains {secret}",
+            )
+
+    namespace["subprocess"] = _FailingSubprocess
+    with pytest.raises(RuntimeError) as raised:
+        namespace["run"](["git", "clone", secret], secret_values=(secret,))
+
+    message = str(raised.value)
+    assert secret not in message
+    assert message.count("[REDACTED]") >= 3
