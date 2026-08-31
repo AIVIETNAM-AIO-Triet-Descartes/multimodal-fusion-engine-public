@@ -63,8 +63,15 @@ def test_notebook_uses_pinned_upstream_and_separate_research_volume() -> None:
     assert "https://{token}@" not in source
     assert "GIT_ASKPASS" in source
     assert "secret_values" in source
-    assert "secret_values=(token,) if token else ()" in source
+    assert "secret_values = (token,) if token else ()" in source
     assert "askpass.unlink(missing_ok=True)" in source
+    clone_start = source.index("def clone_repository(")
+    clone_end = source.index("\nclone_repository()", clone_start)
+    clone_function = source[clone_start:clone_end]
+    assert '"remote", "set-url", "origin", REPO_URL' in clone_function
+    assert '"fetch", "--depth", "1", "origin", REPO_REF' in clone_function
+    assert '"checkout", "--detach", "FETCH_HEAD"' in clone_function
+    assert "        return\n" not in clone_function
     assert 'transnet_env["GIT_LFS_SKIP_SMUDGE"] = "1"' in source
     assert '"clone", "--filter=blob:none", "--no-checkout"' in source
     assert '"fetch", "--depth", "1", "origin", tn["commit"]' in source
