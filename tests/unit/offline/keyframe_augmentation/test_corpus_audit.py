@@ -117,7 +117,7 @@ def test_audit_video_validates_hashes_and_classifies_c0_c1(tmp_path: Path) -> No
     assert summary["oracle_status"]["O1-S"].startswith("BLOCKED")
 
 
-def test_audit_video_rejects_timeline_gap(tmp_path: Path) -> None:
+def test_audit_video_accepts_official_transition_gap(tmp_path: Path) -> None:
     shots_path = tmp_path / "shots.jsonl"
     rows = [
         {"video_id": "v", "shot_id": "a", "start_frame": 0, "end_frame": 9,
@@ -134,11 +134,41 @@ def test_audit_video_rejects_timeline_gap(tmp_path: Path) -> None:
         "shot_count": 2,
         "literal_fps": 10.0,
     }
-    with pytest.raises(ValueError, match="gap or overlap"):
+    per_video, _audits = audit_video(
+        video_id="v",
+        shots_path=shots_path,
+        mapping_path=mapping_path,
+        marker=marker,
+        config=_config(),
+        detector_total_frames=21,
+    )
+    assert per_video["total_frames"] == 21
+    assert per_video["transition_excluded_frames"] == 2
+
+
+def test_audit_video_rejects_timeline_overlap(tmp_path: Path) -> None:
+    shots_path = tmp_path / "shots.jsonl"
+    rows = [
+        {"video_id": "v", "shot_id": "a", "start_frame": 0, "end_frame": 10,
+         "fps": 10.0, "detector_fingerprint": "fp", "confidence": 1.0},
+        {"video_id": "v", "shot_id": "b", "start_frame": 10, "end_frame": 19,
+         "fps": 10.0, "detector_fingerprint": "fp", "confidence": 1.0},
+    ]
+    shots_path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+    mapping_path = tmp_path / "mapping.csv"
+    mapping_path.write_text("n,pts_time,fps,frame_idx\n0,0.1,10,1\n", encoding="utf-8")
+    marker = {
+        "shots_sha256": sha256_file(shots_path),
+        "btc_mapping_sha256": sha256_file(mapping_path),
+        "shot_count": 2,
+        "literal_fps": 10.0,
+    }
+    with pytest.raises(ValueError, match="timeline overlaps"):
         audit_video(
             video_id="v",
             shots_path=shots_path,
             mapping_path=mapping_path,
             marker=marker,
             config=_config(),
+            detector_total_frames=20,
         )

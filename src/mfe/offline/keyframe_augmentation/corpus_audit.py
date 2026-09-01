@@ -170,6 +170,7 @@ def audit_video(
     mapping_path: str | Path,
     marker: Mapping[str, Any],
     config: AugmentationConfig,
+    detector_total_frames: int | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Validate one pair of artifacts and return per-video and per-shot rows."""
     shots_source = Path(shots_path)
@@ -183,12 +184,22 @@ def audit_video(
         raise ValueError(f"{video_id}: empty or cross-video shot artifact")
     if len(shots) != marker.get("shot_count"):
         raise ValueError(f"{video_id}: shot_count mismatch")
-    if shots[0].start_frame != 0:
-        raise ValueError(f"{video_id}: first shot does not start at frame zero")
+    # Official TransNetV2 scene intervals exclude frames whose transition
+    # probability is above threshold.  Leading, inter-scene and trailing gaps
+    # are therefore valid transition spans; only overlap is invalid.
     for previous, current in zip(shots, shots[1:], strict=False):
-        if current.start_frame != previous.end_frame + 1:
-            raise ValueError(f"{video_id}: shot timeline has a gap or overlap")
-    total_frames = shots[-1].end_frame + 1
+        if current.start_frame <= previous.end_frame:
+            raise ValueError(f"{video_id}: shot timeline overlaps")
+    inferred_minimum_frames = shots[-1].end_frame + 1
+    total_frames = detector_total_frames or inferred_minimum_frames
+    if total_frames < inferred_minimum_frames:
+        raise ValueError(f"{video_id}: detector frame count is shorter than shot timeline")
+    excluded_transition_frames = shots[0].start_frame
+    excluded_transition_frames += sum(
+        current.start_frame - previous.end_frame - 1
+        for previous, current in zip(shots, shots[1:], strict=False)
+    )
+    excluded_transition_frames += total_frames - inferred_minimum_frames
     btc_frames, mapping_report = read_and_validate_mapping(
         mapping_source, video_id=video_id, total_frames=total_frames
     )
@@ -215,6 +226,7 @@ def audit_video(
         "literal_fps": literal_fps,
         "total_frames": total_frames,
         "shot_count": len(shots),
+        "transition_excluded_frames": excluded_transition_frames,
         "btc_csv_rows": mapping_report["csv_rows"],
         "btc_unique_frames": mapping_report["unique_frames"],
         "btc_duplicate_aliases": len(mapping_report["duplicate_aliases"]),
