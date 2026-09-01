@@ -16,6 +16,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from mfe.contracts.ids import build_keyframe_id
 from mfe.offline.augmentation.io import canonical_hash
+from mfe.offline.augmentation.models import CandidateRow
+from mfe.offline.keyframe_augmentation.common import pts_time_for_frame_idx
 
 
 class OracleArtifactCandidate(BaseModel):
@@ -70,6 +72,40 @@ class OracleArtifactTarget(BaseModel):
         if not self.frame_range_start <= self.target.frame_idx <= self.frame_range_end:
             raise ValueError("oracle target lies outside its GT interval")
         return self
+
+
+def oracle_candidate_for_snapshot(
+    candidate: OracleArtifactCandidate,
+    *,
+    literal_fps: float,
+) -> CandidateRow:
+    """Adapt decoder-authoritative evidence to the relational PTS contract.
+
+    Notebook 17 records the decoder PTS verbatim because it is source evidence.
+    The relational schema instead requires ``floor(pts_time * literal_fps)`` to
+    reproduce ``frame_idx``.  Exact frame-boundary PTS values are unsafe under
+    binary floating point, and 29.97 is only a literal approximation of
+    30000/1001.  Keep the decoder value in ``decoder_pts_time`` while deriving a
+    floor-safe interval representative for the temporary SQLite snapshot.
+    """
+
+    return CandidateRow(
+        keyframe_id=candidate.keyframe_id,
+        video_id=candidate.video_id,
+        frame_idx=candidate.frame_idx,
+        literal_fps=literal_fps,
+        pts_time=pts_time_for_frame_idx(candidate.frame_idx, literal_fps),
+        decoder_pts_time=candidate.pts_time,
+        shot_id=candidate.shot_id,
+        selector=candidate.selector,
+        coverage_class=candidate.coverage_class,
+        selection_round=candidate.selection_round,
+        distance_to_nearest_btc=candidate.distance_to_nearest_btc,
+        detector_confidence=candidate.detector_confidence,
+        decoder_fingerprint=candidate.decoder_fingerprint,
+        config_hash=candidate.config_hash,
+        audit_status=candidate.audit_status,
+    )
 
 
 def validate_oracle_completion_marker(

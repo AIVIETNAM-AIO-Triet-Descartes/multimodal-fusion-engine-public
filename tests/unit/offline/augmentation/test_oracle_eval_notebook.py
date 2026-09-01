@@ -20,7 +20,12 @@ def test_oracle_eval_notebook_is_dev_only_fail_closed_and_compilable() -> None:
     assert "validate_oracle_completion_marker" in source
     assert "OracleArtifactCandidate" in source
     assert "OracleArtifactTarget" in source
+    assert "oracle_candidate_for_snapshot" in source
     assert "build_relational_snapshot" in source
+    assert "allow_preexisting_mapping_problems=True" in source
+    assert '"oracle_artifact": "decoder_pts"' in source
+    assert '"relational_snapshot": "synthetic_literal_fps_interval"' in source
+    assert '"frame_from_pts": "floor"' in source
     assert 'name="B0"' in source
     assert 'name="P1-N-SIGLIP"' in source
     assert 'name="O1-R-FINAL"' in source

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import sqlite3
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
 from mfe.contracts.ids import pts_time_to_timestamp_ms
 from mfe.mapping.relational import RelationalMap
-from mfe.offline.augmentation.io import sha256_file
+from mfe.offline.augmentation.io import canonical_hash, sha256_file
 from mfe.offline.augmentation.models import CandidateRow
 
 
@@ -18,6 +19,7 @@ def build_relational_snapshot(
     candidates: list[CandidateRow],
     *,
     overwrite: bool = False,
+    allow_preexisting_mapping_problems: bool = False,
 ) -> dict[str, Any]:
     """Clone BTC SQLite, insert delta, and rebuild per-video temporal ordinals."""
 
@@ -27,6 +29,12 @@ def build_relational_snapshot(
         raise FileNotFoundError(source)
     if target.exists() and not overwrite:
         raise FileExistsError(f"refusing to overwrite snapshot: {target}")
+
+    with RelationalMap(str(source)) as relational:
+        baseline_problems = relational.verify_mapping()
+    if baseline_problems and not allow_preexisting_mapping_problems:
+        raise RuntimeError(f"base mapping audit failed: {baseline_problems[:5]}")
+
     target.parent.mkdir(parents=True, exist_ok=True)
     target.unlink(missing_ok=True)
 
@@ -127,13 +135,25 @@ def build_relational_snapshot(
         )
     with RelationalMap(str(target)) as relational:
         problems = relational.verify_mapping()
-    if problems:
+    baseline_counter = Counter(baseline_problems)
+    snapshot_counter = Counter(problems)
+    introduced_problems = list((snapshot_counter - baseline_counter).elements())
+    removed_problems = list((baseline_counter - snapshot_counter).elements())
+    if introduced_problems or removed_problems:
         target.unlink(missing_ok=True)
-        raise RuntimeError(f"snapshot mapping audit failed: {problems[:5]}")
+        raise RuntimeError(
+            "snapshot mapping audit changed the frozen baseline: "
+            f"introduced={introduced_problems[:5]}, removed={removed_problems[:5]}"
+        )
     return {
         "base_sha256": sha256_file(source),
         "snapshot_sha256": sha256_file(target),
         "delta_rows": len(candidates),
         "total_rows": row_count,
         "affected_videos": affected,
+        "baseline_mapping_problem_count": len(baseline_problems),
+        "baseline_mapping_problems_sha256": canonical_hash(baseline_problems),
+        "snapshot_mapping_problem_count": len(problems),
+        "introduced_mapping_problem_count": len(introduced_problems),
+        "removed_mapping_problem_count": len(removed_problems),
     }

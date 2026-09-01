@@ -219,6 +219,52 @@ def test_relational_snapshot_clones_base_and_rebuilds_temporal_ordinals(tmp_path
         assert relational.verify_mapping() == []
 
 
+def test_relational_snapshot_can_preserve_but_not_hide_frozen_base_problems(tmp_path):
+    base = tmp_path / "base-with-known-drift.db"
+    strict_output = tmp_path / "strict.db"
+    compatible_output = tmp_path / "compatible.db"
+    with RelationalMap(str(base)) as relational:
+        relational.init_schema()
+        relational.upsert_video(
+            VideoRow(
+                video_id="L21_V001",
+                source_path="video.mp4",
+                fps=10.0,
+                duration_ms=5000,
+                total_frames=50,
+                width=1920,
+                height=1080,
+            )
+        )
+        relational.upsert_keyframes(
+            [
+                KeyframeRow(
+                    keyframe_id="L21_V001#000010",
+                    video_id="L21_V001",
+                    keyframe_index=0,
+                    frame_idx=10,
+                    pts_time=1.0,
+                    timestamp_ms=999,
+                )
+            ]
+        )
+
+    with pytest.raises(RuntimeError, match="base mapping audit failed"):
+        build_relational_snapshot(base, strict_output, [])
+
+    report = build_relational_snapshot(
+        base,
+        compatible_output,
+        [],
+        allow_preexisting_mapping_problems=True,
+    )
+
+    assert report["baseline_mapping_problem_count"] == 1
+    assert report["snapshot_mapping_problem_count"] == 1
+    assert report["introduced_mapping_problem_count"] == 0
+    assert report["removed_mapping_problem_count"] == 0
+
+
 def test_experiment_store_restores_prefix_atomically_and_verifies_hash(tmp_path):
     transport = LocalDirTransport(tmp_path / "remote")
     source = tmp_path / "source.txt"

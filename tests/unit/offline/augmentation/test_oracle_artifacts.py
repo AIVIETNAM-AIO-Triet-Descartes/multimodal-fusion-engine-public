@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from mfe.offline.augmentation.io import canonical_hash
 from mfe.offline.augmentation.oracle_artifacts import (
     OracleArtifactCandidate,
     OracleArtifactTarget,
+    oracle_candidate_for_snapshot,
     validate_oracle_completion_marker,
 )
 
@@ -52,6 +55,39 @@ def test_oracle_artifact_contract_rejects_identity_drift() -> None:
 
     with pytest.raises(ValueError, match="keyframe_id"):
         OracleArtifactCandidate.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    ("frame_idx", "decoder_pts_time", "literal_fps"),
+    [
+        (1983, 79.32, 25.0),
+        (3074, 102.56913333333334, 29.97),
+    ],
+)
+def test_oracle_snapshot_adapter_preserves_decoder_pts_and_floor_roundtrips(
+    frame_idx: int,
+    decoder_pts_time: float,
+    literal_fps: float,
+) -> None:
+    payload = candidate_payload()
+    payload.update(
+        {
+            "frame_idx": frame_idx,
+            "keyframe_id": f"L21_V002#{frame_idx:06d}",
+            "pts_time": decoder_pts_time,
+        }
+    )
+    candidate = OracleArtifactCandidate.model_validate(payload)
+
+    snapshot_candidate = oracle_candidate_for_snapshot(
+        candidate,
+        literal_fps=literal_fps,
+    )
+
+    assert snapshot_candidate.decoder_pts_time == decoder_pts_time
+    assert snapshot_candidate.pts_time_source == "synthetic_literal_fps_interval"
+    assert math.floor(snapshot_candidate.pts_time * literal_fps) == frame_idx
+    assert snapshot_candidate.frame_idx == frame_idx
 
 
 def test_oracle_marker_requires_matching_remote_hashes() -> None:
