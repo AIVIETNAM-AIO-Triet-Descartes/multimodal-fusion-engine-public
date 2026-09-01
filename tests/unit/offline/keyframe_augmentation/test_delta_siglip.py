@@ -10,6 +10,7 @@ from mfe.offline.keyframe_augmentation.common import sha256_file, sha256_json
 from mfe.offline.keyframe_augmentation.delta_siglip import (
     image_manifest,
     partition_feature_worklist,
+    partition_feature_worklist_by_runner,
     validate_siglip_baseline_manifest,
     write_deterministic_image_tar,
 )
@@ -38,6 +39,26 @@ def test_partition_is_disjoint_and_validates_work_item_hash() -> None:
     broken[0]["frame_idx"] = 9
     with pytest.raises(ValueError, match="invalid feature work item hash"):
         partition_feature_worklist(broken, {"quang1": ["V1", "V2"]})
+
+
+def test_two_runner_partition_is_balanced_deterministic_and_keeps_video_intact() -> None:
+    rows = [_row("V1", 1), _row("V1", 2), _row("V2", 3), _row("V3", 4)]
+    costs = {"V1": 100, "V2": 60, "V3": 40}
+
+    first = partition_feature_worklist_by_runner(rows, ["quang", "trong"], costs)
+    second = partition_feature_worklist_by_runner(
+        list(reversed(rows)), ["trong", "quang"], costs
+    )
+
+    assert first == second
+    owners = {
+        row["video_id"]: runner
+        for runner, assigned in first.items()
+        for row in assigned
+    }
+    assert owners["V1"] == "quang"
+    assert owners["V2"] == owners["V3"] == "trong"
+    assert sum(len(assigned) for assigned in first.values()) == len(rows)
 
 
 def test_tar_and_image_manifest_are_deterministic(tmp_path: Path) -> None:

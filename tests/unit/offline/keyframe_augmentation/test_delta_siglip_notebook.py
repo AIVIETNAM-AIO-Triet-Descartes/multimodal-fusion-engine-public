@@ -11,6 +11,8 @@ def test_notebook_is_preflight_first_and_research_only() -> None:
     payload = json.loads(NOTEBOOK.read_text(encoding="utf-8"))
     text = "\n".join("".join(cell.get("source", [])) for cell in payload["cells"])
     assert payload["metadata"]["kaggle"]["accelerator"] == "gpu"
+    assert 'RUNNERS = ("quang", "trong")' in text
+    assert 'RUNNER = "quang"' in text
     assert 'RUN_SCOPE = "PREFLIGHT"' in text
     assert "75296b93ab4428ae721776d90167cdf3bca6b262137fd93610d04082def5a630" in text
     assert "CANARY_MAX_ABS_DIFF" in text
@@ -21,6 +23,8 @@ def test_notebook_is_preflight_first_and_research_only() -> None:
     assert "BTC.put(" not in text
     assert "BTC.remove_file(" not in text
     assert "selection_freeze_sha256" in text
+    assert "runner-manifests" in text
+    assert "worker-manifests" not in text
 
 
 def test_every_delta_siglip_code_cell_compiles() -> None:

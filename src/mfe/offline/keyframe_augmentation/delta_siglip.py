@@ -80,6 +80,47 @@ def partition_feature_worklist(
     return result
 
 
+def partition_feature_worklist_by_runner(
+    rows: Sequence[Mapping[str, Any]],
+    runners: Sequence[str],
+    video_costs: Mapping[str, int],
+) -> dict[str, list[dict[str, Any]]]:
+    """Keep videos intact while greedily balancing source-byte cost across runners."""
+    runner_names = sorted(set(runners))
+    if not runner_names or len(runner_names) != len(runners):
+        raise ValueError("runners must be non-empty and unique")
+    by_video: dict[str, list[dict[str, Any]]] = {}
+    seen: set[tuple[str, int]] = set()
+    for value in rows:
+        row = dict(value)
+        video_id = str(row["video_id"])
+        key = (video_id, int(row["frame_idx"]))
+        if key in seen:
+            raise ValueError(f"duplicate feature work item: {key}")
+        seen.add(key)
+        expected_hash = row.pop("work_item_hash", None)
+        if expected_hash != sha256_json(row):
+            raise ValueError(f"invalid feature work item hash: {key}")
+        if video_id not in video_costs or int(video_costs[video_id]) <= 0:
+            raise ValueError(f"missing/invalid source cost: {video_id}")
+        row["work_item_hash"] = expected_hash
+        by_video.setdefault(video_id, []).append(row)
+
+    totals = {runner: 0 for runner in runner_names}
+    assignments = {runner: [] for runner in runner_names}
+    ordered_videos = sorted(
+        by_video,
+        key=lambda video_id: (-int(video_costs[video_id]), video_id),
+    )
+    for video_id in ordered_videos:
+        runner = min(runner_names, key=lambda name: (totals[name], name))
+        assignments[runner].extend(by_video[video_id])
+        totals[runner] += int(video_costs[video_id])
+    for runner in assignments:
+        assignments[runner].sort(key=lambda row: (row["video_id"], row["frame_idx"]))
+    return assignments
+
+
 def write_deterministic_image_tar(
     image_paths: Mapping[str, str | Path], output: str | Path
 ) -> Path:
