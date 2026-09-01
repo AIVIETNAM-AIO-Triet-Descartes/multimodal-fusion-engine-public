@@ -41,6 +41,13 @@ shot artifact và mapping BTC; sau đó xuất C0/C1/COVERED/CT/CE vào thư m�
 `gate1-audit-v1`. Đây chỉ là temporal diagnostic O1-T, không được dùng riêng để
 kết luận `NO_HEADROOM`; O1-S/O1-R và B0–B4 vẫn là các gate tiếp theo.
 
+Khi notebook 11 đã publish audit manifest/corpus lock được lead chấp nhận, chạy
+`12-btc-b0-b4-candidate-freeze.ipynb` bằng CPU để sinh B1–B4 và khóa hard delta
+budget. Notebook 12 chỉ xuất candidate manifests cùng feature worklist sang
+`gate1-selection-v1`; nó không decode ảnh, chưa tạo feature/index và không mutate
+BTC. Nếu một arm underfill, exact-collide BTC hoặc sai selector contract thì không
+có freeze hợp lệ.
+
 **Mỗi lượt một file shards riêng, và đó không phải sự lộn xộn.** `merge_bundle.py` đòi ĐỦ mảnh
 cho mọi tầng có trong `plan.stages`; gộp hết vào một file là bundle bị từ chối cho tới khi lượt
 cuối cùng chạy xong toàn bộ 873 video. Tách ra thì gộp được độc lập, và bốn lượt không đụng nhau
