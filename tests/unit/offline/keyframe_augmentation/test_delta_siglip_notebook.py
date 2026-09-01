@@ -15,6 +15,8 @@ def test_notebook_is_preflight_first_and_research_only() -> None:
     assert "75296b93ab4428ae721776d90167cdf3bca6b262137fd93610d04082def5a630" in text
     assert "CANARY_MAX_ABS_DIFF" in text
     assert "ENV_MISMATCHES" in text
+    assert "use_fast=False" in text
+    assert "UNVERIFIED_LEGACY_MANIFEST" in text
     assert "BLOCKED_MISSING_OCR_CAPTION_BGE_AND_DOWNSTREAM" in text
     assert "BTC.put(" not in text
     assert "BTC.remove_file(" not in text

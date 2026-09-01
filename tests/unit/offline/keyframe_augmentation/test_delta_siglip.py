@@ -10,6 +10,7 @@ from mfe.offline.keyframe_augmentation.common import sha256_file, sha256_json
 from mfe.offline.keyframe_augmentation.delta_siglip import (
     image_manifest,
     partition_feature_worklist,
+    validate_siglip_baseline_manifest,
     write_deterministic_image_tar,
 )
 
@@ -61,3 +62,56 @@ def test_tar_and_image_manifest_are_deterministic(tmp_path: Path) -> None:
     payload_hash = unsigned.pop("manifest_payload_hash")
     assert payload_hash == sha256_json(unsigned)
     assert manifest["frame_count"] == 2
+
+
+def test_legacy_siglip_manifest_uses_artifact_contract_without_inventing_env() -> None:
+    manifest = {
+        "artifacts": {
+            "siglip_vectors": {
+                "sha256": "abc",
+                "model": "google/siglip-so400m-patch14-384",
+                "dim": 1152,
+                "params": {"tower": "image", "batch_size": 32},
+            }
+        },
+        "env": {"transformers": "5.0.0"},
+        "stages": {},
+    }
+
+    report = validate_siglip_baseline_manifest(
+        manifest,
+        vector_sha256="abc",
+        checkpoint="google/siglip-so400m-patch14-384",
+        dimension=1152,
+        batch_size=32,
+    )
+
+    assert report["artifact_contract_status"] == "PASS"
+    assert report["stage_environment_status"] == "UNVERIFIED_LEGACY_MANIFEST"
+    assert report["stage_environment"] == {}
+
+
+def test_siglip_manifest_rejects_artifact_hash_drift() -> None:
+    manifest = {
+        "artifacts": {
+            "siglip_vectors": {
+                "sha256": "expected",
+                "model": "model",
+                "dim": 1152,
+                "params": {"tower": "image", "batch_size": 32},
+            }
+        },
+        "stages": {"n4_siglip": {"env": {"torch": "2.0"}}},
+    }
+
+    report = validate_siglip_baseline_manifest(
+        manifest,
+        vector_sha256="actual",
+        checkpoint="model",
+        dimension=1152,
+        batch_size=32,
+    )
+
+    assert report["artifact_contract_status"] == "BLOCKED"
+    assert report["artifact_contract_checks"]["sha256"] is False
+    assert report["stage_environment_status"] == "AVAILABLE"

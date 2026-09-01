@@ -11,6 +11,40 @@ from typing import Any
 from mfe.offline.keyframe_augmentation.common import sha256_file, sha256_json
 
 
+def validate_siglip_baseline_manifest(
+    manifest: Mapping[str, Any],
+    *,
+    vector_sha256: str,
+    checkpoint: str,
+    dimension: int,
+    batch_size: int,
+) -> dict[str, Any]:
+    """Validate the stored SigLIP artifact without inventing legacy stage metadata."""
+    artifact = (manifest.get("artifacts") or {}).get("siglip_vectors")
+    if not isinstance(artifact, Mapping):
+        raise ValueError("baseline manifest has no siglip_vectors artifact")
+    params = artifact.get("params") or {}
+    checks = {
+        "sha256": artifact.get("sha256") == vector_sha256,
+        "model": artifact.get("model") == checkpoint,
+        "dimension": artifact.get("dim") == dimension,
+        "tower": params.get("tower") == "image",
+        "batch_size": params.get("batch_size") == batch_size,
+    }
+    stage = (manifest.get("stages") or {}).get("n4_siglip")
+    stage_environment = stage.get("env") if isinstance(stage, Mapping) else None
+    if not isinstance(stage_environment, Mapping):
+        stage_environment = None
+    return {
+        "artifact_contract_status": "PASS" if all(checks.values()) else "BLOCKED",
+        "artifact_contract_checks": checks,
+        "stage_environment_status": (
+            "AVAILABLE" if stage_environment is not None else "UNVERIFIED_LEGACY_MANIFEST"
+        ),
+        "stage_environment": dict(stage_environment or {}),
+    }
+
+
 def partition_feature_worklist(
     rows: Sequence[Mapping[str, Any]],
     worker_assignments: Mapping[str, Sequence[str]],
