@@ -34,6 +34,13 @@ Notebook producer TransNetV2 dùng tạm để chạy GPU theo worker nằm ở
 `tmp-kaggle-keyframe-producer-v2.ipynb`. Nó không phải một lượt được đánh số trong
 pipeline và không thay thế notebook chính `10-btc-keyframe-augmentation.ipynb`.
 
+Sau khi producer đủ **12/12 worker và 873/873 COMPLETE marker**, chạy
+`11-btc-shot-coverage-audit.ipynb` bằng **CPU / Accelerator None**. Notebook 11
+không chạy lại TransNetV2 và không tải MP4: nó băm lại manifest, marker, report,
+shot artifact và mapping BTC; sau đó xuất C0/C1/COVERED/CT/CE vào thư mục research
+`gate1-audit-v1`. Đây chỉ là temporal diagnostic O1-T, không được dùng riêng để
+kết luận `NO_HEADROOM`; O1-S/O1-R và B0–B4 vẫn là các gate tiếp theo.
+
 **Mỗi lượt một file shards riêng, và đó không phải sự lộn xộn.** `merge_bundle.py` đòi ĐỦ mảnh
 cho mọi tầng có trong `plan.stages`; gộp hết vào một file là bundle bị từ chối cho tới khi lượt
 cuối cùng chạy xong toàn bộ 873 video. Tách ra thì gộp được độc lập, và bốn lượt không đụng nhau
