@@ -10,7 +10,9 @@ NOTEBOOK = ROOT / "notebooks" / "btc" / "13-btc-delta-siglip-producer.ipynb"
 def test_notebook_is_preflight_first_and_research_only() -> None:
     payload = json.loads(NOTEBOOK.read_text(encoding="utf-8"))
     text = "\n".join("".join(cell.get("source", [])) for cell in payload["cells"])
-    assert payload["metadata"]["kaggle"]["accelerator"] == "gpu"
+    assert "kaggle" not in payload["metadata"]
+    assert payload["nbformat_minor"] == 4
+    assert all("id" not in cell for cell in payload["cells"])
     assert 'RUNNERS = ("quang", "trong")' in text
     assert 'RUNNER = "quang"' in text
     assert 'RUN_SCOPE = "PREFLIGHT"' in text
