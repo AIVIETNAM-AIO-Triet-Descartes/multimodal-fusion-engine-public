@@ -27,6 +27,9 @@ def test_notebook_is_preflight_first_and_research_only() -> None:
     assert "selection_freeze_sha256" in text
     assert "runner-manifests" in text
     assert "worker-manifests" not in text
+    assert "torch==2.12.1" in text
+    assert "torchvision==0.27.1" in text
+    assert "TORCH_FALLBACK_INSTALLED" in text
 
 
 def test_every_delta_siglip_code_cell_compiles() -> None:
