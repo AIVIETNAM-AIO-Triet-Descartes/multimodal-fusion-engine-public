@@ -48,6 +48,13 @@ budget. Notebook 12 chỉ xuất candidate manifests cùng feature worklist sang
 BTC. Nếu một arm underfill, exact-collide BTC hoặc sai selector contract thì không
 có freeze hợp lệ.
 
+Sau selection freeze, `13-btc-delta-siglip-producer.ipynb` chạy GPU theo đúng
+12 worker để decode union frame một lần, lưu deterministic JPEG tar và vector
+SigLIP research. Mặc định `PREFLIGHT`: notebook so một BTC JPEG/vector đã lưu với
+pipeline hiện tại và chặn shard nếu numeric canary hoặc package environment lệch.
+SigLIP PASS chưa phải full feature parity; OCR/caption/BGE và downstream vẫn bị
+ghi `BLOCKED`, và không artifact nào của lượt 13 được ghi vào `keyframes-btc`.
+
 **Mỗi lượt một file shards riêng, và đó không phải sự lộn xộn.** `merge_bundle.py` đòi ĐỦ mảnh
 cho mọi tầng có trong `plan.stages`; gộp hết vào một file là bundle bị từ chối cho tới khi lượt
 cuối cùng chạy xong toàn bộ 873 video. Tách ra thì gộp được độc lập, và bốn lượt không đụng nhau
