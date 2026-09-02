@@ -68,11 +68,19 @@ nên artifact phải gọi `O1-S-LB64`, không gọi full/best O1-S. Chạy `PRE
 
 Khi notebook 19 có đúng **90/90 COMPLETE marker**, chạy
 `20-btc-o1s-lb64-aggregate.ipynb` một lần bằng GPU. Notebook 20 không chia runner và
-không cần attach Dataset: nó xác minh lại hai manifest cùng hash của mọi source artifact,
+khi BTC flat chưa được publish thì cần attach đúng Dataset `mfe-data-v2`: nó xác minh lại hai manifest cùng hash của mọi source artifact,
 đo 71 DEV query-event trên toàn bộ 176.707 vector BTC, rồi xuất O1-S-LB64, dense-stage
 rank/score trace, math ledger, hypothesis backlog, adversarial counterexamples và workspace
 safety manifest. Kết quả vẫn `diagnostic_only`; fusion/reranker/scorer, full feature parity
 và official B0–B4 DEV A/B chưa được phép gọi là đã hoàn tất.
+
+Sau notebook 20, chạy `21-btc-o1s-exact-interval-scan.ipynb` bằng GPU. Notebook 21
+chỉ quét chính xác từng frame trong 61 DEV interval dài hơn 64 frame, chia video
+disjoint cho `quang`/`trong`, rồi lưu JPEG + SigLIP artifact có marker resume. Chạy
+`PREFLIGHT` trước, sau đó mỗi người chạy `SHARD` với `CONFIRM_SHARD` đúng runner;
+hai runner có thể chạy song song. Chỉ khi cả hai manifest `COMPLETE` mới chạy
+notebook 22 aggregate exact O1-S; notebook 23 chỉ được chạy sau notebook 22 và
+full feature parity OCR/caption/BGE/downstream.
 
 **Mỗi lượt một file shards riêng, và đó không phải sự lộn xộn.** `merge_bundle.py` đòi ĐỦ mảnh
 cho mọi tầng có trong `plan.stages`; gộp hết vào một file là bundle bị từ chối cho tới khi lượt
