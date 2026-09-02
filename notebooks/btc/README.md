@@ -49,11 +49,22 @@ BTC. Nếu một arm underfill, exact-collide BTC hoặc sai selector contract t
 có freeze hợp lệ.
 
 Sau selection freeze, `13-btc-delta-siglip-producer.ipynb` chạy GPU theo đúng
-12 worker để decode union frame một lần, lưu deterministic JPEG tar và vector
+hai runner `quang`/`trong` để decode union frame một lần, lưu deterministic JPEG tar và vector
 SigLIP research. Mặc định `PREFLIGHT`: notebook so một BTC JPEG/vector đã lưu với
 pipeline hiện tại và chặn shard nếu numeric canary hoặc package environment lệch.
 SigLIP PASS chưa phải full feature parity; OCR/caption/BGE và downstream vẫn bị
 ghi `BLOCKED`, và không artifact nào của lượt 13 được ghi vào `keyframes-btc`.
+
+Sau khi notebook 17 materialize đủ oracle frame, `18-btc-keyframe-augmentation-oracle-eval.ipynb`
+đo DEV B0, natural SigLIP probe và O1-R final-candidate ceiling. Đây là diagnostic-only:
+probe dương không được dùng để bật production, còn O1-R là trần xếp hạng chứ không phải
+selector uplift.
+
+`19-btc-o1s-representative-scan-producer.ipynb` là bước tiếp theo để gỡ blocker O1-S.
+Notebook chia 90 video cho đúng hai runner `quang`/`trong`, lấy tối đa 64 source frame
+đều trên mỗi inclusive DEV GT interval và union còn 12.982 frame. Interval dài bị sample
+nên artifact phải gọi `O1-S-LB64`, không gọi full/best O1-S. Chạy `PREFLIGHT` trước rồi
+đổi sang `SHARD`; chỉ khi cả hai worker manifest `COMPLETE` mới aggregate/stage-trace.
 
 **Mỗi lượt một file shards riêng, và đó không phải sự lộn xộn.** `merge_bundle.py` đòi ĐỦ mảnh
 cho mọi tầng có trong `plan.stages`; gộp hết vào một file là bundle bị từ chối cho tới khi lượt
