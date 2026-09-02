@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 GENERATOR = Path("scratchpad/gen_nb25_26_b1_parallel_producers.py")
-NOTEBOOKS = [Path("notebooks/btc/25-btc-b1-easyocr-producer.ipynb"), Path("notebooks/btc/26-btc-b1-qwen25-producer.ipynb")]
+NOTEBOOKS = [Path("notebooks/btc/25-btc-b1-easyocr-producer.ipynb"), Path("notebooks/btc/26-btc-b1-qwen25-producer.ipynb"), Path("notebooks/btc/27-btc-b1-paddle-vietocr-producer.ipynb")]
 
 
 def test_parallel_producers_regenerate_compile_and_are_resumable() -> None:
