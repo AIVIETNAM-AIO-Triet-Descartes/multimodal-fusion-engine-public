@@ -19,6 +19,8 @@ def test_exact_scan_notebook_is_generated_and_fail_closed() -> None:
     assert 'RUN_SCOPE = "PREFLIGHT"' in source
     assert 'RUN_ID = "o1s-exact-v1"' in source
     assert 'INTERVAL_POLICY = "inclusive_full_interval_exact"' in source
+    assert "DEV_TARGETS = sorted(" in source
+    assert "EXPECTED_DEV_TARGETS = 71" in source
     assert "EXPECTED_FULL_TARGETS = 61" in source
     assert "for frame_idx in range(target.frame_range_start, target.frame_range_end + 1)" in source
     assert '"heldout_accessed": False' in source
