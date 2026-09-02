@@ -98,6 +98,11 @@ artifact nguồn của từng video; sau đó khóa đúng 17.399 frame thành b
 BGE-M3 chỉ chạy sau Qwen25 COMPLETE. Đây là workload freeze, chưa phải full parity
 PASS và chưa phải official B0–B4 DEV A/B.
 
+Sau notebook 23, chạy `24-btc-siglip-b0-b4-screen.ipynb` bằng GPU để sàng lọc
+B1–B4 trước khi tạo feature đắt tiền. Notebook dùng đúng 5.301 candidate mỗi arm,
+71 DEV event và vector SigLIP đã có; 846 NPZ được tải song song. Kết quả chỉ chọn
+arm để chạy OCR/Qwen/BGE, chưa phải official full-feature uplift.
+
 **Mỗi lượt một file shards riêng, và đó không phải sự lộn xộn.** `merge_bundle.py` đòi ĐỦ mảnh
 cho mọi tầng có trong `plan.stages`; gộp hết vào một file là bundle bị từ chối cho tới khi lượt
 cuối cùng chạy xong toàn bộ 873 video. Tách ra thì gộp được độc lập, và bốn lượt không đụng nhau
