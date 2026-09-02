@@ -23,6 +23,8 @@ def test_feature_parity_freeze_contract_and_regeneration() -> None:
     assert "EXPECTED_NB22_COMPLETE_SHA256" in source
     assert "partition_feature_worklist_by_runner" in source
     assert 'for artifact in ("images", "image_manifest", "siglip", "report")' in source
+    assert "research.exists(paths[artifact])" in source
+    assert "research.put_many([" in source
     assert '"dependency": "qwen25.COMPLETE"' in source
     assert "FEATURE_PARITY_WORKLIST_FROZEN" in source
     assert "eval/queryset_heldout" not in source
