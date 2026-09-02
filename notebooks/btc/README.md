@@ -66,6 +66,14 @@ Notebook chia 90 video cho đúng hai runner `quang`/`trong`, lấy tối đa 64
 nên artifact phải gọi `O1-S-LB64`, không gọi full/best O1-S. Chạy `PREFLIGHT` trước rồi
 đổi sang `SHARD`; chỉ khi cả hai worker manifest `COMPLETE` mới aggregate/stage-trace.
 
+Khi notebook 19 có đúng **90/90 COMPLETE marker**, chạy
+`20-btc-o1s-lb64-aggregate.ipynb` một lần bằng GPU. Notebook 20 không chia runner và
+không cần attach Dataset: nó xác minh lại hai manifest cùng hash của mọi source artifact,
+đo 71 DEV query-event trên toàn bộ 176.707 vector BTC, rồi xuất O1-S-LB64, dense-stage
+rank/score trace, math ledger, hypothesis backlog, adversarial counterexamples và workspace
+safety manifest. Kết quả vẫn `diagnostic_only`; fusion/reranker/scorer, full feature parity
+và official B0–B4 DEV A/B chưa được phép gọi là đã hoàn tất.
+
 **Mỗi lượt một file shards riêng, và đó không phải sự lộn xộn.** `merge_bundle.py` đòi ĐỦ mảnh
 cho mọi tầng có trong `plan.stages`; gộp hết vào một file là bundle bị từ chối cho tới khi lượt
 cuối cùng chạy xong toàn bộ 873 video. Tách ra thì gộp được độc lập, và bốn lượt không đụng nhau
