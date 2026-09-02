@@ -26,6 +26,9 @@ def test_o1s_aggregate_is_dev_only_read_only_and_fail_closed() -> None:
     assert "EXPECTED_SIGLIP_CANARY_REPORT_HASH" in source
     assert "validate_o1s_worker_manifest" in source
     assert "validate_scan_completion_marker" in source
+    assert 'f"{scan_root}/samples/{video_id}.jsonl"' in source
+    assert 'f"{scan_root}/markers/{runner}/{video_id}.json"' in source
+    assert 'f"{scan_root}/samples/{runner}/{video_id}.jsonl"' not in source
     assert "best_source_rank" in source
     assert "best_btc_rank" in source
     assert "top_btc_outside_interval_rank" in source
