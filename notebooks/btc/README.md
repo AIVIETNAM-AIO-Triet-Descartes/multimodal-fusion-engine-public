@@ -82,6 +82,14 @@ hai runner có thể chạy song song. Chỉ khi cả hai manifest `COMPLETE` m�
 notebook 22 aggregate exact O1-S; notebook 23 chỉ được chạy sau notebook 22 và
 full feature parity OCR/caption/BGE/downstream.
 
+Khi hai manifest notebook 21 đều `COMPLETE`, chạy
+`22-btc-o1s-exact-aggregate.ipynb` đúng một lần bằng GPU. Notebook 22 fail-closed
+trên 35 marker/32.867 exact frame, giữ 10 short interval đã full-scan ở notebook
+20 và thay 61 LB64 interval bằng exact best-source result. Nó xuất đủ 71 DEV
+query-event, bảng exact-vs-LB64, SigLIP score/rank headroom và failure-stage trace
+sang `gate1-o1s-exact-aggregate-v1`. Đây vẫn là diagnostic-only; notebook 23 bị
+khóa cho tới khi OCR/caption/BGE và downstream fingerprint parity hoàn tất.
+
 **Mỗi lượt một file shards riêng, và đó không phải sự lộn xộn.** `merge_bundle.py` đòi ĐỦ mảnh
 cho mọi tầng có trong `plan.stages`; gộp hết vào một file là bundle bị từ chối cho tới khi lượt
 cuối cùng chạy xong toàn bộ 873 video. Tách ra thì gộp được độc lập, và bốn lượt không đụng nhau

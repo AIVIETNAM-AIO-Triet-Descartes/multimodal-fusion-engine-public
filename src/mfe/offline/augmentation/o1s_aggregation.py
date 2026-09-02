@@ -30,7 +30,10 @@ class O1SEventTrace(BaseModel):
     event_index: int = Field(ge=0)
     video_id: str = Field(min_length=1)
     gt_interval_inclusive: tuple[int, int]
-    sampling_policy: Literal["inclusive_uniform_integer_lb64"]
+    sampling_policy: Literal[
+        "inclusive_uniform_integer_lb64",
+        "inclusive_full_interval_exact",
+    ]
     full_interval_scan: bool
     best_btc_frame_idx: int | None = Field(default=None, ge=0)
     best_btc_rank: int | None = Field(default=None, ge=1)
@@ -59,9 +62,13 @@ class O1SEventTrace(BaseModel):
             raise ValueError("best BTC lies outside its DEV interval")
         if (self.best_btc_frame_idx is None) != (self.best_btc_rank is None):
             raise ValueError("best BTC frame/rank must both be present or both be absent")
-        expected_full_scan = end - start + 1 <= 64
+        expected_full_scan = (
+            end - start + 1 <= 64
+            if self.sampling_policy == "inclusive_uniform_integer_lb64"
+            else True
+        )
         if self.full_interval_scan != expected_full_scan:
-            raise ValueError("full_interval_scan disagrees with the LB64 interval length")
+            raise ValueError("full_interval_scan disagrees with the sampling policy")
         if set(self.best_source_score_by_stage) != set(_STAGES):
             raise ValueError("best source stage map is incomplete or contains an unknown stage")
         if set(self.best_btc_score_by_stage) != set(_STAGES):

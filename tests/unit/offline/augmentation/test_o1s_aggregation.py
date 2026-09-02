@@ -255,6 +255,15 @@ def test_event_schema_checks_lb64_delta_stage_nulls_and_outside_identity() -> No
         _trace(top_btc_outside_interval_id="L21_V001#000050")
 
 
+def test_event_schema_accepts_exact_full_scan_for_long_interval() -> None:
+    trace = _trace(
+        sampling_policy="inclusive_full_interval_exact",
+        full_interval_scan=True,
+    )
+    assert trace.full_interval_scan is True
+    assert trace.sampling_policy == "inclusive_full_interval_exact"
+
+
 def test_adversarial_counterexamples_block_common_overclaims() -> None:
     summary = adversarial_counterexample_summary(
         [_trace()], exposure_depth=100, improvement_epsilon=1e-6
