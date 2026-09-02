@@ -103,6 +103,11 @@ B1–B4 trước khi tạo feature đắt tiền. Notebook dùng đúng 5.301 ca
 71 DEV event và vector SigLIP đã có; 846 NPZ được tải song song. Kết quả chỉ chọn
 arm để chạy OCR/Qwen/BGE, chưa phải official full-feature uplift.
 
+Khi notebook 24 chọn B1, `25-btc-b1-easyocr-producer.ipynb` và
+`26-btc-b1-qwen25-producer.ipynb` có thể chạy song song ở runtime riêng. Mỗi file
+chia đúng hai runner `quang`/`trong`, chỉ xử lý 5.301 frame B1 và resume theo
+marker từng video. Qwen cần T4 x2; không chạy chung kernel với OCR.
+
 **Mỗi lượt một file shards riêng, và đó không phải sự lộn xộn.** `merge_bundle.py` đòi ĐỦ mảnh
 cho mọi tầng có trong `plan.stages`; gộp hết vào một file là bundle bị từ chối cho tới khi lượt
 cuối cùng chạy xong toàn bộ 873 video. Tách ra thì gộp được độc lập, và bốn lượt không đụng nhau
