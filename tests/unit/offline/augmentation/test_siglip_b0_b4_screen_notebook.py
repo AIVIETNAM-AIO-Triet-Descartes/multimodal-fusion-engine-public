@@ -20,6 +20,7 @@ def test_siglip_screen_contract_regeneration_and_compile() -> None:
     assert 'RUN_SCOPE = "SCREEN"' in source
     assert "EXPECTED_CANDIDATES_PER_ARM = 5301" in source
     assert "EXPECTED_FEATURE_FRAMES = 17399" in source
+    assert "build_keyframe_id(str(row[\"video_id\"]), int(row[\"frame_idx\"]))" in source
     assert "ThreadPoolExecutor(max_workers=DOWNLOAD_WORKERS)" in source
     assert "paired_bootstrap_95ci" in source
     assert "SIGLIP_B0_B4_SCREEN_COMPLETE" in source
