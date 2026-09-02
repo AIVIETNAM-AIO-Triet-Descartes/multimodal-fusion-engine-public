@@ -110,6 +110,16 @@ marker từng video. Qwen cần T4 x2; không chạy chung kernel với OCR.
 `27-btc-b1-paddle-vietocr-producer.ipynb` là runtime thứ ba và cũng chạy song
 song; nó giữ Paddle GPU cu126 tách khỏi Torch/vLLM để tránh ABI conflict.
 
+Khi Qwen runner manifest của **chính runner đó** đã `COMPLETE`, chạy
+`28-btc-b1-bge-m3-producer.ipynb` trong một BGE-only runtime với GPU T4. Notebook
+28 chỉ tải `qwen_captions` JSON và nhúng bằng `BAAI/bge-m3`; nó không đọc ảnh,
+không chạy lại Qwen/OCR và không sửa BTC base. Chạy `PREFLIGHT` trước để khóa
+lineage, model fingerprint, package version và numeric runtime sanity; sau đó
+mới đổi sang `SHARD` với `CONFIRM_SHARD` đúng runner. Quang không cần chờ Qwen
+manifest của Trọng để chạy shard Quang, nhưng aggregate full parity phải đợi cả
+hai BGE runner manifest `COMPLETE`. Kết quả notebook 28 vẫn chỉ là research
+feature shard — chưa phải full parity, official A/B hoặc production GO.
+
 **Mỗi lượt một file shards riêng, và đó không phải sự lộn xộn.** `merge_bundle.py` đòi ĐỦ mảnh
 cho mọi tầng có trong `plan.stages`; gộp hết vào một file là bundle bị từ chối cho tới khi lượt
 cuối cùng chạy xong toàn bộ 873 video. Tách ra thì gộp được độc lập, và bốn lượt không đụng nhau
