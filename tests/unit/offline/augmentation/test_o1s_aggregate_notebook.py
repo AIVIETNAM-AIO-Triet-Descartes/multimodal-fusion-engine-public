@@ -29,6 +29,10 @@ def test_o1s_aggregate_is_dev_only_read_only_and_fail_closed() -> None:
     assert 'f"{scan_root}/samples/{video_id}.jsonl"' in source
     assert 'f"{scan_root}/markers/{runner}/{video_id}.json"' in source
     assert 'f"{scan_root}/samples/{runner}/{video_id}.jsonl"' not in source
+    assert 'input_root.rglob(member)' in source
+    assert 'input_root.rglob("mfe-data-v2.zip")' in source
+    assert 'btc.exists(remote)' in source
+    assert "Không cần chạy lại notebook 19" in source
     assert "best_source_rank" in source
     assert "best_btc_rank" in source
     assert "top_btc_outside_interval_rank" in source
