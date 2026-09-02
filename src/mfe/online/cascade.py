@@ -149,13 +149,15 @@ class Cascade:
 
         return cls(
             config=config,
-            vector_index=overrides.get(
-                "vector_index",
-                load("vector index", lambda: _load_vector_index(config)),
+            vector_index=(
+                overrides["vector_index"]
+                if "vector_index" in overrides
+                else load("vector index", lambda: _load_vector_index(config))
             ),
-            inverted_index=overrides.get(
-                "inverted_index",
-                load("inverted index", lambda: _load_inverted_index(config)),
+            inverted_index=(
+                overrides["inverted_index"]
+                if "inverted_index" in overrides
+                else load("inverted index", lambda: _load_inverted_index(config))
             ),
             encode_query=overrides.get(
                 "encode_query",

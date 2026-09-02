@@ -27,6 +27,8 @@ def test_oracle_eval_notebook_is_dev_only_fail_closed_and_compilable() -> None:
     assert '"relational_snapshot": "synthetic_literal_fps_interval"' in source
     assert '"frame_from_pts": "floor"' in source
     assert 'name="B0"' in source
+    assert 'EVAL_CONFIG = REPO / "config/btc_b1.yaml"' in source
+    assert 'EVAL_CONFIG = REPO / "config/pilot.yaml"' not in source
     assert 'name="P1-N-SIGLIP"' in source
     assert 'name="O1-R-FINAL"' in source
     assert '"decision_authority": "diagnostic_only"' in source
