@@ -90,6 +90,14 @@ query-event, bảng exact-vs-LB64, SigLIP score/rank headroom và failure-stage 
 sang `gate1-o1s-exact-aggregate-v1`. Đây vẫn là diagnostic-only; notebook 23 bị
 khóa cho tới khi OCR/caption/BGE và downstream fingerprint parity hoàn tất.
 
+Kết quả notebook 22 đã quan sát được SigLIP headroom trên DEV, nên
+`23-btc-feature-parity-worklist-freeze.ipynb` bắt đầu gỡ parity blocker bằng CPU.
+Notebook 23 xác minh selection freeze, hai runner notebook 13, mọi marker và bốn
+artifact nguồn của từng video; sau đó khóa đúng 17.399 frame thành ba nhóm
+`ocr_classical`, `qwen25`, `bge_m3`. OCR cổ điển và Qwen25 có thể chạy song song;
+BGE-M3 chỉ chạy sau Qwen25 COMPLETE. Đây là workload freeze, chưa phải full parity
+PASS và chưa phải official B0–B4 DEV A/B.
+
 **Mỗi lượt một file shards riêng, và đó không phải sự lộn xộn.** `merge_bundle.py` đòi ĐỦ mảnh
 cho mọi tầng có trong `plan.stages`; gộp hết vào một file là bundle bị từ chối cho tới khi lượt
 cuối cùng chạy xong toàn bộ 873 video. Tách ra thì gộp được độc lập, và bốn lượt không đụng nhau
