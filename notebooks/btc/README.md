@@ -120,6 +120,15 @@ manifest của Trọng để chạy shard Quang, nhưng aggregate full parity ph
 hai BGE runner manifest `COMPLETE`. Kết quả notebook 28 vẫn chỉ là research
 feature shard — chưa phải full parity, official A/B hoặc production GO.
 
+Khi đủ 8 runner manifest của notebook 25–28, chạy
+`29-btc-b1-feature-aggregate.ipynb` đúng một lần bằng CPU. Notebook 29 xác minh
+mọi manifest, marker và hash artifact, lọc đúng 5.301 frame B1 rồi gộp SigLIP,
+EasyOCR, PaddleOCR, VietOCR, Qwen caption/OCR và BGE-M3 thành delta flat bundle
+research-only tại `gate1-b1-feature-aggregate-v1`. Nó không sửa BTC và không đọc
+held-out. SQLite snapshot/index B0+B1 được hoãn sang notebook 30 vì bước đó cần
+attach baseline BTC bất biến; notebook 29 `COMPLETE` chỉ có nghĩa bundle delta
+đã sẵn sàng cho paired DEV A/B, chưa phải bằng chứng điểm tăng.
+
 **Mỗi lượt một file shards riêng, và đó không phải sự lộn xộn.** `merge_bundle.py` đòi ĐỦ mảnh
 cho mọi tầng có trong `plan.stages`; gộp hết vào một file là bundle bị từ chối cho tới khi lượt
 cuối cùng chạy xong toàn bộ 873 video. Tách ra thì gộp được độc lập, và bốn lượt không đụng nhau
