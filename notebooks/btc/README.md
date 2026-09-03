@@ -129,6 +129,13 @@ held-out. SQLite snapshot/index B0+B1 được hoãn sang notebook 30 vì bướ
 attach baseline BTC bất biến; notebook 29 `COMPLETE` chỉ có nghĩa bundle delta
 đã sẵn sàng cho paired DEV A/B, chưa phải bằng chứng điểm tăng.
 
+Sau khi notebook 29 kết thúc với `B1_FEATURE_AGGREGATE: COMPLETE`, attach đúng
+Dataset `mfe-data-v2` đã dùng ở notebook 18 rồi chạy
+`30-btc-b0-b1-dev-ab.ipynb` một lần. Notebook 30 dựng SQLite overlay tạm và đo
+B0/B1 trên cùng 63 truy vấn DEV bằng công thức chấm chính thức, kèm paired
+bootstrap 95%. Nó vẫn là research-only: không đọc held-out, không sửa BTC và
+không tự cấp quyền merge production.
+
 **Mỗi lượt một file shards riêng, và đó không phải sự lộn xộn.** `merge_bundle.py` đòi ĐỦ mảnh
 cho mọi tầng có trong `plan.stages`; gộp hết vào một file là bundle bị từ chối cho tới khi lượt
 cuối cùng chạy xong toàn bộ 873 video. Tách ra thì gộp được độc lập, và bốn lượt không đụng nhau
