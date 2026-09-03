@@ -41,6 +41,7 @@ def test_notebook_30_regenerates_and_compiles() -> None:
 def test_notebook_30_locks_inputs_and_stays_dev_only() -> None:
     source = _source()
     assert "EXPECTED_B1_COUNT = 5301" in source
+    assert "EXPECTED_METADATA_CORRECTIONS = 33" in source
     assert "d2c38a6a5f7fe810b09d87b6a384b850bcbf942564bf83d910c353eaeafc5fa6" in source
     assert 'RUN_SCOPE = "PAIRED_DEV_AB"' in source
     assert "gate1-b0-b1-dev-ab-v1" in source
@@ -50,6 +51,8 @@ def test_notebook_30_locks_inputs_and_stays_dev_only() -> None:
     assert '"btc_mutated": False' in source
     assert "load_overlay_flat_bundle" in source
     assert "build_relational_snapshot" in source
+    assert 'b0 = run_variant("B0", relational_db=B0_DB' in source
+    assert "symmetric_tail_metadata_corrections" in source
     assert "paired_bootstrap_interval" in source
     assert "hãy chọn GPU T4, không chọn P100" in source
     assert "research.put(complete_path, complete_remote)" in source

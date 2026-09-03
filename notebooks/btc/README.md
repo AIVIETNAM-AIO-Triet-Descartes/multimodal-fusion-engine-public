@@ -133,8 +133,10 @@ Sau khi notebook 29 kết thúc với `B1_FEATURE_AGGREGATE: COMPLETE`, attach �
 Dataset `mfe-data-v2` đã dùng ở notebook 18 rồi chạy
 `30-btc-b0-b1-dev-ab.ipynb` một lần. Notebook 30 dựng SQLite overlay tạm và đo
 B0/B1 trên cùng 63 truy vấn DEV bằng công thức chấm chính thức, kèm paired
-bootstrap 95%. Nó vẫn là research-only: không đọc held-out, không sửa BTC và
-không tự cấp quyền merge production.
+bootstrap 95%. Với các video decode dài hơn metadata SQLite cũ vài giây,
+notebook chỉ nới metadata trên bản sao tạm và dùng cùng bản sao đó cho cả B0/B1.
+Nó vẫn là research-only: không đọc held-out, không sửa BTC và không tự cấp
+quyền merge production.
 
 **Mỗi lượt một file shards riêng, và đó không phải sự lộn xộn.** `merge_bundle.py` đòi ĐỦ mảnh
 cho mọi tầng có trong `plan.stages`; gộp hết vào một file là bundle bị từ chối cho tới khi lượt
