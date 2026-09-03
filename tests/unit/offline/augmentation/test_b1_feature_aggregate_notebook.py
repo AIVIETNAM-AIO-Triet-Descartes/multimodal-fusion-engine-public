@@ -56,6 +56,7 @@ def test_notebook_29_regenerates_and_all_cells_compile() -> None:
     assert "gate1-b1-paddle-vietocr-v1" in source
     assert "gate1-b1-bge-m3-v1" in source
     assert "siglip_vectors.npz" in source and "dense_vectors.npz" in source
+    assert '"rank-bm25>=0.2.2,<1"' in source
     assert "B1_FEATURE_AGGREGATE" in source
     assert "heldout_accessed" in source and '"btc_mutated": False' in source
     assert "path.is_file() and path != complete_path" in source
