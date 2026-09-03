@@ -144,6 +144,14 @@ Nếu notebook 30 trả `DEV_POSITIVE_BUT_UNCERTAIN`, chạy
 chiếu candidate B1 trong vùng đáp án và xuất `leader-handoff.md`. Đây là gói
 bàn giao bằng chứng, không phải bước mở held-out hay production merge.
 
+Khi bộ DEV thành viên đã mở rộng, chạy
+`32-btc-b0-b1-dev163-ab.ipynb` để đo lại retrieval B0–B1 trên đúng **163 KIS/QA**
+(115 KIS + 48 QA). Notebook khóa hash ba file nguồn trong `eval/dev`, tách báo
+cáo 54 KIS/QA cũ và 109 query mới, đồng thời loại 26 TRAKE khỏi mẫu 163 để không
+trộn bài toán chuỗi sự kiện vào thống kê “163 câu”. Notebook tái sử dụng toàn bộ
+feature B1 và baseline `mfe-data-v2`; không chạy lại producer, không đọc held-out
+và không tự cấp quyền merge production.
+
 **Mỗi lượt một file shards riêng, và đó không phải sự lộn xộn.** `merge_bundle.py` đòi ĐỦ mảnh
 cho mọi tầng có trong `plan.stages`; gộp hết vào một file là bundle bị từ chối cho tới khi lượt
 cuối cùng chạy xong toàn bộ 873 video. Tách ra thì gộp được độc lập, và bốn lượt không đụng nhau
