@@ -138,6 +138,12 @@ notebook chỉ nới metadata trên bản sao tạm và dùng cùng bản sao đ
 Nó vẫn là research-only: không đọc held-out, không sửa BTC và không tự cấp
 quyền merge production.
 
+Nếu notebook 30 trả `DEV_POSITIVE_BUT_UNCERTAIN`, chạy
+`31-btc-b1-dev-diagnostic.ipynb` bằng CPU, không cần attach Dataset. Notebook
+31 không chạy lại model; nó xác minh báo cáo, chỉ ra các query tăng/giảm, đối
+chiếu candidate B1 trong vùng đáp án và xuất `leader-handoff.md`. Đây là gói
+bàn giao bằng chứng, không phải bước mở held-out hay production merge.
+
 **Mỗi lượt một file shards riêng, và đó không phải sự lộn xộn.** `merge_bundle.py` đòi ĐỦ mảnh
 cho mọi tầng có trong `plan.stages`; gộp hết vào một file là bundle bị từ chối cho tới khi lượt
 cuối cùng chạy xong toàn bộ 873 video. Tách ra thì gộp được độc lập, và bốn lượt không đụng nhau
