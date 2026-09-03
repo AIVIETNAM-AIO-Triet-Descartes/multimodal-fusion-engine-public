@@ -1,6 +1,6 @@
 """Đọc một **gói truy vấn** BTC — thư mục `query-*.txt` — thành thứ chạy được.
 
-    docs/context/the-le-cuoc-thi.md · docs/context/bo-de-thu-nghiem/
+    docs/context/the-le-cuoc-thi.md · eval/btc/bo-de-thu-nghiem/
 
 BTC phát đề dưới dạng file text trần, một truy vấn một file, và **dạng truy vấn
 nằm trong tên file**:
@@ -66,18 +66,29 @@ SUFFIXES: dict[str, QueryType] = {"kis": "KIS", "qa": "QA", "trake": "TRAKE"}
 #: file `tim-tay-1-qa.csv` trong gói là thứ BTC không hỏi.
 ADHOC_PREFIX = "tim-tay"
 
-#: `E1:`, `E 2 :`, `e3.`, và `E1 ` — BTC gõ tay nên dấu ngăn không cố định.
+#: `E1:`, `E 2 :`, `e3.`, `E1 ` — và từ đợt sơ tuyển 2: **`Cảnh 1:`**.
 #:
-#: Dấu ngăn là TUỲ CHỌN vì gói đề ngày 21-08-2026 viết `E1 Khoảnh khắc…` không
-#: có hai chấm, và bản regex đòi `[:.\-]` đã làm hỏng cả lượt chạy với thông báo
-#: "không có dòng nào dạng E<n>" — trong khi file có đủ ba dòng, ngay trước mắt.
-#: Một phép nhận dạng định dạng do người gõ phải chịu được cách gõ của người đó.
+#: BTC gõ tay nên cả NHÃN lẫn DẤU NGĂN đều không cố định. Hai lần đã trả giá:
+#:
+#: * Gói 21-08-2026 viết `E1 Khoảnh khắc…` không có hai chấm, và bản regex đòi
+#:   `[:.\-]` làm hỏng cả lượt chạy với thông báo "không có dòng nào dạng E<n>"
+#:   — trong khi file có đủ ba dòng, ngay trước mắt người đọc.
+#: * Gói **đợt 2** (`query-p2-21-trake.txt`) viết `Cảnh 1:` … `Cảnh 4:` thay vì
+#:   `E1:`. Cùng gói đó `query-p2-8-trake.txt` vẫn dùng `E1:` — nên KHÔNG suy ra
+#:   được nhãn từ đợt đề, phải nhận cả hai.
+#:
+#: Nhận sai hướng nào cũng mất một câu: `load_package` ném cho CẢ thư mục, nên
+#: một file lạ nhãn là 30 câu không nạp được.
 #:
 #: Nhưng vẫn phải có KHOẢNG TRẮNG rồi mới tới nội dung: không thế thì `E1` trong
 #: `E1000` hay một mã hiệu như `E5A` cũng thành mốc sự kiện.
 #:
-#: Neo `^` với `re.MULTILINE` để một chữ "E1" giữa câu không bị hiểu thành mốc.
-_EVENT = re.compile(r"^\s*E\s*(\d+)\s*[:.\-]?\s+(.+)$", re.IGNORECASE | re.MULTILINE)
+#: Neo `^` với `re.MULTILINE` để "E1" hay "cảnh 2" giữa câu không thành mốc — câu
+#: mở đầu của chính `query-p2-21` là *"4 cảnh này xảy ra liên tiếp nhau"*, và nó
+#: KHÔNG được đếm thành một mốc.
+_EVENT = re.compile(
+    r"^\s*(?:E|C[ảa]nh)\s*(\d+)\s*[:.\-]?\s+(.+)$", re.IGNORECASE | re.MULTILINE
+)
 
 
 @dataclass(frozen=True)

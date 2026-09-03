@@ -1,7 +1,7 @@
 """Chạy cả một gói đề BTC và ghi ra bộ file nộp.
 
     python scripts/run_submission.py --config config/pilot.yaml \
-        --queries docs/context/bo-de-thu-nghiem --out eval/submissions/p1 --zip
+        --queries eval/btc/bo-de-thu-nghiem --out eval/submissions/p1 --zip
 
 Đây là mảnh nối cuối cùng giữa hai nửa đã có sẵn: `mfe.eval.query_package` đọc đề
 thật (`query-*.txt`, không có đáp án), `mfe.online.cascade` tìm keyframe, và
@@ -90,7 +90,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", default="config/pilot.yaml")
     parser.add_argument(
         "--queries",
-        default="docs/context/bo-de-thu-nghiem",
+        default="eval/btc/bo-de-thu-nghiem",
         help="Thu muc chua query-*.txt cua BTC",
     )
     parser.add_argument("--out", default="eval/submissions/p1")

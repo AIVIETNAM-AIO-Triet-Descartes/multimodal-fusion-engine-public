@@ -1118,6 +1118,12 @@
       "text_en": "The autumn pavilion hangs the starfish and multi-colored fish lamps"
     },
     {
+      "text": "hai bàn tay bào và rửa măng trắng trên tấm ván đặt trên thùng nước",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "They grate the asparagus with their hands and wash it on a plank over a bucket of water."
+    },
+    {
       "text": "hai du khách đu dây zipline qua thung lũng núi",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -1158,6 +1164,12 @@
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "They walked through the numbered barns of the farmhouse."
+    },
+    {
+      "text": "hai người đàn ông dỡ giỏ lưới đầy măng từ xe máy xuống đất",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Two men unloaded a bamboo-laden basket from their motorcycle."
     },
     {
       "text": "hai người đàn ông đứng nói chuyện trước thác nước chảy qua vách đá trong rừng",
@@ -1418,6 +1430,12 @@
       "text_en": "Red-clad farmers tend red pepper trees in greenhouses"
     },
     {
+      "text": "người phất cờ ô vuông đen trắng ở vạch đích",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "the black and white flag bearer at the finish line"
+    },
+    {
       "text": "người phụ nữ cầm một chùm quả đứng cạnh người nông dân trong vườn",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -1434,6 +1452,12 @@
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "woman in black and white striped dress eating seafood at a table by the sea"
+    },
+    {
+      "text": "người phụ nữ mặc áo sơ mi kẻ đỏ trắng ngồi lột vỏ măng bên thùng nhựa xanh",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The woman in the red and white striped shirt was peeling bamboo shoots from a green plastic bin."
     },
     {
       "text": "người phụ nữ sơ chế ớt và các nguyên liệu trong nhiều chiếc bát",
@@ -1634,6 +1658,12 @@
       "text_en": "And they're all around the table, mixing ingredients and putting them in bowls."
     },
     {
+      "text": "nồi đất cá kho nước sốt nâu đen có ớt và hành lá",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "pot of fish chowder brown and black sauce with chilies and scallions"
+    },
+    {
       "text": "nữ du khách áo kẻ vàng đứng ở điểm ngắm cảnh có dòng chữ độ cao so với mực nước biển",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -1782,6 +1812,12 @@
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "The yellow racer holds a brown cotton mascot in front of the cycling background"
+    },
+    {
+      "text": "tay đua áo vàng giơ tay ăn mừng chiến thắng",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The yellow racer raised his hand in celebration."
     },
     {
       "text": "tay đua áo vàng vừa về đích giơ một tay chỉ lên trời, chạy ngang bảng quảng cáo màu đỏ ven đường",
@@ -2258,6 +2294,12 @@
       "text_en": "The black robes with the golden trim raised the dragon's body into two almost vertical arcs next to each other, forming a shape that resembled two large figures in the middle of the green field."
     },
     {
+      "text": "đoàn tay đua bám sát nhau lao về phía trước trên đường có hàng rào hai bên",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The team of runners, clustered together, raced forward on the side-fenced road."
+    },
+    {
       "text": "đoàn xe mô tô ba bánh màu vàng cam hộ tống chạy trên đường, hai bên cắm cờ đỏ",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -2322,6 +2364,18 @@
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "white gloved hands poured the solution from the toilet bowl."
+    },
+    {
+      "text": "đĩa chả giò hình tam giác xếp quanh chén nước sốt đỏ",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "triangle shaped spring rolls around a bowl of red sauce"
+    },
+    {
+      "text": "đĩa cá chiên bột vàng rụm bày trên đĩa trắng có rau và ớt",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "A plate of goldfish on a white plate with vegetables and peppers"
     },
     {
       "text": "đười ươi lông nâu ngồi ăn thức ăn trong khu nuôi",

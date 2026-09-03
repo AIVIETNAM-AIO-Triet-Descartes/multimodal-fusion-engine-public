@@ -74,6 +74,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Sweep only the {0, 0.5, 1, 2, 4} grid, without the OFF option.",
     )
     parser.add_argument(
+        "--grid",
+        default=None,
+        metavar="0.5,1,1.5,2",
+        help="Luoi quet tuy y, cach nhau dau phay. Mac dinh {0, 0.5, 1, 2, 4}. "
+        "CHI dung de mai lai MOT vai arm da biet co dinh that (xem --only-arms); "
+        "mai ca bang tren luoi min la bam bo dev, khong phai do chinh xac hon.",
+    )
+    parser.add_argument(
         "--ablation",
         action="store_true",
         help="Skip the ascent; just report the full set minus each arm in turn.",
@@ -282,6 +290,22 @@ def main() -> None:
             ],
         }
     else:
+        # Lưới quét: mặc định là lưới thô §3.4b, hoặc lưới người vận hành đưa vào.
+        #
+        # Vì sao KHÔNG mặc định mịn hơn: trên 163 câu, **một** câu lật từ trúng
+        # sang trượt đổi Final khoảng `1/163 = 0,006`. Lưới 0,25 phân giải dưới
+        # ngưỡng đó, tức nó chọn giữa những khác biệt không tồn tại. Lượt quét
+        # 28-08 đã chạm sàn này: `object` ở 0,0 cho 0,582 và ở 0,5 cho 0,583 —
+        # chênh 0,001, và leo dốc vẫn "chọn" một trong hai.
+        grid = WEIGHT_GRID
+        if args.grid:
+            grid = tuple(float(x) for x in args.grid.replace(" ", "").split(",") if x)
+            if not args.only_arms:
+                print(
+                    "  ! --grid ma KHONG --only-arms: dang mai CA BANG tren luoi "
+                    "min. Do la bam bo dev chat hon, khong phai do chinh xac hon."
+                )
+
         def on_step(step) -> None:
             cells = " ".join(
                 f"{'OFF' if value == OFF else value}:{m.objective(args.objective):.3f}"
@@ -301,6 +325,7 @@ def main() -> None:
             arm_order,
             relational,
             grouper,
+            grid=grid,
             allow_off=not args.no_off,
             rounds=args.rounds,
             objective=args.objective,
@@ -329,7 +354,7 @@ def main() -> None:
             "queryset": str(queryset),
             "objective": args.objective,
             "rounds_run": result.rounds_run,
-            "grid": list(WEIGHT_GRID),
+            "grid": list(grid),
             "allow_off": not args.no_off,
             "baseline": {"wide": result.baseline.wide, "strict": result.baseline.strict},
             "best": {"wide": result.best.wide, "strict": result.best.strict},

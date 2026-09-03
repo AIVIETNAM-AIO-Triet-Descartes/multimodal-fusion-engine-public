@@ -652,7 +652,7 @@ uploads = st.sidebar.file_uploader(
 
 folder = st.sidebar.text_input(
     "…hoặc đường dẫn thư mục chứa `query-*.txt`",
-    placeholder="docs/context/bo-de-dot-1",
+    placeholder="eval/btc/bo-de-dot-2",
     help="Cùng bộ đọc với ô tải lên (`mfe.eval.query_package`). Tiện khi gói đề "
          "đã nằm trên đĩa — 25 file thì chọn tay khá mệt.",
 )
