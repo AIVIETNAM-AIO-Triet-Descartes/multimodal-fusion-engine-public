@@ -154,13 +154,15 @@ class Cascade:
 
         return cls(
             config=config,
-            vector_index=overrides.get(
-                "vector_index",
-                load("vector index", lambda: _load_vector_index(config)),
+            vector_index=(
+                overrides["vector_index"]
+                if "vector_index" in overrides
+                else load("vector index", lambda: _load_vector_index(config))
             ),
-            inverted_index=overrides.get(
-                "inverted_index",
-                load("inverted index", lambda: _load_inverted_index(config)),
+            inverted_index=(
+                overrides["inverted_index"]
+                if "inverted_index" in overrides
+                else load("inverted index", lambda: _load_inverted_index(config))
             ),
             encode_query=overrides.get(
                 "encode_query",
@@ -434,7 +436,12 @@ class Cascade:
                 "tang ngoi ngoai. Can `keyframe_index` cho phep phat cua DANTE.",
                 weight,
             )
-            return coarse
+            # Phải là 2-tuple như mọi cửa thoát khác: `search` giải nén
+            # `coarse, scene_ordered = self._scene_order(...)`, nên trả về list
+            # trần ở đây làm cả truy vấn vỡ ĐÚNG LÚC Relational Map không mở
+            # được — tức đúng lúc đã có một cảnh báo và người ta tưởng tầng chỉ
+            # ngồi ngoài.
+            return coarse, False
 
         per_clause = []
         for index, clause in enumerate(split):

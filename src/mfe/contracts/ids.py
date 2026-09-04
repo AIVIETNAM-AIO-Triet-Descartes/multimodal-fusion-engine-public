@@ -29,15 +29,17 @@ timestamps less than one frame apart — they denote the same source frame. Inge
 collapses them; see `mfe.offline.keyframes.collapse_duplicate_frames`.
 
 `frame_idx` (the real frame in the source video) is derivable, with two
-conditions that are not optional (both measured on the shipped sample, 1240 rows
-across 5 videos including a 29.97fps one):
+conditions that are not optional. Rechecked on 2026-08-26: 4,615/4,615 rows in
+the current 16-video sample and 87,305/87,305 populated rows in the 299-CSV
+archive match exactly (one archive row has a blank source `frame_idx`):
 
     frame_idx = floor(pts_time * fps)        100% exact on every row
 
-    - It must be **floor**, not round and not ceil. `round` matched 55% of rows
-      and `ceil` 28%. An earlier revision of this module forbade derivation
-      entirely on the strength of the `round` measurement; that conclusion was
-      wrong, it was the rounding mode that was wrong.
+    - It must be **floor**, not round and not ceil. On the same two data sets,
+      `round` disagreed with 1,152 and 5,272 populated rows respectively. An
+      earlier revision of this module forbade derivation entirely on the
+      strength of the `round` measurement; that conclusion was wrong, it was
+      the rounding mode that was wrong.
     - `fps` must be the **literal value the dataset states** (29.97), not the
       exact NTSC rational it approximates (30000/1001). Substituting the
       "more correct" rational drops accuracy from 100% to 41%, because BTC
@@ -155,9 +157,10 @@ def parse_shot_id(shot_id: str) -> tuple[str, int]:
 def frame_idx_from_pts(pts_time: float, fps: float) -> int:
     """Derive the source-video frame index: ``floor(pts_time * fps)``.
 
-    Verified exact on all 1240 rows of the shipped sample (30.0, 25.0 and
-    29.97 fps videos). See the module docstring for why it is `floor` and why
-    `fps` must be the literal value the dataset states.
+    Verified exact on all 4,615 rows of the current sample and all 87,305 rows
+    with a populated source index in the local 299-CSV archive. See the module
+    docstring for why it is `floor` and why `fps` must be the literal value the
+    dataset states.
 
     Use this only when no `map-keyframes` row exists for the keyframe — for
     keyframes the team extracts itself. When the CSV has the answer, copy it.

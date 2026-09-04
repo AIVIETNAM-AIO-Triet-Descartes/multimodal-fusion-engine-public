@@ -1,0 +1,61 @@
+# Runtime engine configuration imported from Trọng's verified execution branch.
+#
+# This file intentionally has a distinct name from keyframe_augmentation_v1.yaml:
+# the latter is the canonical Quang Gate 0/1/2 contract.  The runtime engine may
+# produce artifacts, but those artifacts are accepted only after the canonical
+# oracle, feature-parity, equal-budget, and crowding gates pass.
+#
+# Before a real run, stage the complete official TensorFlow TransNetV2 SavedModel
+# at detector.checkpoint and replace the all-zero SHA with sha256_path()'s tree
+# digest.  A zero digest is a deliberate fail-closed placeholder.
+
+experiment:
+  id: btc_aug_cov_v1
+  parent_bundle: aic_btc_b1_v1
+  seed: 2026
+
+transport:
+  kind: local
+  volume: keyframes-btc
+  version: 2
+  local_root: augmentation_local
+
+dataset:
+  dev_queryset: eval/queryset_dev.jsonl
+  heldout_queryset: eval/queryset_heldout.jsonl
+  video_inventory: data/augmentation/video_inventory.jsonl
+  extra_pilot_videos: 24
+
+detector:
+  kind: transnet_v2
+  factory: transnetv2:TransNetV2
+  checkpoint: data/models/transnetv2/transnetv2-saved-model
+  checkpoint_sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  threshold_grid: [0.3, 0.4, 0.5, 0.6, 0.7]
+  default_threshold: 0.5
+  uncertain_below: 0.6
+  micro_shot_seconds: 0.5
+
+coverage:
+  target_gap_seconds_grid: [4.0, 6.0, 8.0]
+  k_max_grid: [2, 3, 4]
+  delta_cap_ratio: 0.03
+
+dedup:
+  phash_max_distance: 5
+  embedding_max_cosine: 0.97
+
+evaluation:
+  bootstrap_samples: 10000
+  bootstrap_seed: 2026
+  noninferiority_margin: -0.005
+  max_latency_ratio: 1.10
+  min_oracle_mean_delta: 0.005
+  min_oracle_rescues: 2
+  heldout_by_type_margin: -0.01
+
+paths:
+  workdir: augmentation_work/btc_aug_cov_v1
+  base_flat_root: eval/merge/aic_btc_b1_v1
+  base_relational_db: stores/relational/app.db
+  eval_config: config/pilot.yaml

@@ -79,6 +79,37 @@ def test_from_config_does_not_swallow_a_broken_translator_call(caplog):
     assert not broken, f"duong dung translator NEM loi: {[r.getMessage() for r in broken]}"
 
 
+def test_from_config_does_not_probe_stores_when_flat_overrides_are_explicit(monkeypatch):
+    """Explicit ``None`` means the caller deliberately uses a flat bundle.
+
+    ``dict.get(key, expensive_default())`` evaluates the default eagerly, so
+    the old wiring still opened FAISS/BM25 stores and emitted misleading ingest
+    warnings even though the supplied overrides won.  The flat evaluator must
+    not touch either store at all.
+    """
+
+    probed: list[str] = []
+    monkeypatch.setattr(
+        "mfe.online.cascade._load_vector_index",
+        lambda _config: probed.append("vector"),
+    )
+    monkeypatch.setattr(
+        "mfe.online.cascade._load_inverted_index",
+        lambda _config: probed.append("inverted"),
+    )
+
+    Cascade.from_config(
+        _config(enabled=False),
+        vector_index=None,
+        inverted_index=None,
+        reranker=None,
+        text_store=None,
+        dense_store_factory=lambda *_: None,
+    )
+
+    assert probed == []
+
+
 def test_quest_backend_is_optional():
     """Thiếu `quest` thì translator vẫn dựng được, chỉ mất tier `llm`.
 

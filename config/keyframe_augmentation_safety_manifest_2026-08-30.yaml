@@ -1,0 +1,263 @@
+schema_version: 2
+manifest_id: keyframe-augmentation-safety-2026-08-30
+purpose: >-
+  Immutable-before/after identity for this research pass. The manifest records
+  workspace state only; it does not authorize BTC/live-store mutation.
+workspace:
+  absolute_path: 'D:\baitap\aic\multimodal-fusion-engine'
+  branch: feature/quang/storage
+  head_sha: bced309a87927849e76fd72d2eb3a777eed57322
+  agents_md: absent
+  claude_md_sha256: DF9BD1E34E694E1A7723D42E5B8CA6CD508A859EE5ACB4F2BBF09CF523BA73EE
+  python_version: 3.12.13
+  package_lock_or_pyproject_sha256: C398EC86370F829D2CAD52CAC02ABF16FF4DFCE5EAAEA46048E6471084F21A5B
+  docker_version: 'Docker version 29.7.2, build a7dcaa6'
+  gpu_available: false
+  cuda_device_count: 0
+  network_research_date: 2026-08-30
+  canonical_prompt_sha256: E61D64C838E7FB323A511FA461B09B047550ECAFBD0BB5A13ABEBC0590F084AE
+  dirty_paths_before_ref: before.dirty_paths_before
+  untracked_paths_before_ref: before.untracked_paths_before
+baseline_provenance:
+  phase_order: baseline_then_audit_then_oracle_then_candidate_then_AB_then_heldout
+  baseline_captured_before_first_corrective_write: true
+  canonical_prompt_reread_before_current_corrective_pass: true
+  prompt_hash_revalidated: E61D64C838E7FB323A511FA461B09B047550ECAFBD0BB5A13ABEBC0590F084AE
+  tracked_dirty_diff_sha256_before: 23d2cafc2af57530324aad3bdc055f8f65c1b8c3
+  baseline_test_stdout_sha256_before_current_pass: 43e155e9bf06e86cae329918eec5bac104b3f0b32036d7a6b4078836a73eee29
+  baseline_test_result_before_current_pass: 68_passed
+  heldout_accessed_for_tuning: false
+before:
+  captured_at: 2026-08-30
+  command: >-
+    git branch --show-current; git rev-parse HEAD; git status --short
+    --untracked-files=all; rg --files -g AGENTS.md -g CLAUDE.md;
+    .\\.venv\\Scripts\\python.exe --version; Get-FileHash pyproject.toml;
+    docker --version; .\\.venv\\Scripts\\python.exe -c
+    "import torch; print(torch.cuda.is_available()); print(torch.cuda.device_count())";
+    git diff --check
+  dirty_paths_before:
+    - docs/research/keyframe-augmentation/README.md
+    - docs/research/keyframe-augmentation/source-audit.md
+    - docs/task/quang/quang-full-project-pipeline-report.md
+    - docs/task/quang/quang-milvus-elasticsearch-report.md
+    - docs/task/quang/quang-storage-local-test.md
+    - pyproject.toml
+    - scripts/build_btc_relational.py
+    - scripts/build_sample_2026_records.py
+    - scripts/ingest_btc_vectors.py
+    - src/mfe/offline/dake.py
+    - src/mfe/offline/stages.py
+    - src/mfe/stores/production/elasticsearch.py
+    - src/mfe/stores/production/ingestion.py
+    - src/mfe/stores/production/milvus.py
+    - src/mfe/stores/production/profiler.py
+    - src/mfe/stores/production/temporal.py
+    - src/mfe/stores/production/vietnamese.py
+    - tests/stores/production/test_sample_record_builder.py
+    - tests/unit/offline/test_dake.py
+    - tests/unit/offline/test_stage_n1.py
+    - tests/unit/stores/inverted/test_elasticsearch_production.py
+    - tests/unit/stores/inverted/test_milvus_production_advanced.py
+    - tests/unit/stores/inverted/test_storage_profiler.py
+    - tests/unit/stores/inverted/test_temporal_reranking.py
+    - tests/unit/stores/inverted/test_vietnamese_expansion.py
+  untracked_paths_before:
+    - config/keyframe_augmentation_experiment_matrix_2026-08-30.yaml
+    - config/keyframe_augmentation_v1.yaml
+    - docs/research/keyframe-augmentation/corrective-review-2026-08-28.md
+    - docs/research/keyframe-augmentation/cross-review-quang-trong-2026-08-29.md
+    - docs/research/keyframe-augmentation/deep-landscape-2026-08-30.md
+    - docs/research/keyframe-augmentation/deep-research-and-trong-cross-review-prompt.md
+    - docs/research/keyframe-augmentation/go-no-go-unverified-2026-08-30.md
+    - docs/research/keyframe-augmentation/implementation-v1.md
+    - docs/research/keyframe-augmentation/local-pilot-2026-08-27.md
+    - docs/research/keyframe-augmentation/quang-trong-cross-review-response-2026-08-30.md
+    - docs/research/keyframe-augmentation/source-ledger-2026-08-30.md
+    - docs/task/aic2026-pipeline-strategy-and-roles.md
+    - scripts/build_p2_submission_draft.py
+    - scripts/check_modal_keyframes.py
+    - scripts/compare_keyframe_owner_coverage.py
+    - scripts/fetch_p2_evidence.py
+    - scripts/fetch_specific_evidence.py
+    - scripts/open_keyframe.py
+    - scripts/parallel_download.py
+    - scripts/retrieve_p2.py
+    - scripts/retrieve_p2_variants.py
+    - scripts/run_keyframe_augmentation.py
+    - src/mfe/offline/keyframe_augmentation/__init__.py
+    - src/mfe/offline/keyframe_augmentation/bundle.py
+    - src/mfe/offline/keyframe_augmentation/cli.py
+    - src/mfe/offline/keyframe_augmentation/common.py
+    - src/mfe/offline/keyframe_augmentation/gate0.py
+    - src/mfe/offline/keyframe_augmentation/gate1.py
+    - src/mfe/offline/keyframe_augmentation/gate2.py
+    - src/mfe/offline/keyframe_augmentation/models.py
+    - src/mfe/offline/keyframe_augmentation/transnet.py
+    - tests/integration/test_keyframe_augmentation_bundle.py
+    - tests/unit/offline/keyframe_augmentation/test_gate0.py
+    - tests/unit/offline/keyframe_augmentation/test_gate1.py
+    - tests/unit/offline/keyframe_augmentation/test_gate2.py
+    - tests/unit/offline/keyframe_augmentation/test_related_ingest_contracts.py
+    - tests/unit/offline/keyframe_augmentation/test_transnet.py
+    - tests/unit/test_check_modal_keyframes.py
+    - tests/unit/test_compare_keyframe_owner_coverage.py
+    - tmp/pdf-law/page-1.png
+    - tmp/pdf-law/page-2.png
+    - tmp/pdf-law/page-3.png
+    - tmp/pdf-law/page-4.png
+    - tmp/pdf-law/page-5.png
+    - tmp/pdf-law/page-6.png
+    - tmp/research-2026-08-30/diagnostic-oracle-O1-S.jsonl
+    - tmp/research-2026-08-30/diagnostic-oracle-O1-T.jsonl
+    - tmp/research-2026-08-30/diagnostic-sample16.json
+    - tmp/research-2026-08-30/gate0-sample16-final.tmp
+    - tmp/research-2026-08-30/gate0-sample16-lock-final.json
+    - tmp/research-2026-08-30/math-audit-sample16.json
+  tracked_dirty_diff_sha256: 23d2cafc2af57530324aad3bdc055f8f65c1b8c3
+  diff_check: PASS_WITH_LINE_ENDING_WARNINGS_ONLY
+after:
+  captured_at: 2026-08-30
+  command: git status --short --untracked-files=all; git diff --binary | git hash-object --stdin; git diff --check
+  status_output_sha256: e98e059d3989565c774b3461965a3a415ffda393a709a02a9e663eb04bce3522
+  tracked_dirty_diff_sha256: 23d2cafc2af57530324aad3bdc055f8f65c1b8c3
+  dirty_paths_after:
+    - docs/research/keyframe-augmentation/README.md
+    - docs/research/keyframe-augmentation/source-audit.md
+    - docs/task/quang/quang-full-project-pipeline-report.md
+    - docs/task/quang/quang-milvus-elasticsearch-report.md
+    - docs/task/quang/quang-storage-local-test.md
+    - pyproject.toml
+    - scripts/build_btc_relational.py
+    - scripts/build_sample_2026_records.py
+    - scripts/ingest_btc_vectors.py
+    - src/mfe/offline/dake.py
+    - src/mfe/offline/stages.py
+    - src/mfe/stores/production/elasticsearch.py
+    - src/mfe/stores/production/ingestion.py
+    - src/mfe/stores/production/milvus.py
+    - src/mfe/stores/production/profiler.py
+    - src/mfe/stores/production/temporal.py
+    - src/mfe/stores/production/vietnamese.py
+    - tests/stores/production/test_sample_record_builder.py
+    - tests/unit/offline/test_dake.py
+    - tests/unit/offline/test_stage_n1.py
+    - tests/unit/stores/inverted/test_elasticsearch_production.py
+    - tests/unit/stores/inverted/test_milvus_production_advanced.py
+    - tests/unit/stores/inverted/test_storage_profiler.py
+    - tests/unit/stores/inverted/test_temporal_reranking.py
+    - tests/unit/stores/inverted/test_vietnamese_expansion.py
+  untracked_paths_after:
+    - config/keyframe_augmentation_adversarial_cases_2026-08-30.yaml
+    - config/keyframe_augmentation_experiment_matrix_2026-08-30.yaml
+    - config/keyframe_augmentation_hypothesis_backlog_2026-08-30.yaml
+    - config/keyframe_augmentation_math_call_site_ledger_2026-08-30.yaml
+    - config/keyframe_augmentation_oracle_schema_2026-08-30.yaml
+    - config/keyframe_augmentation_safety_manifest_2026-08-30.yaml
+    - config/keyframe_augmentation_source_ledger_2026-08-30.yaml
+    - config/keyframe_augmentation_v1.yaml
+    - docs/research/keyframe-augmentation/compliance-gap-D0-D14-2026-08-30.md
+    - docs/research/keyframe-augmentation/corrective-review-2026-08-28.md
+    - docs/research/keyframe-augmentation/cross-review-quang-trong-2026-08-29.md
+    - docs/research/keyframe-augmentation/deep-landscape-2026-08-30.md
+    - docs/research/keyframe-augmentation/deep-research-and-trong-cross-review-prompt.md
+    - docs/research/keyframe-augmentation/go-no-go-unverified-2026-08-30.md
+    - docs/research/keyframe-augmentation/implementation-v1.md
+    - docs/research/keyframe-augmentation/local-pilot-2026-08-27.md
+    - docs/research/keyframe-augmentation/quang-trong-cross-review-response-2026-08-30.md
+    - docs/research/keyframe-augmentation/source-ledger-2026-08-30.md
+    - docs/task/aic2026-pipeline-strategy-and-roles.md
+    - scripts/build_p2_submission_draft.py
+    - scripts/check_modal_keyframes.py
+    - scripts/compare_keyframe_owner_coverage.py
+    - scripts/fetch_p2_evidence.py
+    - scripts/fetch_specific_evidence.py
+    - scripts/open_keyframe.py
+    - scripts/parallel_download.py
+    - scripts/retrieve_p2.py
+    - scripts/retrieve_p2_variants.py
+    - scripts/run_keyframe_augmentation.py
+    - src/mfe/offline/keyframe_augmentation/__init__.py
+    - src/mfe/offline/keyframe_augmentation/bundle.py
+    - src/mfe/offline/keyframe_augmentation/cli.py
+    - src/mfe/offline/keyframe_augmentation/common.py
+    - src/mfe/offline/keyframe_augmentation/diagnostics.py
+    - src/mfe/offline/keyframe_augmentation/gate0.py
+    - src/mfe/offline/keyframe_augmentation/gate1.py
+    - src/mfe/offline/keyframe_augmentation/gate2.py
+    - src/mfe/offline/keyframe_augmentation/models.py
+    - src/mfe/offline/keyframe_augmentation/oracle.py
+    - src/mfe/offline/keyframe_augmentation/transnet.py
+    - tests/integration/test_keyframe_augmentation_bundle.py
+    - tests/unit/offline/keyframe_augmentation/test_execution_spec_artifacts.py
+    - tests/unit/offline/keyframe_augmentation/test_gate0.py
+    - tests/unit/offline/keyframe_augmentation/test_gate1.py
+    - tests/unit/offline/keyframe_augmentation/test_gate2.py
+    - tests/unit/offline/keyframe_augmentation/test_related_ingest_contracts.py
+    - tests/unit/offline/keyframe_augmentation/test_transnet.py
+    - tests/unit/test_check_modal_keyframes.py
+    - tests/unit/test_compare_keyframe_owner_coverage.py
+    - tmp/pdf-law/page-1.png
+    - tmp/pdf-law/page-2.png
+    - tmp/pdf-law/page-3.png
+    - tmp/pdf-law/page-4.png
+    - tmp/pdf-law/page-5.png
+    - tmp/pdf-law/page-6.png
+    - tmp/research-2026-08-30/diagnostic-oracle-O1-S.jsonl
+    - tmp/research-2026-08-30/diagnostic-oracle-O1-T.jsonl
+    - tmp/research-2026-08-30/diagnostic-sample16.json
+    - tmp/research-2026-08-30/gate0-sample16-final.tmp
+    - tmp/research-2026-08-30/gate0-sample16-lock-final.json
+    - tmp/research-2026-08-30/math-audit-sample16.json
+  validation:
+    targeted_tests:
+      command: .\\.venv\\Scripts\\pytest.exe -q tests/unit/offline/keyframe_augmentation tests/integration/test_keyframe_augmentation_bundle.py tests/unit/test_compare_keyframe_owner_coverage.py
+      result: 79_passed
+      output_sha256: 488f6fe8c7f5c427219a9bac5d26a483287891413b5da00f86cd3a16cc0fd452
+    ruff:
+      result: PASS
+      output_sha256: a4443afdcfb6d7363adb285762515ccf7cf50473b1a05c20c1a50f6bed4d26b0
+    yaml_parse:
+      result: YAML_OK_7
+      output_sha256: 1cbe7b5b0b68688c1d23070426803bf14343b81fcb967225e61a1b293decf1a4
+    compileall:
+      result: PASS_NO_STDOUT
+      output_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    git_diff_check:
+      result: PASS_WITH_PREEXISTING_LINE_ENDING_WARNINGS_ONLY
+      output_sha256: e600b0cac5be2332ffd4ac1e72c85d623c8322c10aa6ba6648e246935fbc6c18
+    dirty_review:
+      status_output_sha256: e98e059d3989565c774b3461965a3a415ffda393a709a02a9e663eb04bce3522
+      tracked_dirty_diff_sha256_after: 23d2cafc2af57530324aad3bdc055f8f65c1b8c3
+      tracked_dirty_diff_unchanged_from_before: true
+    full_suite:
+      result: NOT_RUN
+      reason: >-
+        Scope is the isolated untracked keyframe-augmentation package and its
+        local contracts; the repository already contains unrelated tracked dirty
+        changes. Targeted unit/integration coverage is the safe merge signal and
+        avoids changing or triaging out-of-scope failures merely to green the table.
+change_scope_ledger:
+  - owner: mfe.offline.keyframe_augmentation.oracle.OracleEvidenceRow
+    files: [src/mfe/offline/keyframe_augmentation/oracle.py]
+    rationale: canonical D6 field names, schema v2 emission and v1 input compatibility
+    tests: [test_oracle_v2_canonical_fields_and_v1_aliases_are_compatible]
+  - owner: mfe.offline.keyframe_augmentation.diagnostics
+    files: [src/mfe/offline/keyframe_augmentation/diagnostics.py]
+    rationale: fail-closed feature parity and required anti-crowding diagnostics
+    tests: [test_feature_parity_requires_passing_frozen_numeric_canary_for_measured, test_crowding_reports_btc_displacement]
+  - owner: mfe.offline.keyframe_augmentation.gate2.run_gate2
+    files: [src/mfe/offline/keyframe_augmentation/gate2.py]
+    rationale: deterministic paired cluster-bootstrap intervals and win/loss/tie evidence
+    tests: [test_gate2_uses_official_score_equal_budget_noninferiority_and_latency]
+  - owner: execution-spec manifests and validator tests
+    files: [config, docs/research/keyframe-augmentation, tests/unit/offline/keyframe_augmentation]
+    rationale: machine-readable D0-D14 compliance without touching BTC/live stores
+    tests: [test_execution_spec_artifacts.py]
+prohibited_actions:
+  - mutate BTC map-keyframes or live stores
+  - tune held-out
+  - use mirror weights without provenance
+  - run cloud or GPU workloads
+  - commit or push
+  - delete pre-existing dirty/untracked data

@@ -1,0 +1,279 @@
+schema_version: 2
+matrix_id: kfaug-b0-b4-v1
+created_at: 2026-08-30
+status: PROPOSED_UNEXECUTED
+purpose: >-
+  Freeze a fair, official-score-first comparison of BTC-only and four
+  supplemental selectors. This file is a protocol, not a score claim.
+
+repository:
+  head_commit: bced309a87927849e76fd72d2eb3a777eed57322
+  working_tree: dirty_before_this_matrix
+  tracked_dirty_diff_sha256: 23d2cafc2af57530324aad3bdc055f8f65c1b8c3
+  source_prompt_sha256: E61D64C838E7FB323A511FA461B09B047550ECAFBD0BB5A13ABEBC0590F084AE
+
+execution_order:
+  - D1_workspace_safety_and_baseline
+  - D2_D4_sources_and_conflicts
+  - D5_math_audit
+  - D6_O1_T_O1_S_O1_R
+  - D7_hypothesis_lock
+  - D8_candidate_B0_B4
+  - D9_official_DEV_AB
+  - heldout_confirmation_only_after_DEV_lock
+proxy_decision_authority: diagnostic_only
+
+locked_contract:
+  btc_identity: copy_map_keyframes_csv_frame_idx
+  custom_frame_from_pts: floor(pts_time * literal_fps)
+  timestamp_ms: round(pts_time * 1000)
+  hard_delta_budget: floor(guardrail_ratio * btc_count)
+  k_target_and_min_gap: ceil
+  max_gap: floor
+  transnet_endpoints: zero_based_inclusive
+  btc_base_mutation: forbidden
+  heldout_tuning: forbidden
+  production_default: btc_only
+  pilot_guardrail_ratio: 0.03
+
+dataset:
+  config: config/keyframe_augmentation_v1.yaml
+  core_config: config/sample2026.yaml
+  gate0_lock: REQUIRED_AT_RUN
+  tuning_split: dev
+  confirmation_split: heldout
+  query_set: identical_across_arms
+  video_set: identical_across_arms
+  hardware_state: identical_cpu_environment
+  timeout: identical
+
+arms:
+  - id: B0
+    selector: btc_only
+    independent_variable: no_supplemental_candidates
+    delta_budget: 0
+  - id: B1
+    selector: shot_center
+    independent_variable: selector_only
+    delta_budget: locked_hard_delta_budget
+  - id: B2
+    selector: farthest
+    independent_variable: selector_only
+    delta_budget: locked_hard_delta_budget
+  - id: B3
+    selector: dynamic_density
+    independent_variable: selector_only
+    delta_budget: locked_hard_delta_budget
+    coverage_inputs: [C0, C1]
+  - id: B4
+    selector: uniform_random
+    independent_variable: selector_only
+    delta_budget: locked_hard_delta_budget
+
+fairness:
+  locked_hard_delta_budget: floor(btc_count * pilot_guardrail_ratio)
+  primary_ab_validity: every_B1_B4_delta_count_equals_locked_hard_delta_budget
+  underfill_policy:
+    record_fields: [arm, locked_budget, available_candidates, selected_count, deficit]
+    primary_ab: invalid_for_raw_equal_budget_comparison_if_any_arm_underfills
+    forbidden: fill_from_outside_locked_eligibility
+    matched_underfill_secondary: >-
+      optional, separately labeled diagnostic analysis at min(selected_count_B1..B4);
+      never substituted for the pre-registered primary A/B
+  required_equal_fields:
+    - gate0_dataset_hash
+    - split
+    - query_ids
+    - feature_pipeline_fingerprint
+    - index_configuration_fingerprint
+    - retrieval_fingerprint
+    - fusion_fingerprint
+    - reranker_fingerprint
+    - timeout
+    - hardware_state
+    - seed
+  selector_change_only: true
+  downstream_fingerprint_definition: >-
+    One explicit immutable pipeline fingerprint covering feature model and
+    preprocessing/normalization, index type/metric/search parameters, retrieval,
+    fusion, reranker, candidate depth and dedup settings. Each arm also records
+    its necessarily different candidate/index-content hash; content hashes are
+    provenance, not a fixed factor when selector is the independent variable.
+
+budget_proof:
+  formula: locked_hard_delta_budget = floor(btc_count * guardrail_ratio)
+  b0_delta_count: 0
+  b1_b4_must_equal: true
+  underfill_does_not_satisfy_primary_equal_budget_proof: true
+  matched_underfill_is_secondary_only: true
+  candidate_pool_excess_is_not_index_excess: true
+  budget_is_locked_before_official_score: true
+
+factorized_ablations:
+  - id: E-S0
+    name: selector_only
+    variable: selector
+    frozen: [exposure, calibration, fusion, reranker, candidate_depth, dedup]
+    arms: [B0, B1, B2, B3, B4]
+    authority: diagnostic_only_until_official_DEV
+  - id: E-X1
+    name: exposure_only
+    variable: candidate_exposure
+    selector: B3_locked
+    frozen: [feature_fingerprint, index_fingerprint, fusion, reranker, calibration]
+    authority: diagnostic_only_until_official_DEV
+  - id: E-C1
+    name: calibration_only
+    variable: origin_aware_score_calibration
+    selector: B3_locked
+    exposure: E-X1_locked
+    frozen: [candidate_manifest, feature_fingerprint, index_fingerprint, fusion, reranker]
+    authority: diagnostic_only_until_official_DEV
+  - id: E-XC
+    name: selector_exposure_calibration_interaction
+    variable: interaction_term
+    cells: [E-S0, E-X1, E-C1]
+    frozen: [dataset, split, hard_budget, downstream_fingerprint, timeout, hardware]
+    falsification: interaction_delta <= 0_or_not_reproducible
+    authority: diagnostic_only_until_official_DEV
+
+randomization_and_latency:
+  arm_order: deterministic_interleave_by_query_and_seed
+  cache_bias_control: alternate_arm_order_and_record_cold_warm_state
+  latency_states: [cold_process, warm_process]
+  percentiles: [p50, p95, p99]
+  same_hardware_and_timeout: true
+
+metrics:
+  primary: official Final Score end-to-end
+  official_recall: [1, 5, 20, 50, 100]
+  slices:
+    - KIS
+    - QA
+    - TRAKE
+    - temporal_coverage_gap
+    - baseline_retrieval_headroom
+    - btc_inside_gt_interval
+  paired_outputs:
+    - per_query_final_score
+    - per_query_r_at_k
+    - first_hit_rank
+    - rescued_queries
+    - regressed_queries
+    - crowding_and_duplicate_rate
+  uncertainty:
+    - paired_query_delta
+    - video_cluster_bootstrap_one_sided_95_lcb
+    - paired_two_sided_95_interval
+    - seed_rerun_determinism
+    - winner_loser_tie_with_multiple_comparison_warning
+  systems:
+    - p50_latency_ms
+    - p95_latency_ms
+    - p99_latency_ms
+    - peak_memory_bytes
+    - timeout_rate
+    - error_rate
+    - preprocessing_seconds
+    - storage_bytes
+    - feature_parity_status
+    - cost_status
+
+oracle_protocol:
+  O1-T:
+    meaning: temporal_candidate_coverage_only
+    cannot_conclude: NO_HEADROOM
+  O1-S:
+    meaning: best_real_source_frame_inside_inclusive_gt_interval
+    requires:
+      - full_interval_feature_parity
+      - frozen_B0_retrieval_fusion_reranker
+      - candidate_manifest_hash
+      - selection_artifact_sha256
+  O1-R:
+    meaning: force_rank_ground_truth_under_same_downstream_pipeline
+    requires:
+      - identical_query_ids
+      - identical_downstream_fingerprint
+      - official_per_query_scores
+
+acceptance:
+  decision_table:
+    - condition: O1_T_blocked
+      decision: no_temporal_claim_keep_BTC_only
+    - condition: O1_R_measured_and_no_uplift
+      decision: no_selector_headroom_keep_BTC_only
+    - condition: O1_R_uplift_and_O1_S_no_uplift
+      decision: representation_or_feature_parity_failure_investigate_before_selector
+    - condition: O1_S_uplift_and_exposure_no_uplift
+      decision: inspect_fusion_reranker_calibration
+    - condition: B3_target_slice_positive_and_guardrails_pass
+      decision: freeze_DEV_then_run_heldout_once
+    - condition: B4_beats_B3
+      decision: do_not_select_B3; report_random_baseline_winner
+  dev_go_condition:
+    - B3_target_slice_delta_gt_0
+    - B3_global_non_inferiority_lcb_ge_-configured_margin
+    - B3_p95_increase_le_configured_guardrail
+    - B3_feature_parity_status_MEASURED
+    - all_runs_cost_status_MEASURED
+    - no_unexplained_BTC_regression_or_crowding_spike
+  heldout_condition: rerun_only_after_dev_protocol_is_locked
+  if_missing_required_artifact: UNVERIFIED
+  if_dev_go_but_heldout_regresses: KEEP_BTC_ONLY
+  all_proxy_tables: diagnostic_only
+
+execution_commands:
+  gate0: >-
+    .venv\\Scripts\\python.exe -m mfe.offline.keyframe_augmentation.cli gate0
+    --config config/keyframe_augmentation_v1.yaml
+    --core-config config/sample2026.yaml --dev eval/queryset_dev.jsonl
+    --heldout eval/queryset_heldout.jsonl
+    --output tmp/research-2026-08-30/canonical-gate0-lock.json
+  detector: >-
+    .venv\\Scripts\\python.exe -m mfe.offline.keyframe_augmentation.cli detect
+    --video data/canonical/videos/L21_V001.mp4
+    --gate0 tmp/research-2026-08-30/canonical-gate0-lock.json
+    --transnet-repo tmp/vendor/TransNetV2
+    --weights tmp/vendor/TransNetV2/inference-pytorch/transnetv2-pytorch-weights.pth
+    --device cpu --output tmp/research-2026-08-30/canonical-shots-L21_V001.jsonl
+  gate1: >-
+    .venv\\Scripts\\python.exe -m mfe.offline.keyframe_augmentation.cli gate1
+    --config config/keyframe_augmentation_v1.yaml
+    --gate0 tmp/research-2026-08-30/canonical-gate0-lock.json
+    --shots tmp/research-2026-08-30/canonical-shots-L21_V001.jsonl
+    --output tmp/research-2026-08-30/canonical-gate1
+  gate2: >-
+    .venv\\Scripts\\python.exe -m mfe.offline.keyframe_augmentation.cli gate2
+    --config config/keyframe_augmentation_v1.yaml
+    --gate0 tmp/research-2026-08-30/canonical-gate0-lock.json
+    --gate1 tmp/research-2026-08-30/canonical-gate1
+    --arm-run eval/runs/canonical/B0-run.json
+    --arm-run eval/runs/canonical/B1-run.json
+    --arm-run eval/runs/canonical/B2-run.json
+    --arm-run eval/runs/canonical/B3-run.json
+    --arm-run eval/runs/canonical/B4-run.json
+    --output tmp/research-2026-08-30/canonical-gate2-report.json
+
+provenance_requirements:
+  every_run_records:
+    - command
+    - git_head
+    - tracked_dirty_diff_sha256
+    - gate0_dataset_hash
+    - config_hash
+    - input_hashes
+    - model_weight_decoder_fingerprints
+    - downstream_fingerprint
+    - seed
+    - environment
+    - output_hashes
+    - wall_time
+    - config_freeze_timestamp
+    - config_freeze_sha256
+  measured_number_requires:
+    - command
+    - input_hashes
+    - config_hash
+    - output_hashes
+    - environment_fingerprint

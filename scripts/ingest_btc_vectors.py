@@ -51,7 +51,15 @@ def iter_records(
                 raise ValueError(f"{csv_path}:{row_number}: invalid pts_time/fps") from exc
             frame_id = math.floor(pts_time * fps)
             provided = (row.get("frame_idx") or "").strip()
-            if provided and int(provided) != frame_id:
+            # Cột `frame_idx` của CSV là bản chuẩn DUY NHẤT, `floor(pts*fps)` chỉ
+            # là phép đối chiếu. Ô trống mà vẫn đi tiếp nghĩa là ta lặng lẽ dùng
+            # con số suy ra — đúng thứ CLAUDE.md §2 cấm, và nó hỏng im lặng: dòng
+            # đó vẫn vào kho, vẫn tra cứu được, chỉ trỏ sai khung.
+            if not provided:
+                raise ValueError(
+                    f"{csv_path}:{row_number}: canonical frame_idx is blank"
+                )
+            if int(provided) != frame_id:
                 raise ValueError(
                     f"{csv_path}:{row_number}: frame_idx {provided} != "
                     f"floor(pts_time*fps) {frame_id}"

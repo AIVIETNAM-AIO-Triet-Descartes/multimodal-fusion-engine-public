@@ -49,7 +49,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from mfe.contracts.ids import build_keyframe_id  # noqa: E402
+from mfe.contracts.ids import build_keyframe_id, pts_time_to_timestamp_ms  # noqa: E402
 from mfe.contracts.records import KeyframeRow, VideoRow  # noqa: E402
 from mfe.core.cli import setup_console  # noqa: E402
 from mfe.core.config import load_config  # noqa: E402
@@ -136,7 +136,11 @@ def rows_for(video_id: str, map_csv: Path, info_json: Path):
     # hai con số khác nhau ở video 29,97 fps, và cột này dùng để CHẶN frame
     # ngoài biên lúc nộp bài.
     total_frames = int(last["frame_idx"]) + 1
-    duration_ms = int(float(last["pts_time"]) * 1000)
+    # `pts_time_to_timestamp_ms` (làm tròn), KHÔNG `int(... * 1000)` (cắt cụt).
+    # Hai phép này lệch nhau tới 1 ms, và `mfe.offline.keyframe_augmentation.
+    # bundle` đã dùng hàm chuẩn — để nguyên phép cắt cụt ở đây là B0 và B1 ghi
+    # hai `timestamp_ms` khác nhau cho CÙNG một keyframe.
+    duration_ms = pts_time_to_timestamp_ms(float(last["pts_time"]))
 
     video = VideoRow(
         video_id=video_id,
@@ -165,7 +169,7 @@ def rows_for(video_id: str, map_csv: Path, info_json: Path):
             keyframe_index=int(row["n"]),
             frame_idx=frame_idx,
             pts_time=float(row["pts_time"]),
-            timestamp_ms=int(float(row["pts_time"]) * 1000),
+            timestamp_ms=pts_time_to_timestamp_ms(float(row["pts_time"])),
         )
         for frame_idx, row in sorted(best.items())
     ]

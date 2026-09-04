@@ -1,0 +1,52 @@
+schema_version: 1
+run_id: transnetv2-btc-b1-v1
+
+# Change MEMBER in the notebook, not this shared contract.
+members:
+  - triet
+  - trong
+  - quang
+  - bao
+  - dat
+
+# A worker is a disjoint, deterministic byte-balanced slice of one owner's
+# videos. Keep MEMBER as the real owner for provenance/merge; change WORKER in
+# the notebook to run multiple permitted Kaggle sessions without collisions.
+workers:
+  triet: [triet1, triet2]
+  trong: [trong1, trong2]
+  quang: [quang1, quang2, quang3, quang4]
+  bao: [bao1, bao2]
+  dat: [dat1, dat2]
+
+source:
+  catalogue: config/zips_batch1.yaml
+  assignment_key: assignment
+
+btc:
+  # Canonical production bundle is read-only for this research run.
+  volume: keyframes-btc
+  bundle: aic_btc_b1_v1
+
+output:
+  # Intentionally separate from BTC and every live store.
+  volume: keyframe-augmentation-research
+  root: /research/keyframe-augmentation/transnetv2-btc-b1-v1
+
+transnetv2:
+  repository: https://github.com/soCzech/TransNetV2.git
+  commit: 85cef72af9a916bdfd7cc94a670c9cdfbf12d1ed
+  source_relpath: inference-pytorch/transnetv2_pytorch.py
+  converter_relpath: inference-pytorch/convert_weights.py
+  tensorflow_weights_relpath: inference/transnetv2-weights
+  tensorflow_weight_files:
+    - saved_model.pb
+    - variables/variables.data-00000-of-00001
+    - variables/variables.index
+  weights_relpath: inference-pytorch/transnetv2-pytorch-weights.pth
+  threshold: 0.5
+  device: cuda
+
+repository:
+  url: https://github.com/AIVIETNAM-AIO-Triet-Descartes/multimodal-fusion-engine.git
+  ref: feature/quang/storage

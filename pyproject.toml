@@ -72,6 +72,8 @@ mfe-eval = "mfe.eval.run:main"
 mfe-official = "mfe.eval.official:main"
 # Gop bo test cua 5 nguoi (eval/dev/*, eval/heldout/*) sau khi validate.
 mfe-merge-queryset = "mfe.eval.merge_queryset:main"
+# BTC-first Gate 0-2 keyframe augmentation research pipeline.
+mfe-keyframe-augmentation = "mfe.offline.keyframe_augmentation.cli:main"
 # Quan ly kho production (Milvus + Elasticsearch) — Cong Quang.
 mfe-production-store = "mfe.stores.production.cli:main"
 
