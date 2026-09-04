@@ -106,6 +106,8 @@ ARTIFACTS: dict[str, Artifact] = {
         Artifact("siglip_vectors", "vector", "siglip_vectors.npz", None, 1152, "n4_siglip"),
         Artifact("dense_vectors", "vector", "dense_vectors.npz", None, 1024, "n6_bge_m3"),
         Artifact("audio_features", "vector", "audio_features.npz", None, 512, "n3_audio"),
+        Artifact("subtitles_dense", "vector", "subtitles_dense.npz", None, 1024,
+                 "n7_bge_m3_subtitles"),
     )
 }
 
@@ -176,6 +178,7 @@ STAGE_PACKAGES: dict[str, tuple[str, ...]] = {
     "n6_caption_qwen": ("torch", "transformers", "vllm"),
     "n6_ocr_qwen25": ("torch", "transformers", "vllm"),
     "n6_bge_m3": ("torch", "transformers", "sentence-transformers"),
+    "n7_bge_m3_subtitles": ("torch", "transformers", "sentence-transformers"),
 }
 
 _SHA_CHUNK = 1 << 20
