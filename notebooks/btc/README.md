@@ -152,6 +152,16 @@ trộn bài toán chuỗi sự kiện vào thống kê “163 câu”. Notebook 
 feature B1 và baseline `mfe-data-v2`; không chạy lại producer, không đọc held-out
 và không tự cấp quyền merge production.
 
+Sau feature aggregate B1 và các bước DEV A/B, `33-btc-b1-subtitle-producer.ipynb`
+bổ sung subtitle
+cho keyframe delta mà không chạy lại Whisper. Notebook đọc `frame_idx` từ
+worklist và mapping BTC, cho frame mới kế thừa transcript của cửa sổ BTC chứa
+frame đó, rồi nhúng text bằng BGE-M3. Trường `pts_time` synthetic của selection
+không được sử dụng. Chạy `PREFLIGHT` trước (một video, không upload), sau đó hai
+runner chạy `SHARD`; chỉ khi cả hai manifest `COMPLETE` mới chạy `AGGREGATE`.
+Mọi output vẫn nằm trong `keyframe-augmentation-research`, không ghi vào
+BTC/live.
+
 **Mỗi lượt một file shards riêng, và đó không phải sự lộn xộn.** `merge_bundle.py` đòi ĐỦ mảnh
 cho mọi tầng có trong `plan.stages`; gộp hết vào một file là bundle bị từ chối cho tới khi lượt
 cuối cùng chạy xong toàn bộ 873 video. Tách ra thì gộp được độc lập, và bốn lượt không đụng nhau
