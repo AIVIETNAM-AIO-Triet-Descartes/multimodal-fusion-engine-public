@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import pytest
 
-from mfe.online.query_text import has_description, quest_rewrite, strip_questions
+from mfe.online.query_text import (
+    Rewrite,
+    has_description,
+    quest_apply,
+    quest_rewrite,
+    strip_questions,
+)
 
 
 def test_giu_mo_ta_bo_cau_hoi():
@@ -109,3 +117,84 @@ class TestQuestRewrite:
         assert out.ok
         assert out.vi == "Cảnh xe lội nước qua cầu."
         assert out.en == "cars crossing a bridge"
+
+
+class TestQuestApply:
+    """`quest_apply` — chọn PHÉP đúng theo dạng đề.
+
+    Ba việc của `mfe.online.quest` khác nhau, và dùng nhầm việc thì hại chứ
+    không phải vô ích: đem `quest_decompose` (vốn để tách một câu HỎI) vào một
+    câu KIS là viết lại một mô tả thị giác vốn đã đúng thể loại SigLIP ăn.
+    """
+
+    KIS = "Cảnh trong bộ phim của đạo diễn Steven Spielberg năm 1975."
+    QA = "Cảnh xe lội nước qua cầu. Biển báo ghi số mấy?"
+
+    def test_QA_di_duong_viet_lai(self):
+        goi = []
+
+        def rewrite(text):
+            goi.append(text)
+            return Rewrite(vi="biển báo", en="a height sign", ok=True)
+
+        out = quest_apply(self.QA, "QA", rewrite=rewrite, expand=_no_expand)
+        assert goi == [self.QA]
+        assert out.ok and out.en == "a height sign"
+
+    def test_KIS_di_duong_MO_RONG_va_NOI_VAO_CUOI(self):
+        """Nối vào cuối, KHÔNG thay thế — câu gốc vẫn mang phần mô tả thị giác."""
+        out = quest_apply(
+            self.KIS, "KIS", rewrite=_no_rewrite,
+            expand=lambda _: [_Term(vi="cá mập", en="shark")],
+        )
+        assert out.ok
+        assert out.vi.startswith(self.KIS)
+        assert "cá mập" in out.vi
+        assert "cá mập" in (out.reason or "")
+
+    def test_TRAKE_dung_chung_duong_voi_KIS(self):
+        out = quest_apply(
+            "Chuỗi động tác nhảy cao.", "TRAKE", rewrite=_no_rewrite,
+            expand=lambda _: [_Term(vi="xà ngang", en="crossbar")],
+        )
+        assert out.ok and "xà ngang" in out.vi
+
+    def test_KHONG_goi_ten_them_gi_la_ok_False_co_LY_DO(self):
+        """42/49 đề thật không cần thêm gì — rỗng là câu trả lời ĐÚNG.
+
+        Nhưng nó phải NÓI RA: một nút bấm xong không đổi gì trông y hệt một nút
+        hỏng, và người vận hành sẽ đi sửa khoá API thay vì đi tìm tiếp.
+        """
+        out = quest_apply(self.KIS, "KIS", rewrite=_no_rewrite, expand=lambda _: [])
+        assert not out.ok
+        assert out.vi == self.KIS
+        assert out.reason and "khong goi ten" in out.reason
+
+    def test_expand_NEM_thi_van_tra_ve_cau_goc(self):
+        def boom(_):
+            raise RuntimeError("het quota")
+
+        out = quest_apply(self.KIS, "KIS", rewrite=_no_rewrite, expand=boom)
+        assert not out.ok
+        assert out.vi == self.KIS
+        assert "het quota" in (out.reason or "")
+
+    @pytest.mark.parametrize("text", ["", "   "])
+    def test_cau_rong_khong_goi_LLM(self, text):
+        out = quest_apply(text, "KIS", rewrite=_no_rewrite, expand=_no_expand)
+        assert not out.ok and out.reason == "cau rong"
+
+
+@dataclass(frozen=True)
+class _Term:
+    vi: str
+    en: str
+    why: str = ""
+
+
+def _no_rewrite(_text):
+    raise AssertionError("khong duoc di duong viet lai o day")
+
+
+def _no_expand(_text):
+    raise AssertionError("khong duoc di duong mo rong o day")

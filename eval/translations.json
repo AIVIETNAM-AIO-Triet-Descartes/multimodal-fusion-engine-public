@@ -14,10 +14,28 @@
       "text_en": "Three people walk down a slope in the rain, two of them holding umbrellas; the one walking behind wears a raincoat with a bear printed on the back. Then several people walk together towards a house along a dirt road, with a pond beside it."
     },
     {
+      "text": "Ba người đàn ông lớn tuổi mặc áo lễ xanh bóng và đội khăn đen đứng sát bàn thờ, cùng thực hiện nghi thức với đồ thờ phía trước.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Three elderly men in shiny blue ceremonial robes and black turbans stood close to the altar, performing the ritual with the altar items in front."
+    },
+    {
       "text": "Ba người đàn ông ngồi trên chiếc xuồng màu xanh len qua rừng ngập mặn, một người chèo ở phía sau còn hai người trò chuyện ở mũi xuồng.",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "Three men sat in a blue canoe through the mangroves, one rowing in the back and two talking at the bow."
+    },
+    {
+      "text": "Ban đêm trên một chiếc xuồng, nhóm người ngồi quây quanh dưới ánh đèn nhỏ; người mặc áo vàng ôm và chơi đàn guitar.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "At night in a boat, a group of people sat around under a small light; the man in the yellow jacket played the guitar."
+    },
+    {
+      "text": "Ban đêm, đám cháy rừng đỏ rực kéo dài sau những thân cây đen silhouetted, làm cả bầu trời phủ khói đỏ cam.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "At night, the red forest fires spread behind silhouetted black trees, filling the sky with orange-red smoke."
     },
     {
       "text": "Biển số của chiếc xe máy màu xanh dương dựng ở hiện trường ban đêm là gì?",
@@ -26,16 +44,58 @@
       "text_en": "What's the plate number of the blue motorcycle that was parked at the scene at night?"
     },
     {
+      "text": "Bàn thờ đỏ vàng đặt dưới bảng chữ Hán lớn, được trang trí dày đặc hoa văn mạ vàng, đèn đỏ và các bài vị bên trong ngôi miếu.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The red - gold altar is placed under the large Chinese script, heavily decorated with gilded patterns, red lamps, and tablets inside the temple."
+    },
+    {
+      "text": "Bên bờ kênh, bộ rễ khổng lồ của cây cổ thụ trồi hẳn khỏi đất, uốn ngoằn ngoèo quanh gốc cạnh một căn chòi nhỏ.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The giant roots of the old tree rose out of the ground on the bank, winding around the base of a small cottage."
+    },
+    {
+      "text": "Bên trong ngôi miếu, bàn thờ chạm trổ đỏ vàng được phủ kín đồ lễ và hoa văn, hai bên là cột cùng các bảng chữ Hán.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Inside the temple, the red - and - yellow carved altar is covered with offerings and patterns, and on either side are columns and Chinese tablets."
+    },
+    {
+      "text": "Bên trong nhà kính trồng rau, người nông dân mặc áo đỏ cúi chăm sóc các luống cây có nhiều quả ớt chuông chín đỏ.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Inside the greenhouses, the farmers in red robes stooped to tend the rows of trees that contained many red-ripened bell peppers."
+    },
+    {
+      "text": "Bên trong toa metro sáng màu, nhiều hành khách đứng và ngồi chen nhau dưới hai hàng vòng tay vịn màu đỏ treo dọc trần tàu.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Inside the bright-colored train car, many passengers stood and sat under two rows of red handrails hanging along the ceiling."
+    },
+    {
       "text": "Bản đồ phân bố động đất tại một vùng trên thế giới, với một bảng chú giải phía bên trái gồm các kí hiệu nhiều màu sắc tương ứng với các vị trí tâm chấn có cấp độ động đất khác nhau. Không tính bảng chú giải, có bao nhiêu vị trí ghi nhận động đất cấp độ 4?",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "A map of earthquake distribution in one region of the world, with a left-hand glossary of multicolored symbols corresponding to epicenter locations of different earthquake levels. Excluding the glossary, how many locations do fourth-degree earthquakes occur?"
     },
     {
+      "text": "Bốn con chim cánh cụt nối thành hàng, dang cánh bước trên nền tuyết trắng cạnh mặt biển và các khối băng lớn.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Four penguins line up, spread their wings and walk across the white snow by the sea and the ice."
+    },
+    {
       "text": "Chiếc cổng lớn phía sau hai người dẫn chương trình có màu gì?",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "What color is that big gate behind the two hosts?"
+    },
+    {
+      "text": "Chiếc xuồng trắng chở hai người len qua vùng cây thủy sinh dày; người ngồi phía trước mặc áo đỏ và đội nón lá.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The white boat carried two men through thick water-weed; the one in front wore a red coat and a green cap."
     },
     {
       "text": "Chuyên đề 10 trên màn hình mở đầu hướng dẫn kỹ năng trong môn học nào?",
@@ -242,6 +302,42 @@
       "text_en": "Close-up of a boy sitting in the middle of the night audience, looking up and clapping as the show intersects the scenes of white and yellow phosphors jumping on stilts."
     },
     {
+      "text": "Gian hàng Trung thu đông người treo kín đèn nhiều màu, nổi bật là các đèn ông sao và đèn tạo hình cá lớn phía trên khách tham quan.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The crowded autumn central pavilion was fully hung with colorful lights, notably star lights and large fish - shaped lamps above the visitors."
+    },
+    {
+      "text": "Giữa con đường chợ đông xe máy, một cụ bà mặc đồ nâu hoa văn và quấn khăn trên đầu đi qua các sạp hàng hai bên.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "In the middle of the crowded motorbike market lane, an old woman in patterned brown and a shawl over her head walked past the stalls on either side."
+    },
+    {
+      "text": "Giữa khu đất trống, ngôi nhà gỗ có mái tam giác cháy dữ dội; lửa trùm lên mái trong khi cột khói đen bốc thẳng lên cao.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "In the middle of the clearing, the triangular-roofed wooden house burned violently; flames covered the roof while black columns of smoke rose straight up."
+    },
+    {
+      "text": "Giữa những con sóng xám, một chú chó nhỏ mặc áo phao hồng đứng giữ thăng bằng trên tấm ván lướt sóng màu xanh vàng.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "In the middle of the gray waves, a little dog in a pink life jacket stood balanced on a yellow-green surfboard."
+    },
+    {
+      "text": "Giữa trại ong trên thung lũng núi, người nuôi ong đứng cạnh nhiều thùng tổ sơn màu và nâng một cầu ong phủ kín ong để kiểm tra.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "In the middle of a beehive in a mountain valley, beekeepers stand next to several colored beehives and lift a covered bee bridge to check."
+    },
+    {
+      "text": "Góc quay từ trên cao cho thấy một vệt sạt lở đất đỏ rộng cắt qua mảng cây xanh và chạy xuống sát những mái nhà của khu dân cư.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The angle of view from above shows a wide red landslide that cuts through the greenery and runs down close to the residential rooftops."
+    },
+    {
       "text": "Hai bạn học sinh mặc đồng phục áo trắng, quần xanh, quàng khăn đỏ đang làm MC trên một sân khấu tại trường học, phía sau là một bộ trống cơ màu đỏ và một cây đàn piano.",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -288,6 +384,12 @@
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "Two women stood in front of shelves stacked with embryo bags, holding and examining the clusters of abalone mushrooms growing from the opening of the bags."
+    },
+    {
+      "text": "Hiện trường tai nạn đường sắt vào ban đêm có cảnh sát đứng giữa đoàn tàu và chiếc xe bán tải màu trắng bị hư hỏng nặng sát đường ray.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The scene of the nighttime railway accident was a police stand between the train and a heavily damaged white pickup near the tracks."
     },
     {
       "text": "Hành động cắt chùm nho bằng kéo từ giàn nho bằng một chiếc kéo màu đen. Có thể thấy có một sợi dây màu xanh dương được buộc vào cuống của chùm nho này trước khi nó được cắt.",
@@ -374,6 +476,12 @@
       "text_en": "The full moon appears in the sky above the horizon"
     },
     {
+      "text": "Một chó robot bốn chân màu xám đi giữa rừng thông, bên cạnh là người điều khiển đeo khẩu trang và cầm thiết bị điều khiển.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "A gray four - legged robot dog walks in the middle of a pine grove, next to which is a masked controller who holds the control device."
+    },
+    {
       "text": "Một con lân màu đỏ rực dựng thẳng người trên chiếc cọc cao, thân kéo dài theo phương thẳng đứng trong khi dàn cọc còn lại và khán giả nằm phía sau.",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -392,10 +500,28 @@
       "text_en": "A silver - haired woman sat on the wooden floor, bent and knitting a huge round concave cross from bamboo spokes, surrounded by many frames and unfinished products."
     },
     {
+      "text": "Một dải lửa dài lan ngang sườn đồi khô cằn, bao quanh các thân cây cháy sém và tạo lớp khói xám dày phủ kín phía sau.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "A long strip of fire spread across the arid hillside, surrounding the scorched tree trunks and creating a thick grey smoke that covered the back."
+    },
+    {
       "text": "Một em bé ngồi trên vai người lớn giữa đám đông khán giả, chăm chú nhìn con lân trắng đen đang biểu diễn trên các cọc cao.",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "A child sat on an adult's shoulder in the crowd of spectators, staring at the black and white lion performing on high stakes."
+    },
+    {
+      "text": "Một hồ nước gần tròn màu xanh ngọc nằm sâu giữa các vách đá xám, xung quanh phủ cây rừng và được nhìn từ góc cao.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "A nearly round turquoise lake deep between grey cliffs, surrounded by forest trees and viewed from a high angle."
+    },
+    {
+      "text": "Một người mặc bộ đồ đen gắn nhiều điểm cảm biến, được treo dây hỗ trợ và cúi gập người khi diễn trước phông xanh trong trường quay.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "A man in a black suit with multiple sensor points, hanging a support rope, and bending over when performing in front of a blue background in the studio."
     },
     {
       "text": "Một người đàn ông mặc áo xanh ngồi trên xuồng, dùng dao chặt tàu lá dừa nước dài rồi kéo phần lá vừa cắt lên thuyền.",
@@ -416,10 +542,22 @@
       "text_en": "A woman in a light blue truncheonette sat in a canoe, cooking food on a small stove while another canoe passed a creek covered with lotus flowers."
     },
     {
+      "text": "Một sảnh triển lãm mái kính rộng chật kín người, đám đông tập trung ở tầng dưới trong khi hai thang cuốn lớn chạy chéo phía trên.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "A wide glass - roof exhibit hall was packed with people, the crowd concentrated on the lower floors while two large escalators ran diagonally above."
+    },
+    {
       "text": "Một thành viên mặc quân phục rằn ri cầm vật phát sáng bước ra từ căn lều phủ bạt đen đang tỏa nhiều khói trắng, mở đầu tiết mục múa rồng của đội.",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "A member of the team in a camouflage uniform, carrying a flaming object, emerged from a black canvas tent that was smoking white, opening the dragons' dance."
+    },
+    {
+      "text": "Một đàn chim đen bay dày đặc thành nhiều lớp trên bầu trời ven sông, ngay phía trên hàng cây và các mái nhà của thành phố.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "A dense flock of black birds flew in layers over the river sky, just above the city's trees and rooftops."
     },
     {
       "text": "Một đàn sư tử đang nghỉ ngơi và leo trèo trên các bục gỗ trong khu nuôi dưỡng, phía trước có bảng thông tin của London Zoo phục vụ công tác theo dõi và bảo tồn động vật.. Sau đó có cảnh hai nhân viên mặc áo xanh lá đang cân và ghi nhận số liệu của một con vật trong khuôn viên sở thú.",
@@ -456,6 +594,12 @@
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "The woman in the pink gown, wearing glasses, was explaining the different uses of the verb \"remember\" based on the time of the action being referred to."
+    },
+    {
+      "text": "Người phụ nữ mặc áo tím ngồi trước khung cửi gỗ, dùng hai tay luồn và ép các sợi để dệt tấm vải ca rô đen trắng.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The woman in purple sat in front of the wooden loom, and with her hands threaded and pressed the threads to weave the black and white checkered cloth."
     },
     {
       "text": "Người phụ nữ ngồi dưới sàn dùng con dao cong nhỏ chẻ ống tre thành nhiều nan mảnh, cạnh bà là các bó tre xanh đã cắt đều.",
@@ -572,6 +716,12 @@
       "text_en": "Five people sat on low plastic chairs around a pile of peeled asparagus on the yard: the woman on the far left wore a red and white checked shirt and yellow pants, in the middle a woman in a green T-shirt, and on the far right a man in a camouflage dress. Behind them were rows of blue plastic barrels and a yellow plastic basket."
     },
     {
+      "text": "Nữ giáo viên mặc áo dài màu hồng đứng giảng bên cạnh bảng xanh có tiêu đề tiếng Anh “Common Determiners” và nội dung bài học viết phía dưới.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "A female teacher in a pink gown was teaching next to a blue board titled \"Common Determiners\" and the lesson below."
+    },
+    {
       "text": "Nữ người dẫn chương trình đang ăn tô mì ở quán mặc áo màu gì?",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -600,6 +750,12 @@
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "Money story: close - up of the uncut note on the print line, then a panoramic view of the central bank building"
+    },
+    {
+      "text": "Slide bài giảng Vật lí về hiện tượng phóng xạ trình bày một bảng so sánh ba loại tia alpha, beta và gamma cùng các đặc điểm tương ứng.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "This slide of the physics lecture on radiation presents a table comparing the three types of alpha, beta and gamma rays with their respective characteristics."
     },
     {
       "text": "Slide bài giảng lịch sử nền trắng có ba ô bấm bo tròn màu xanh dương xếp dọc, lần lượt ghi HOA KÌ, NHẬT BẢN và TÂY ÂU, mỗi ô kèm một khung trắng rỗng bên phải. Ngay sau đó slide thu nhỏ về nửa phải màn hình trên nền xanh đậm lấp lánh, bên trái là ô hình nam giảng viên mặc áo sơ mi trắng ngồi trước laptop.",
@@ -656,6 +812,36 @@
       "text_en": "In the night task, a black and white phosphor stood erect on a high post in front of a green and yellow dragon and a row of large boxes covered in green cloth."
     },
     {
+      "text": "Trong bản tin hiện trường tại Bình Chánh, một nhà xưởng bốc lửa đỏ dữ dội, phía trên cuộn thành cột khói đen dày che khuất bầu trời.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "In the Binh Chanh crime scene, a factory fires violently red, its top coiling into thick black smoke that obscures the sky."
+    },
+    {
+      "text": "Trong khu bếp ngoài trời, hai người phụ nữ cùng đứng sát một chiếc nồi kim loại lớn và phối hợp chuẩn bị món ăn.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "In the outdoor kitchen, the two women stood close to a large metal pot and coordinated the preparation of the dish."
+    },
+    {
+      "text": "Trong khu nuôi nhiều cây xanh, một con đười ươi lông nâu ngồi thấp, dùng tay cầm thức ăn màu xanh đưa lên miệng.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "In a green enclosure, a low - lying brown orangutan holds a handful of green food to its mouth."
+    },
+    {
+      "text": "Trong khu tín ngưỡng, tượng người màu trắng đứng chính giữa hai tượng chim hạc đối xứng, phía sau là mái đền đỏ vàng dưới trời xanh.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "In the sanctuary, a white figure stands between two symmetrical harps, behind which is a red - yellow temple roof in the blue sky."
+    },
+    {
+      "text": "Trong nhà tưởng niệm, nhiều hộp sọ xếp sau tủ kính phía trên các bó xương dài, cạnh bảng ghi số hài cốt chưa xác định.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "In the memorial house, many skulls were stacked behind glass cabinets above the long bones, next to an unidentified skeleton number."
+    },
+    {
       "text": "Trong nhà xưởng, hai người đàn ông mặc áo thun màu xanh dương đang xếp những thùng carton màu trắng in chữ đỏ lên một pallet đã bọc màng. Phía sau là các sọt nhựa màu xanh lá đựng trái cây.",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -678,6 +864,12 @@
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "In the vineyards with the trellises, the woman in white shirt cut a bunch of green grapes with scissors and gave them to the woman who led them beside her."
+    },
+    {
+      "text": "Trong đoàn diễu hành ngoài phố, một người hóa trang đeo mặt nạ có cặp sừng cong, bộ lông dài sẫm màu và bước giữa đám đông.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "In the street parade, a makeup man wearing a mask with curved horns and long dark fur walked among the crowd."
     },
     {
       "text": "Trong đoạn clip có là một chàng trai đội mũ lưỡi trai đen, mặc áo thun trắng có dòng chữ tiếng Anh, đang ngồi cạnh một chiếc hộp. Trên hộp, anh sắp xếp nhiều mảnh bìa cắt rời với hình thù ngẫu nhiên.\nNhờ ánh sáng chiếu từ một phía, các mảnh bìa đó đổ bóng lên tường, tạo thành hình chân dung một người đàn ông với khuôn mặt rõ nét, tóc vuốt gọn và mặc vest.",
@@ -716,6 +908,30 @@
       "text_en": "In the video of a mushroom dish, there are moments of preparation: The first moment of seeing a mushroom cut."
     },
     {
+      "text": "Trên chiếc xuồng giữa sông, hai ngư dân ngồi sát nhau, trải và dùng tay sửa tấm lưới đánh cá lớn màu nâu.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "In the canoe in the middle of the river, the fishermen sat close together, spread out and fixed with their hands the large brown fishing net."
+    },
+    {
+      "text": "Trên cánh đồng, người phụ nữ mặc áo hoa, che kín mặt và đội nón lá cầm một bó lá dài màu xanh vừa được thu hoạch.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "In the field, the woman in a flower dress, covering her face and wearing a leaf hat holds a long bundle of freshly harvested green leaves."
+    },
+    {
+      "text": "Trên mặt sông rộng, một chiếc xuồng nhỏ màu xanh chở đầy đồ đạc; người đội nón lá ngồi ở mũi giữa các cụm cây thủy sinh nổi.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "On the wide river, a small green canoe was laden with furniture; the man in the conical cap sat at the bow among the floating plants."
+    },
+    {
+      "text": "Trên mặt đường còn ướt, một nhóm tay đua xe đạp áp sát nhau, cúi thấp người tăng tốc trong những mét nước rút ngay trước vạch đích.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "On the wet road, a group of cyclists, pressed together, crouched low and accelerating in the water meters right before the finish line."
+    },
+    {
       "text": "Trên đĩa tròn màu trắng có 1 ly panna cotta. Có một bàn tay lần lượt đặt thêm 2 ly panna cotta nữa vào đĩa.\nMỗi ly panna cotta có lớp kem mịn màu trắng ngà, bên trên trang trí vài lát nho đỏ, thêm lá bạc hà xanh tạo điểm nhấn tươi mát.\nBên cạnh trên đĩa còn có hai bông hoa ăn được (màu đỏ và vàng) để tăng phần đẹp mắt.",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -746,10 +962,46 @@
       "text_en": "Looking for a video of a race, shot from an overhead flycam, of a blue-and-white-shirted athlete crossing over three other athletes and taking the lead. Knowing that the athlete is leading the rest of the way to the finish line, the driver is the one who gets to the top."
     },
     {
+      "text": "Tượng Quan Âm màu trắng khổng lồ đứng cao hơn toàn bộ mái nhà, được quay chính diện với khu dân cư và sông nước trải rộng phía sau.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The huge white Guanyin Statue stands higher than the entire roof, facing the residential area and the river spread out behind."
+    },
+    {
+      "text": "Tượng bán thân màu đồng của người đàn ông râu dài đội mũ được đặt trong điện thờ, bao quanh bởi các cột và bảng chữ đỏ vàng.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Bronze busts of the bearded man in the hat were placed in the sanctuary, surrounded by columns and a red - yellow script."
+    },
+    {
+      "text": "Tại khu vui chơi, nữ du khách mặc áo sơ mi kẻ vàng ngồi trên xe trượt mini màu xanh, ngay cạnh một chiếc xe tương tự màu đỏ.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "At the amusement park, a female tourist wearing a yellow striped shirt sits on a blue mini sled, next to a similar red one."
+    },
+    {
+      "text": "Tại quầy chợ hải sản, những miếng thịt quay da vàng nâu được bày cạnh các rổ cá, mực và những khay thực phẩm khác.",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "At the seafood market, golden - brown skin roasted meat is displayed next to baskets of fish, squid, and other food trays."
+    },
+    {
       "text": "ba hũ sản phẩm ba khía đặt cạnh nhau, hũ giữa mang nhãn vàng",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "Three pots of three facets, side by side, the middle one with a gold label."
+    },
+    {
+      "text": "ba khía đã sơ chế được cho vào các hũ nhựa trong",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "three pre-cooked notches placed in clear plastic jars"
+    },
+    {
+      "text": "ba khía được trộn đều với ớt đỏ và gia vị trong thau lớn",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The three notches are mixed with red pepper and spices in a large basin"
     },
     {
       "text": "ba người mặc áo lễ màu xanh đứng trước bàn thờ",
@@ -794,6 +1046,12 @@
       "text_en": "Hospital sign with the name \"HEALTHCARE\" in front of the flagged building"
     },
     {
+      "text": "biển lớn màu xanh trắng tại đầu cầu có cờ Việt Nam ghi HUYỆN CHỢ MỚI",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "A large blue-and-white sign at the top of the bridge with the Vietnamese flag showing NEW MARKET DISTRICT"
+    },
+    {
       "text": "biển màu xanh có hai dòng KHU VỰC BIÊN GIỚI và FRONTIER AREA",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -804,6 +1062,12 @@
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "White cloud cover over the ridge, forest from the top."
+    },
+    {
+      "text": "biển đặc sản người Chăm và các dây xúc xích bò đỏ ghi tên tung lò mò",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Cham - cuisine specialty sign and red beef sausage links with the name \"wipe the stove\""
     },
     {
       "text": "bàn tay chỉ vào chồng gạch đỏ xếp lớp",
@@ -830,6 +1094,12 @@
       "text_en": "red - gold altar heavily decorated with Chinese characters and patterns"
     },
     {
+      "text": "bác sĩ dùng ống nghe áp lên cơ thể em bé nằm trên giường bệnh",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The doctor put a stethoscope on the baby in the hospital bed."
+    },
+    {
       "text": "bác sĩ áp ống nghe lên người em bé khi thăm khám",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -854,10 +1124,22 @@
       "text_en": "Pink lotus blossom blooming on the lake between the green lotus leaves"
     },
     {
+      "text": "bản đồ bản tin trận động đất 4,2 độ có dấu sao đỏ tại huyện Kon Plông",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "map of the 4.2 magnitude earthquake newscast with red star in Kon Plong District"
+    },
+    {
       "text": "bản đồ bản tin động đất 4,2 độ ghi địa danh huyện Kon Plông",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "map of 4.2 magnitude earthquake newscast with place name Kon Plong district"
+    },
+    {
+      "text": "bảng Giảm giá sốc cạnh sản phẩm Downy màu tím hiển thị giá 169.000 đồng",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Purple Downy Shock Price List shows the price of VND169,000"
     },
     {
       "text": "bảng chấm điểm màu xanh xuất hiện sau bài múa rồng của đội mặc quân phục rằn ri",
@@ -908,6 +1190,12 @@
       "text_en": "A metal drum set by a fire outside at night."
     },
     {
+      "text": "chiếc xe chệch sang lề phải và lao xuống khỏi mặt đường",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The car veered to the right and dived off the road."
+    },
+    {
       "text": "chiếc xe khách màu đỏ nằm dưới rãnh và được xe cứu hộ kéo lên",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -950,10 +1238,64 @@
       "text_en": "The dog is balancing on the surfboard."
     },
     {
+      "text": "con lân biểu diễn ngay cạnh mô hình rồng nhiều màu cuộn trên sàn",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The phosphor is right next to the multicolored dragon scroll on the floor."
+    },
+    {
+      "text": "con lân bắt đầu nhảy và giữ thăng bằng trên các cọc cao",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The animal starts jumping and balancing on high stakes."
+    },
+    {
+      "text": "con lân cúi đầu lấy bó lá xanh có hoa đỏ trên một cọc",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The lion bowed his head and took a bundle of green leaves with red flowers from a stake."
+    },
+    {
+      "text": "con lân thực hiện những cú nhảy đầu tiên trên dãy cọc cao",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The animal made its first jump on the high stakes."
+    },
+    {
+      "text": "con lân trắng đen bước ra khỏi ô cửa của cổng nhà cổ",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The black and white unicorn stepped out of the doorway of her house."
+    },
+    {
+      "text": "con lân trở về mặt đất và chào cùng các thành viên ở cuối bài",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The phoenix returns to the ground and salutes with the rest of the group at the end of the song."
+    },
+    {
+      "text": "con lân vàng đỏ cúi chào và khởi động trên mặt sàn",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The red and yellow phosphor bowed and warmed up on the floor."
+    },
+    {
       "text": "các bác sĩ mặc áo mổ xanh và đội mũ trùm đang phẫu thuật dưới đèn sáng trong phòng mổ",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "Doctors in green operating jackets and hoods are operating under bright lights in the operating room."
+    },
+    {
+      "text": "các bẹ lục bình khô được tách và vuốt thành sợi dài",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Dried chives are separated and clawed into long strands."
+    },
+    {
+      "text": "các công nhân trộn cá và chia hỗn hợp vào nhiều hũ",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The workers mix the fish and divide the mixture into jars."
     },
     {
       "text": "các cặp thi đấu cõng nhau vượt chướng ngại vật ngoài trời",
@@ -962,10 +1304,22 @@
       "text_en": "The couples ride on their backs across an open - air hurdle"
     },
     {
+      "text": "các giỏ và khay hoàn thiện có hoa trang trí được trưng bày",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "baskets and finished trays with decorative flowers on display"
+    },
+    {
       "text": "các khay cá tươi và hải sản bày bán dày đặc trong chợ",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "The stalls of fresh fish and seafood are crowded in the market."
+    },
+    {
+      "text": "các lá dài được tước và cắt thành những dải đều nhau",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The long leaves are stripped and cut into even strips."
     },
     {
       "text": "các món ăn Châu Đốc được dọn ra lần lượt: đĩa chả giò hình tam giác, đĩa cá chiên bột, rồi nồi đất cá kho",
@@ -974,10 +1328,70 @@
       "text_en": "The dishes of Chau Doc were served one after another: a triangular plate of spring rolls, a plate of fried fish, and a pot of potted fish."
     },
     {
+      "text": "các tay đua lần lượt đi qua vạch đích màu đỏ",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The runners take turns crossing the red finish line."
+    },
+    {
+      "text": "các tay đua nước rút sát vạch đích trước khi màn hình chuyển sang đồ họa kết thúc",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The runners sprint to the finish line before the screen switches to the final graphic."
+    },
+    {
+      "text": "các tay đua nước rút và cán đích dưới cổng màu đỏ",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The runners sprint and race under the red gate."
+    },
+    {
+      "text": "các tay đua áo đỏ tách hàng và nước rút gần đích",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Redcoats split and sprinted near the finish line."
+    },
+    {
+      "text": "các thành viên chạy làm thân rồng uốn lượn thành nhiều nhịp sóng",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The members run as the dragon's body twists into waves."
+    },
+    {
+      "text": "các thành viên đứng dưới đỡ con lân rời khỏi dãy cọc ở cuối bài",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The players stand down and support the giant and leave the post at the end."
+    },
+    {
       "text": "các đội đua tính giờ lần lượt xuất hiện: đội áo vàng xanh chạy thành hàng, đội áo xanh dương thay phiên dẫn tốc, rồi đội áo đỏ nước rút về đích",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "The time-taking teams were in turn: the yellow and blue teams were in line, the blue team took turns, and the red team sprinted to the finish line."
+    },
+    {
+      "text": "công nhân lấy cá từ thùng lớn để đưa vào khu chế biến",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The workers take the fish from the big containers and bring it to the processing area."
+    },
+    {
+      "text": "công nhân đeo găng làm sạch và cắt bồn bồn thành khúc",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Workers wore cleaning gloves and cut the tub into chunks."
+    },
+    {
+      "text": "công nhân đeo găng phân loại ba khía vào các rổ vàng",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "workers wear three-fold sorting gloves into the gold baskets"
+    },
+    {
+      "text": "công nhân đổ hỗn hợp từ thùng kim loại vào thùng chế biến lớn",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Workers pour the mixture from the metal barrel into the large processing container."
     },
     {
       "text": "cảnh anh ngồi bán hàng trực tuyến trước chiếc đèn vòng tròn, trên bàn bày mấy hộp sản phẩm",
@@ -1142,6 +1556,18 @@
       "text_en": "Two fishermen fixing a brown net in a canoe."
     },
     {
+      "text": "hai ngư dân trên xuồng khác gom và thu tấm lưới vào thuyền",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Two fishermen in another boat picked up the net and put it in the boat."
+    },
+    {
+      "text": "hai ngư dân trải lưới và gỡ những con cá mắc bên trong",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Two fishermen spread out their nets and removed the fish that were stuck inside."
+    },
+    {
       "text": "hai người dẫn chương trình đứng phía trước một chiếc cổng lớn",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -1158,6 +1584,12 @@
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "Two leaf - hat workers operating the loom outdoors"
+    },
+    {
+      "text": "hai người trên xuồng cùng nâng tấm lưới lớn khỏi mặt nước",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The two men in the boat lifted the big net off the water."
     },
     {
       "text": "hai người đi qua các dãy chuồng lưới đánh số trong nhà trại",
@@ -1202,6 +1634,24 @@
       "text_en": "rows of black cast iron pots on the wall of the pancake kitchen."
     },
     {
+      "text": "hàng tay đua mặc áo xanh nối đuôi nhau tách khỏi đoàn đông",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The row of blue-clad racers pulling apart from the crowd."
+    },
+    {
+      "text": "hành khách xếp hàng trên sân ga và bước qua cửa lên tàu",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "passengers lined up on the platform and walked through the door to the train."
+    },
+    {
+      "text": "hành khách đứng ngồi trong toa metro khi cảnh vật lướt qua cửa sổ",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The passengers were sitting in the subway car as the sights glided through the window."
+    },
+    {
       "text": "hồ nước tròn xanh ngọc nằm giữa vách đá và cây rừng",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -1232,6 +1682,12 @@
       "text_en": "opening screen Subject 10 Skills in Geography"
     },
     {
+      "text": "màn hình mở đầu Chuyên đề 10 ghi Kỹ năng trong môn Địa lí",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "opening screen Subject 10: Geography Skill"
+    },
+    {
       "text": "màn hình mở đầu Ôn tập môn Toán Chuyên đề 10 Xác suất",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -1256,6 +1712,18 @@
       "text_en": "The children in yellow and white uniforms stood together on the board, with a map of Vietnam hanging next to them."
     },
     {
+      "text": "mẫu trang trí hình tròn từ lá dừa đã hoàn thiện được trưng bày",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Completed coconut leaf circle decoration on display"
+    },
+    {
+      "text": "mật ong màu vàng được rót vào nhiều hũ nhựa nhỏ",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Yellow honey poured into small plastic jars."
+    },
+    {
       "text": "một chiếc xe máy nằm kẹt dưới gầm xe tải sau va chạm",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -1278,6 +1746,12 @@
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "One hand a cell phone to a staff at a cell phone detox facility."
+    },
+    {
+      "text": "một người đứng trên thuyền tròn nhỏ giữa mặt sông",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "A man standing in a small round boat in the middle of the river."
     },
     {
       "text": "một phụ nữ mặc áo gi-lê đỏ đứng giữa những chồng bình nước và hàng hoá chất đống",
@@ -1352,16 +1826,52 @@
       "text_en": "The artist threads through several black beads to form a ring."
     },
     {
+      "text": "nghệ sĩ đội mũ đeo kính ngồi trước máy đánh chữ cổ và nhấn các phím tròn",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The artist in the spectacles sits in front of the ancient typewriter and presses the round keys."
+    },
+    {
       "text": "ngôi nhà mái tam giác bốc cháy dữ dội giữa cột khói đen",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "The house, with its triangular roof, was on fire in the middle of a black smoke."
     },
     {
+      "text": "ngư dân lấy cá từ lưới và đưa con cá nhỏ cho người dẫn chương trình xem",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Fishermen took the fish out of the net and showed the little fish to the host."
+    },
+    {
+      "text": "ngư dân trên xuồng kéo tấm lưới màu nâu khỏi mặt nước",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Fishermen in the canoes pulled the brown net out of the water."
+    },
+    {
+      "text": "ngư dân trên xuồng thả và kéo tấm lưới lớn dưới nước",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Fishermen in canoes dropped and pulled a large net under the water."
+    },
+    {
+      "text": "người biểu diễn mặc trang phục đỏ cưỡi ngựa trong sân ngoài trời trước đám đông",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The performer in red riding in the courtyard in front of the crowd"
+    },
+    {
       "text": "người biểu diễn ngồi trên lưng ngựa trong sân",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "The performer is sitting on horseback in the courtyard."
+    },
+    {
+      "text": "người biểu diễn tham gia tiết mục nhảy tập thể khi ngồi trên xe lăn",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The performer joins the group dance while in a wheelchair"
     },
     {
       "text": "người bán cho bún vào tô rồi múc nước dùng từ nồi",
@@ -1374,6 +1884,12 @@
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "The seller prepares the stock and ingredients on the boat"
+    },
+    {
+      "text": "người bán dùng dao gọt những quả thốt nốt vỏ tím đen",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The seller pinches the black-purple pumice trees with a knife"
     },
     {
       "text": "người dân chặt và gom các thân tre ngoài bãi",
@@ -1400,6 +1916,12 @@
       "text_en": "carnival performer wearing horned and long - haired masks"
     },
     {
+      "text": "người lấy mật dùng lửa và khói tiếp cận tổ ong trên cây",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The nectar collector approached the tree with fire and smoke."
+    },
+    {
       "text": "người mặc đồ gắn cảm biến chuyển động cúi người trên phông xanh",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -1424,10 +1946,22 @@
       "text_en": "The farmer picks the red coffee beans from the tree."
     },
     {
+      "text": "người nông dân lội nước cắt và gom những thân bồn bồn dài",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The farmers wading in the water cut and gathered long tubers."
+    },
+    {
       "text": "người nông dân mặc áo đỏ chăm sóc những cây ớt chuông đỏ trong nhà kính",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "Red-clad farmers tend red pepper trees in greenhouses"
+    },
+    {
+      "text": "người nông dân áo đỏ thu hoạch quả cà phê chín đỏ và đổ vào rổ",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The red-shirted farmer picks red-ripe coffee beans and puts them in a colander."
     },
     {
       "text": "người phất cờ ô vuông đen trắng ở vạch đích",
@@ -1446,6 +1980,12 @@
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "woman weaving black and white checkered cloth on wooden loom"
+    },
+    {
+      "text": "người phụ nữ dệt vải bằng khung cửi gỗ trong căn nhà có cửa sổ lớn",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Woman weaving with wooden loom in house with big window"
     },
     {
       "text": "người phụ nữ mặc váy đen sọc trắng ăn hải sản tại bàn bên bờ biển",
@@ -1470,6 +2010,12 @@
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "woman weaves fabric on a wooden loom"
+    },
+    {
+      "text": "người phụ nữ đội mũ bảo hiểm chăm sóc một con ngựa đeo dây cương trong chuồng",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The woman in the helmet tending to a horse with reins in the stable"
     },
     {
       "text": "người phụ nữ đội mũ bảo hiểm đứng cạnh và chăm sóc một con ngựa",
@@ -1502,16 +2048,64 @@
       "text_en": "People who perform and dance in wheelchairs."
     },
     {
+      "text": "người tham gia giao điện thoại di động cho nhân viên tại điểm cai nghiện điện thoại",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "participants who deliver mobile phones to staff at a mobile detoxification site"
+    },
+    {
+      "text": "người thợ dùng bút tô màu vàng lên họa tiết trên nền đỏ",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The artist uses a pen to paint the pattern in yellow on a red background."
+    },
+    {
+      "text": "người thợ dùng bút và keo phủ lớp nhũ vàng lên tấm tranh",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The artist used a pen and glue to coat the canvas with gold stigmata."
+    },
+    {
+      "text": "người thợ gấp và đan các dải lá thành hoa văn trang trí",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The workman folded and knitted the strips of leaves into decorative patterns."
+    },
+    {
+      "text": "người thợ khuấy hỗn hợp đường màu nâu trong chảo lớn",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "brown sugar stirrer in a large pan"
+    },
+    {
+      "text": "người thợ múc và dàn bột thành bánh tròn trên mặt hấp",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The batter is ladled and spread in a circle on the steaming face."
+    },
+    {
       "text": "người thợ mặc áo trắng ngồi vận hành máy tiện thủ công",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "The white-clad worker sat operating the hand-made lathe."
     },
     {
+      "text": "người thợ đẩy giàn phên bánh tráng từ trong nhà ra đường",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The worker pushes the waffle iron from the house to the street"
+    },
+    {
       "text": "người đàn ông chất và xử lý những tàu lá dừa nước trên ghe",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "man loading and handling the water-covered boats in his boat"
+    },
+    {
+      "text": "người đàn ông dùng bút phác thảo hình chim trên giấy",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "man sketching a bird on paper with a pen"
     },
     {
       "text": "người đàn ông mặc áo sơ mi trắng biểu diễn một nhạc cụ có bàn phím",
@@ -1524,6 +2118,12 @@
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "The man in black is interviewed in the middle of the stomping scene"
+    },
+    {
+      "text": "người đàn ông ngồi trên xuồng chặt và kéo tàu lá dừa nước",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "man in a canoe cutting and towing a water coconut leaf boat"
     },
     {
       "text": "người đàn ông trên xuồng kéo lưới hoặc dụng cụ từ mặt nước",
@@ -1556,6 +2156,18 @@
       "text_en": "numerous skulls and human bones displayed in the memorial hall"
     },
     {
+      "text": "nhiều người cùng gỡ những con cá nhỏ mắc trong lưới",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "And so many people were taking out little fish that were caught in the net."
+    },
+    {
+      "text": "nhiều tay đua liên tiếp chạy qua vạch đích dưới cổng đỏ",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Multiple drivers in a row run over the finish line under the red gate."
+    },
+    {
       "text": "nhiều tay đua tràn qua cổng đích đỏ giữa các lá cờ Việt Nam",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -1566,6 +2178,12 @@
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "multiple white wafers are laid out on the trellis"
+    },
+    {
+      "text": "nhãn hũ Bà Giáo Khỏe 55555 có hình con cá và dòng chữ mắm cá chẽm",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "label of \"Beautiful Master Tu 55555\" with the fish and the words \"Shape\""
     },
     {
       "text": "nhóm du khách chắp tay cầu nguyện trong ngôi đền trang trí đỏ vàng",
@@ -1584,6 +2202,18 @@
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "A group of people sitting in a boat at night, one holding a guitar."
+    },
+    {
+      "text": "nhóm người ngồi xuồng đi sâu vào con rạch giữa rừng",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The men in the canoes went deep into the creek in the middle of the forest."
+    },
+    {
+      "text": "nhóm tay đua dẫn đầu cúi người tăng tốc dọc hàng rào quảng cáo",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The lead biker group crouched and sped along the advertising fence."
     },
     {
       "text": "nhóm tay đua nhỏ kéo thành hàng dài trên đường lớn nhìn từ trên cao",
@@ -1610,6 +2240,12 @@
       "text_en": "And we had a group of kids moving around the pool with a coach."
     },
     {
+      "text": "nhóm trẻ em đeo kính tập bơi trong bể có dây phân làn cùng người hướng dẫn",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "And the group of kids who wore goggles and swam in the lane-diverging pool with the instructor."
+    },
+    {
       "text": "những biểu tượng lớn trên mái công trình được sơn màu vàng",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -1622,10 +2258,22 @@
       "text_en": "Completed concave and round baskets are presented"
     },
     {
+      "text": "những con ba khía sẫm màu được xả rửa bằng nước",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The dark three-striped ones are rinsed with water."
+    },
+    {
       "text": "những cuốn sách thiếu nhi bìa màu bày trải trên mặt bàn gỗ sẫm",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "The children's books, in color, were spread out on the dark wooden table."
+    },
+    {
+      "text": "những cọng bồn bồn được xếp vào túi và hút kín bao bì",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The tubers were packed in the bag and sealed."
     },
     {
       "text": "những hộp phim xếp chồng thành đống nhiều màu",
@@ -1646,10 +2294,28 @@
       "text_en": "Men in yellow life jackets pushing their sack-laden rafts in the waves"
     },
     {
+      "text": "những người mặc áo vàng cầm vợt chơi cầu lông qua lưới trên sân ngoài trời",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The guys in yellow jackets holding lacrosse sticks playing badminton over the open field."
+    },
+    {
       "text": "những người mặc áo vàng cầm vợt đánh qua lưới trên sân",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "The men in yellow with the racquets across the field."
+    },
+    {
+      "text": "những người thợ ngồi giữa đống nguyên liệu và đan mặt giỏ",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The workers sit in the middle of the pile of ingredients and knit basket-side baskets."
+    },
+    {
+      "text": "những người ven bờ hạ và kéo chiếc vó lưới vuông",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Men on the lower shore and dragging the hoof of the square net"
     },
     {
       "text": "những người đứng quanh bàn trộn nguyên liệu và bày món ra tô",
@@ -1658,10 +2324,28 @@
       "text_en": "And they're all around the table, mixing ingredients and putting them in bowls."
     },
     {
+      "text": "những tấm bánh tráng tròn trắng mỏng được xếp trên phên và mang ra phơi",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The white, round wafers were laid on the wreaths and hung on the dry side."
+    },
+    {
+      "text": "những tấm bánh tráng tròn được xếp kín trên các tấm phên",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The round wafers were all packed on the wafers."
+    },
+    {
       "text": "nồi đất cá kho nước sốt nâu đen có ớt và hành lá",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "pot of fish chowder brown and black sauce with chilies and scallions"
+    },
+    {
+      "text": "nữ du khách áo kẻ vàng tại điểm ngắm cảnh cạnh thông tin độ cao 128 m so với mực nước biển",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "female tourist in yellow plaid at view point next to the 128 m elevation information"
     },
     {
       "text": "nữ du khách áo kẻ vàng đứng ở điểm ngắm cảnh có dòng chữ độ cao so với mực nước biển",
@@ -1680,6 +2364,12 @@
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "A teacher in a pink dress stands in front of the Common Determiners."
+    },
+    {
+      "text": "nữ giáo viên áo dài hồng đứng cạnh bảng xanh có tiêu đề Common Determiners",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The pink-clad teacher stood next to the blue board called Common Determiners."
     },
     {
       "text": "nữ giáo viên áo dài hồng đứng trước bảng có tiêu đề Common Determiners",
@@ -1736,6 +2426,12 @@
       "text_en": "A red - painted warrior with a weapon standing in the temple"
     },
     {
+      "text": "phần thân trắng đã bóc được cầm lên để giới thiệu",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "peeled white body held up for introduction"
+    },
+    {
       "text": "quy trình sơ chế măng rừng: dỡ giỏ măng từ xe máy xuống, ngồi lột vỏ măng, rồi bào và rửa măng trong thùng nước",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -1754,10 +2450,34 @@
       "text_en": "street vendor with a lot of round fruit with purple and black skin"
     },
     {
+      "text": "quầy ven đường bày đống quả tròn có ruột trắng và vỏ màu tím đen",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The roadside stand was full of round fruits with white flesh and black and purple peels."
+    },
+    {
+      "text": "rồng hạ thấp uốn lượn phía trên hàng thành viên nằm sấp trên sàn",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The lower dragon curves above the row of members on their stomachs on the floor"
+    },
+    {
+      "text": "rồng vàng tạo thành vòng tròn lớn quanh đội hình áo xanh",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Yellow Dragons form a big circle around the blue formation."
+    },
+    {
       "text": "slide Vật lí cấu tạo hạt nhân nguyên tử gồm hai loại hạt proton và neutron",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "slide: The physics of the nucleus of an atom consists of two types of particles: protons and neutrons."
+    },
+    {
+      "text": "slide Vật lí mô tả cấu tạo hạt nhân nguyên tử gồm hai loại hạt proton và neutron",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "slide Physics showing the structure of the atomic nucleus, which consists of two types of particles, protons and neutrons."
     },
     {
       "text": "slide bài giảng Vật lí về phóng xạ hiển thị bảng các loại tia alpha beta và gamma",
@@ -1808,6 +2528,12 @@
       "text_en": "The yellow racer raised his arms in celebration after finishing, with a fence on both sides of the road."
     },
     {
+      "text": "tay đua mặc áo xanh bứt lên dẫn đầu đoàn đua",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The blue-clad driver raced ahead of the race."
+    },
+    {
       "text": "tay đua áo vàng cầm một linh vật bông màu nâu trước phông nền đua xe đạp",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -1832,6 +2558,12 @@
       "text_en": "The ancient red brick tower in the middle of the green lawn, the walls cracked and worn."
     },
     {
+      "text": "thân rồng được xếp thành hình nhiều cánh giống một ngôi sao",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The dragon's body is arranged in a star - like pattern."
+    },
+    {
       "text": "thầy giáo mặc áo polo xanh than đứng nói giữa lớp",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -1854,6 +2586,12 @@
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "The crowded metro with its red handrails"
+    },
+    {
+      "text": "tranh tường Đồng sen Tháp Mười ghi tên tỉnh Đồng Tháp cạnh hình hồ sen",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "mural of the Copper Lotus in the Tenth Avenue with the name of Dong Thap province next to the lotus pond"
     },
     {
       "text": "tàu chở khách thân đỏ vàng chạy nhanh trên sông",
@@ -1886,10 +2624,28 @@
       "text_en": "The large white statue between two harps in the sanctuary"
     },
     {
+      "text": "tấm biển song ngữ cạnh hố khảo cổ ghi DI TÍCH GÒ CÂY THỊ B",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "bilingual plaque next to the archaeological pit showing the RELICENCE OF THE TREE B"
+    },
+    {
       "text": "tấm biển song ngữ trong khu khảo cổ ghi DI TÍCH GÒ CÂY THỊ B",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "Bilingual plaque in archaeological site reads DISTRIBUTION OF THE TREE B TREE"
+    },
+    {
+      "text": "tấm biển xanh ba ngôn ngữ ghi KHU VỰC BIÊN GIỚI và FRONTIER AREA",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "blue three-linguistic sign reading BORDER AREA and FRONTIER AREA"
+    },
+    {
+      "text": "tấm bánh tổ phủ ong được gỡ xuống và đưa ra trước máy quay",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The hive cake was taken down and presented to the camera."
     },
     {
       "text": "tấm băng rôn màu xanh lá ghi QUAN TÀI KHÔNG ĐỒNG treo trước một cánh cửa màu xanh",
@@ -1904,10 +2660,28 @@
       "text_en": "A red landslide streak running close to the residential area from above"
     },
     {
+      "text": "xe khách nhỏ màu trắng chạy phía trước camera trên đường hai làn",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Small white passenger car running in front of camera on two - lane road"
+    },
+    {
       "text": "xe mui trần trang trí nhiều màu chở đông người giữa lễ hội",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "multi-colored, decorated convertible crowded with people in the middle of the festival"
+    },
+    {
+      "text": "xe máy hai bánh nằm đổ và mắc dưới gầm xe tải sau vụ va chạm",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The motorcycle fell down and got stuck under the truck after the crash."
+    },
+    {
+      "text": "xe nằm lật nghiêng trong rãnh cỏ và sau đó được cứu hộ",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The car was on its side in the grass and then rescued."
     },
     {
       "text": "Áo của tay đua thắng chặng in tên tỉnh nào ở trước ngực?",
@@ -2300,10 +3074,22 @@
       "text_en": "The team of runners, clustered together, raced forward on the side-fenced road."
     },
     {
+      "text": "đoàn tàu metro xuất hiện bên ngoài rồi dừng cạnh sân ga",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The subway appears outside and stops by the platform."
+    },
+    {
       "text": "đoàn xe mô tô ba bánh màu vàng cam hộ tống chạy trên đường, hai bên cắm cờ đỏ",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "The convoy of orange three - wheelers was on the road, with red flags on both sides."
+    },
+    {
+      "text": "đoàn đua xe đạp chạy bên những cánh đồng lúa xanh",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The bicycle race runs by the green rice fields"
     },
     {
       "text": "đoàn đua xe đạp chạy qua cây cầu bắc trên mặt nước",
@@ -2312,10 +3098,34 @@
       "text_en": "The bicycle race runs over the bridge over the water."
     },
     {
+      "text": "đoàn đua xe đạp chạy trên con đường dọc theo đường ray",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The bicycle race runs along the track."
+    },
+    {
+      "text": "đoàn đua xe đạp chạy trên cây cầu rộng bắc qua mặt nước xanh",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The bicycle race runs on a wide bridge over green water."
+    },
+    {
       "text": "đoàn đua xe đạp tiến vào cầu giàn thép, chạy qua cây cầu rộng trên mặt nước xanh, rồi các tay đua lần lượt cán vạch đích màu đỏ",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "The bicycle race enters the steel gantry bridge, runs across the wide bridge over the green water, and the riders cross the red finish line one by one."
+    },
+    {
+      "text": "đoàn đua xe đạp tiến vào và đi qua cầu giàn thép",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The bicycle race enters and crosses the steel gantry bridge."
+    },
+    {
+      "text": "đoàn đua xe đạp vượt điểm trung gian có đông khán giả và băng-rôn vàng",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The intermediate - point bike race has a big audience and a yellow banner"
     },
     {
       "text": "đoàn đua xe đạp đi qua cánh đồng lúa xanh, tiếp tục chạy dọc đường ray, rồi nước rút dưới cổng đích màu đỏ",
@@ -2324,10 +3134,22 @@
       "text_en": "The bicycle race goes through the green rice field, continues along the track, and sprints under the red finish gate."
     },
     {
+      "text": "đoàn đua đông chạy phía sau mô tô có người mặc áo phản quang",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The east race was behind a motorbike with a man in a reflective vest."
+    },
+    {
       "text": "đoàn đông tay đua khép lại thành cụm phía sau mô tô dẫn đường",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "The motorcade closed behind the driver's motorbike."
+    },
+    {
+      "text": "đoàn đông tay đua xe đạp bám sát nhau phía sau xe mô tô trên đường ướt",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "A crowd of cyclists clustered behind motorcycles on the wet road."
     },
     {
       "text": "đàn chim bay dày đặc trên bầu trời phía trên các mái nhà",
@@ -2366,6 +3188,12 @@
       "text_en": "white gloved hands poured the solution from the toilet bowl."
     },
     {
+      "text": "đôi tay đan xen và siết chặt từng sợi màu nâu",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "His hands interlocked and clasped each brown strand."
+    },
+    {
       "text": "đĩa chả giò hình tam giác xếp quanh chén nước sốt đỏ",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -2384,6 +3212,18 @@
       "text_en": "Brown - haired orangutans eating food in the aquaria."
     },
     {
+      "text": "đường thốt nốt sánh màu nâu được rót vào các hũ",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Brown jagged sugar poured into jars"
+    },
+    {
+      "text": "đầu bếp trong cuộc thi sơ chế tôm hùm lớn màu cam và trình bày món ăn",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "chef in the competition for preparing large orange lobsters and presenting the dish"
+    },
+    {
       "text": "đầu bếp trình bày món ăn làm từ tôm hùm trong cuộc thi nấu ăn",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -2400,6 +3240,18 @@
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "blue background graphic lists the number of hydroelectric reservoir outlets, above which is the hydroelectric dam"
+    },
+    {
+      "text": "đội mặc đồng phục xanh dương chạy đội hình tính giờ với bánh xe màu vàng",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The team in blue uniform runs a time formation with yellow wheels."
+    },
+    {
+      "text": "đội đua mặc áo vàng và xanh chạy sát nhau thành hàng",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The team in yellow and blue, they're in a line."
     },
     {
       "text": "ảnh chụp màn hình hộp thư Gmail hiện lá thư báo trúng học bổng có huy hiệu đỏ",

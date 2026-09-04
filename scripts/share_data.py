@@ -95,8 +95,19 @@ def _files_under(base: Path, need: Need) -> list[Path]:
     return sorted(p for p in base.rglob(need.pattern) if p.is_file())
 
 
-def pack(out: Path) -> int:
-    """Gói ba phần trên, đường dẫn TƯƠNG ĐỐI so với gốc repo."""
+def pack(out: Path, flat_root: Path | None = None) -> int:
+    """Gói ba phần trên, đường dẫn TƯƠNG ĐỐI so với gốc repo.
+
+    `flat_root` đổi **nguồn** của kho phẳng nhưng giữ nguyên **đích**: file vẫn
+    được ghi vào zip dưới `stores/flat/data/vectors/`, vì đó là chỗ
+    `mfe.online.flat_arms` đọc. Nhờ vậy gói B0+B1 là một bản thay thế thả thẳng
+    vào, người nhận không phải sửa gì.
+
+    Nó KHÔNG đổi `app.db` và `map-keyframes` — và đó là điều phải biết trước khi
+    dùng: hai thứ đó chỉ có hàng B0, nên keyframe B1 sẽ **không tra được ảnh**
+    (`keyframe_images.ordinal_for` trả None). Lưới ảnh sẽ có ô trống ở đúng
+    những khung mới, và ô trống trông y hệt lỗi token Modal.
+    """
     missing = [n for n in REQUIRED if not (ROOT / n.path).exists()]
     if missing:
         for need in missing:
@@ -109,10 +120,16 @@ def pack(out: Path) -> int:
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as archive:
         for need in REQUIRED:
             base = ROOT / need.path
-            files = _files_under(base, need)
+            source = base
+            if flat_root is not None and need.path == "stores/flat/data/vectors":
+                source = flat_root if flat_root.is_dir() else ROOT / flat_root
+                print(f"  kho phang lay tu {source} (ghi vao {need.path})")
+            files = _files_under(source, need)
             print(f"  {need.path}: {len(files)} file", flush=True)
             for path in files:
-                archive.write(path, arcname=str(path.relative_to(ROOT)).replace("\\", "/"))
+                arcname = need.path + "/" + path.relative_to(source).as_posix() \
+                    if source != base else str(path.relative_to(ROOT)).replace("\\", "/")
+                archive.write(path, arcname=arcname)
                 total += path.stat().st_size
     print(
         f"\n{out}  ·  {out.stat().st_size / 2**20:.0f} MB nen "
@@ -211,13 +228,21 @@ def main() -> None:
     sub = parser.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("pack", help="Lead goi du lieu thanh zip")
     p.add_argument("--out", default="mfe-data.zip")
+    p.add_argument(
+        "--flat-root",
+        default=None,
+        help="Thu muc kho phang thay cho stores/flat/data/vectors (vd "
+        "stores/flat_b1/data/vectors). File van vao zip duoi duong dan cu. "
+        "CANH BAO: app.db va map-keyframes van la ban B0, nen keyframe B1 "
+        "KHONG tra duoc anh.",
+    )
     u = sub.add_parser("unpack", help="Thanh vien giai nen vao dung cho + kiem")
     u.add_argument("archive")
     sub.add_parser("verify", help="Chi kiem, khong giai nen")
 
     args = parser.parse_args()
     if args.cmd == "pack":
-        sys.exit(pack(Path(args.out)))
+        sys.exit(pack(Path(args.out), Path(args.flat_root) if args.flat_root else None))
     if args.cmd == "unpack":
         sys.exit(unpack(Path(args.archive)))
     sys.exit(verify())

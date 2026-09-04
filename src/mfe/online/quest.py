@@ -94,6 +94,54 @@ Query: "tay đua mặc áo vàng giơ hai tay lên ăn mừng sau khi về đíc
 Query: "{query}"
 """
 
+QUEST_CLAUSE_PROMPT = """Bạn là bộ phân tích truy vấn cho hệ thống tìm kiếm video.
+
+Câu truy vấn KIS đôi khi kể **nhiều cảnh nối tiếp nhau trong cùng một video**.
+Hệ thống đánh chỉ mục từng khung rời, nên nếu không tách ra thì một video có
+MỘT trong các cảnh ghi điểm y như video có ĐỦ CẢ, đúng thứ tự.
+
+Nhiệm vụ DUY NHẤT: tách câu thành danh sách mệnh đề, xếp theo THỨ TỰ XẢY RA
+TRONG VIDEO (không phải thứ tự xuất hiện trong câu).
+
+LUẬT:
+1. Câu chỉ tả MỘT khoảnh khắc — dù tả rất kỹ, nhiều chi tiết, nhiều vật thể —
+   thì trả về DANH SÁCH RỖNG. Đây là trường hợp thường gặp nhất và là câu trả
+   lời ĐÚNG. Tách một cảnh thành nhiều mảnh làm hỏng truy vấn.
+2. Chỉ tách khi các phần thật sự xảy ra ở những THỜI ĐIỂM KHÁC NHAU.
+3. Tách được dưới 3 mệnh đề thì trả về RỖNG. Với 2 mệnh đề, hai vị trí bất kỳ
+   xếp đúng thứ tự với xác suất một nửa, nên ràng buộc không lọc được gì.
+4. Tối đa 5 mệnh đề.
+5. Mỗi mệnh đề phải TỰ ĐỨNG ĐƯỢC như một mô tả ảnh: giữ chủ ngữ, đừng để lại
+   đại từ trỏ ngược ("ông ta", "chỗ đó"). Viết bằng TIẾNG VIỆT như câu gốc.
+6. KHÔNG thêm chi tiết câu gốc không có. Chỉ cắt và viết lại cho tự đứng được.
+7. `order` bắt đầu từ 1 theo thứ tự thời gian trong video. Nếu câu dùng lối kể
+   ngược ("trước khi X, Y đã…") thì `order` phải theo THỜI GIAN, không theo câu.
+
+Chỉ trả về JSON này, không markdown, không giải thích:
+{"clauses": [{"text": "...", "order": 1}]}
+
+VÍ DỤ A (ba cảnh nối tiếp):
+Query: "Bắt đầu bằng cảnh người đàn ông mở cửa tiệm tạp hoá, tiếp theo ông ta
+bày hàng lên kệ, cảnh cuối là khách bước vào mua đồ"
+{"clauses": [{"text": "người đàn ông mở cửa tiệm tạp hoá", "order": 1},
+             {"text": "người đàn ông bày hàng lên kệ", "order": 2},
+             {"text": "khách bước vào tiệm mua đồ", "order": 3}]}
+
+VÍ DỤ B (một khoảnh khắc, tả kỹ):
+Query: "hai người phụ nữ mặc áo dài đứng cạnh nồi bánh chưng lớn trong sân,
+phía sau là hàng cau và một chiếc xe máy màu đỏ"
+{"clauses": []}
+
+VÍ DỤ C (kể ngược — order theo THỜI GIAN):
+Query: "Vận động viên giơ tay ăn mừng trên bục, trước đó anh ta về đích đầu
+tiên, và trước nữa là cảnh xuất phát khỏi vạch"
+{"clauses": [{"text": "vận động viên xuất phát khỏi vạch", "order": 1},
+             {"text": "vận động viên về đích đầu tiên", "order": 2},
+             {"text": "vận động viên giơ tay ăn mừng trên bục", "order": 3}]}
+
+Query: "{query}"
+"""
+
 QUEST_VQA_PROMPT = """Bạn là bộ phân tích câu hỏi cho hệ thống tìm kiếm video thời sự Việt Nam.
 
 Nhiệm vụ: Cho một câu hỏi VQA (Visual Question Answering), hãy tách thành 3 phần JSON:
@@ -310,6 +358,73 @@ def quest_expand(query: str, client: QuestClient | None = None) -> list[Expansio
             continue
         terms.append(ExpansionTerm(vi=vi, en=en, why=str(item.get("why") or "").strip()))
     return terms
+
+
+def quest_clauses(query: str, client: QuestClient | None = None) -> list[str]:
+    """Tách câu KIS thành mệnh đề theo trình tự. **Rỗng là câu trả lời ĐÚNG.**
+
+    Vì sao cần, khi đã có `scene_order.split_clauses`
+    -------------------------------------------------
+    `split_clauses` tách bằng một **danh sách từ nối cứng** (`bắt đầu bằng`,
+    `tiếp theo`, `cảnh cuối`, `rồi`…). Câu kể ba cảnh mà không dùng từ nối nào
+    thì nó không tách được — và đếm trên 38 đề KIS thật của BTC: **21** câu mang
+    từ nối trình tự, nhưng bộ luật chỉ đạt ngưỡng ≥3 mệnh đề ở **3** câu. Nút
+    thắt của cả tầng thứ tự cảnh nằm ở phép tách, không phải ở cơ chế.
+
+    Nên hàm này KHÔNG thay `split_clauses` — nó là **nguồn thứ ba**, cạnh bộ
+    luật và ô gõ tay. Cả ba đổ vào cùng `scene_order.clauses_from_texts`, và
+    ngưỡng `MIN_CLAUSES_FOR_PRIOR` áp cho cả ba.
+
+    Trả `[]` trong bốn trường hợp, và **không** trường hợp nào là lỗi: câu chỉ
+    tả một khoảnh khắc (thường gặp nhất), tách ra dưới 3 mệnh đề, LLM không chạy
+    được, hoặc trả về thứ không đọc nổi. Người gọi vẫn tìm bằng nguyên câu.
+
+    Không có `fallback` trả lại chính câu hỏi — cùng lý do như `quest_expand`:
+    một "mệnh đề" duy nhất bằng cả câu không chứng minh được trình tự nào, mà
+    trình tự đúng là thứ duy nhất tầng này thưởng.
+    """
+    client = client or QuestClient()
+    ok, reason = client.available()
+    if not ok:
+        logger.warning("quest_clauses: khong tach duoc — %s", reason)
+        return []
+
+    try:
+        text = client.generate(
+            QUEST_CLAUSE_PROMPT.replace("{query}", query), max_tokens=600
+        )
+    except Exception as err:  # noqa: BLE001 — khong tach duoc thi van tim duoc
+        logger.warning("quest_clauses: %s: %s", type(err).__name__, err)
+        return []
+
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if not match:
+        logger.warning("quest_clauses: khong doc duoc JSON tu %r", text[:120])
+        return []
+    try:
+        payload = json.loads(match.group(0))
+    except ValueError as err:
+        logger.warning("quest_clauses: JSON hong (%s): %r", err, text[:120])
+        return []
+
+    items = []
+    for raw in payload.get("clauses") or []:
+        if not isinstance(raw, dict):
+            continue
+        body = str(raw.get("text") or "").strip()
+        if not body:
+            continue
+        # `order` thiếu hoặc hỏng thì dùng thứ tự LLM trả về, không bỏ mệnh đề:
+        # thứ tự trong danh sách đã là một phỏng đoán hợp lý, còn bỏ đi là mất
+        # hẳn một cảnh.
+        try:
+            order = int(raw.get("order", len(items) + 1))
+        except (TypeError, ValueError):
+            order = len(items) + 1
+        items.append((order, body))
+
+    items.sort(key=lambda pair: pair[0])
+    return [body for _, body in items]
 
 
 def expanded_queries(

@@ -20,6 +20,7 @@ from mfe.online.quest import (
     ExpansionTerm,
     QuestClient,
     expanded_queries,
+    quest_clauses,
     quest_expand,
 )
 
@@ -119,3 +120,100 @@ class TestProviderSanSang:
         ok, reason = QuestClient().available()
         assert not ok
         assert "API_KEY" in reason
+
+
+class TestTachMenhDe:
+    """`quest_clauses` — nguồn THỨ BA cho mệnh đề, cạnh bộ luật và ô gõ tay.
+
+    Bộ luật cứng (`scene_order.split_clauses`) dò từ nối, nên nó chỉ đạt ngưỡng
+    ≥3 mệnh đề ở **3/38** đề KIS thật. Hàm này đọc được câu không có từ nối nào.
+    Nhưng nó phải im lặng đúng chỗ: câu tả MỘT khoảnh khắc mà bị tách ra là truy
+    vấn hỏng, và đó là trường hợp thường gặp nhất.
+    """
+
+    THREE = (
+        '{"clauses": ['
+        '{"text": "người đàn ông mở cửa tiệm", "order": 1},'
+        '{"text": "người đàn ông bày hàng lên kệ", "order": 2},'
+        '{"text": "khách bước vào mua đồ", "order": 3}]}'
+    )
+
+    def test_doc_duoc_va_giu_thu_tu(self):
+        client = FakeClient(self.THREE)
+        assert quest_clauses("x", client) == [
+            "người đàn ông mở cửa tiệm",
+            "người đàn ông bày hàng lên kệ",
+            "khách bước vào mua đồ",
+        ]
+
+    def test_XEP_LAI_theo_order_chu_khong_theo_thu_tu_tra_ve(self):
+        """Đề kể ngược thì `order` mới là trình tự thật, không phải vị trí trong JSON.
+
+        DANTE thưởng cho chuỗi TĂNG DẦN, nên một danh sách đảo chiều không chỉ
+        vô ích — nó chấm điểm cho đúng những video kể sai thứ tự.
+        """
+        client = FakeClient(
+            '{"clauses": ['
+            '{"text": "giơ tay ăn mừng", "order": 3},'
+            '{"text": "xuất phát khỏi vạch", "order": 1},'
+            '{"text": "về đích đầu tiên", "order": 2}]}'
+        )
+        assert quest_clauses("x", client) == [
+            "xuất phát khỏi vạch", "về đích đầu tiên", "giơ tay ăn mừng",
+        ]
+
+    def test_co_markdown_va_loi_dan(self):
+        client = FakeClient(f"Được thôi!\n```json\n{self.THREE}\n```")
+        assert len(quest_clauses("x", client)) == 3
+
+    def test_RONG_la_cau_tra_loi_dung(self):
+        """Câu tả một khoảnh khắc -> `[]`. Không phải lỗi, và là ca thường gặp nhất."""
+        assert quest_clauses("x", FakeClient('{"clauses": []}')) == []
+
+    def test_client_khong_san_sang_thi_KHONG_goi(self):
+        client = FakeClient(ready=(False, "chua co khoa"))
+        assert quest_clauses("x", client) == []
+        assert client.calls == 0
+
+    def test_LLM_nem_thi_tra_rong(self):
+        client = FakeClient(error=RuntimeError("het quota"))
+        assert quest_clauses("x", client) == []
+
+    @pytest.mark.parametrize("reply", ["khong co json", "", '{"clauses": khong-json}'])
+    def test_tra_ve_khong_doc_duoc_thi_rong(self, reply):
+        assert quest_clauses("x", FakeClient(reply)) == []
+
+    def test_bo_menh_de_RONG_va_khong_phai_dict(self):
+        client = FakeClient(
+            '{"clauses": [{"text": "  ", "order": 1}, "rac", '
+            '{"text": "cảnh thật", "order": 2}]}'
+        )
+        assert quest_clauses("x", client) == ["cảnh thật"]
+
+    def test_thieu_order_thi_dung_thu_tu_tra_ve_chu_KHONG_bo(self):
+        """Bỏ một mệnh đề vì thiếu `order` là mất hẳn một cảnh — đắt hơn nhiều
+        so với dùng thứ tự LLM đã trả về, vốn đã là một phỏng đoán hợp lý."""
+        client = FakeClient(
+            '{"clauses": [{"text": "một"}, {"text": "hai"}, {"text": "ba"}]}'
+        )
+        assert quest_clauses("x", client) == ["một", "hai", "ba"]
+
+    def test_order_hong_kieu_van_giu_menh_de(self):
+        client = FakeClient(
+            '{"clauses": [{"text": "một", "order": "x"}, {"text": "hai", "order": 2}]}'
+        )
+        assert set(quest_clauses("x", client)) == {"một", "hai"}
+
+
+def test_prompt_tach_menh_de_noi_ro_ba_luat_dat_gia():
+    """Prompt là DỮ LIỆU, và ba luật này là ba chỗ đã trả giá ở nơi khác.
+
+    Kiểm chúng còn trong prompt vì một lần sửa prompt cho gọn sẽ lặng lẽ bỏ đi
+    ràng buộc, và hậu quả chỉ lộ ra sau một lượt đo.
+    """
+    from mfe.online.quest import QUEST_CLAUSE_PROMPT
+
+    assert "DANH SÁCH RỖNG" in QUEST_CLAUSE_PROMPT      # mot khoanh khac -> rong
+    assert "dưới 3 mệnh đề" in QUEST_CLAUSE_PROMPT      # nguong MIN_CLAUSES_FOR_PRIOR
+    assert "THỜI GIAN" in QUEST_CLAUSE_PROMPT           # order theo thoi gian
+    assert "KHÔNG thêm chi tiết" in QUEST_CLAUSE_PROMPT  # cam bia them

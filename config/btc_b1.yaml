@@ -140,10 +140,38 @@ retrieval:
   # đầu chứ không tinh chỉnh. Với một tầng chỉ +0,015 trên dev, mức can thiệp
   # đó là đặt cược, không phải lớp an toàn.
   #
-  # GIỮ NGUYÊN `[vlm]` cho tới khi Lead quyết lại — bật `vlm` là quyết định đã
-  # ký ngày 28-08, và đổi nó trong im lặng thì lần sau không ai biết bảng nào
-  # đang có hiệu lực. Muốn tắt: đổi dòng dưới thành `rerank_tiers: []`.
-  rerank_tiers: [vlm]
+  # ═══ 04-09: ĐO LẠI ĐÚNG THIẾT KẾ §O.3 — TẮT. Lead quyết. ═══
+  #
+  # `vlm` KHÔNG tất định, nên một cặp bật/tắt không kết luận được. Chạy tắt ×1
+  # (tất định) và bật ×3, cùng 60 câu heldout, cùng config, đổi đúng dòng này:
+  #
+  #                 RỘNG     HẸP  |  KIS     QA    TRAKE
+  #   vlm TẮT      0,5228  0,4064 | 0,517  0,680   0,285
+  #   vlm bật #1   0,4828  0,3764 | 0,489  0,587   0,285
+  #   vlm bật #2   0,5028  0,3831 | 0,506  0,627   0,285
+  #   vlm bật #3   0,5061  0,3931 | 0,517  0,613   0,285
+  #   bật: TB      0,4972  0,3842
+  #
+  # Δ trung bình −0,0256 RỘNG · −0,0222 HẸP. Khoảng của nhánh bật
+  # [0,4828–0,5061] **không chạm** 0,5228 trên CẢ HAI thước — đó đúng là điều
+  # kiện §O.3 đặt ra để được phép kết luận. Thiệt hại tập trung ở QA
+  # (0,680 → 0,609); TRAKE không đổi vì `rerank_tier_depth` = 20.
+  #
+  # Tầng CÓ chạy thật: 80/81 · 81/81 · 80/81 câu, dời 15–17 trong 20 ứng viên
+  # mỗi câu. Đây không phải "tầng ngồi ngoài in ra +0,000".
+  #
+  # Quota KHÔNG phải nguyên nhân: **0 lỗi 429 trên 243 lượt gọi**
+  # `gemini-flash-lite-latest`. Chế độ hỏng thật là **503 UNAVAILABLE** (2 lần,
+  # mỗi lần 1 câu mất rerank) — ngẫu nhiên, nên hai lượt cùng cấu hình chấm
+  # khác số câu. Đó là nguồn dao động THỨ HAI chồng lên cái vốn đã không tất
+  # định.
+  #
+  # Con số +0,015 hồi 27-08 sai vì nó đo trên **dev** — chính bộ mà mọi thứ
+  # khác cũng đã được chỉnh trên đó. Heldout bác nó ba lần liên tiếp.
+  #
+  # Bật lại cho MỘT câu vẫn làm được trên giao diện (`app/submit_lab.py`, bộ
+  # tuỳ chọn theo phạm vi) — đó là chỗ đúng để thử một câu bí, không phải ở đây.
+  rerank_tiers: []
   rerank_tier_depth: 20
 
   # `vlm` NGỒI NGOÀI câu đã có thiên kiến thứ tự cảnh — hai bên giẫm chân nhau.

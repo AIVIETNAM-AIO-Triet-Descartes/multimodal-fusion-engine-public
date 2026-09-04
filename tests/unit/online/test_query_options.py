@@ -79,3 +79,31 @@ def test_ba_dang_khop_hau_to_ten_file():
         got = parse_query(f"query-p1-1-{suffix}.txt", "E1 mot canh nao do")
         assert got.type == expected
         assert expected in QUERY_TYPES
+
+
+class TestQuest:
+    """`quest` là cần gạt có phạm vi, và `None` phải KẾ THỪA chứ không TẮT.
+
+    Cùng bẫy như `tiers`: nếu `None` ghi đè thì bật quest cho cả gói, mở bảng
+    của một câu ra xem rồi đóng lại, và quest tắt mất ở câu đó mà không có gì
+    báo. Ở đây hậu quả cụ thể hơn — câu đó đi tìm bằng một chuỗi khác hẳn.
+    """
+
+    def test_None_ke_thua_cap_tren(self):
+        assert Options(quest=True).merge(Options()).quest is True
+
+    def test_False_TUONG_MINH_de_duoc_len_True(self):
+        """Tắt tường minh khác với chưa chọn — nếu không thì không tắt lại được."""
+        assert Options(quest=True).merge(Options(quest=False)).quest is False
+
+    def test_mac_dinh_la_chua_chon(self):
+        assert Options().quest is None
+
+    def test_resolve_theo_day_goi_dang_cau(self):
+        store = {
+            "goi": Options(quest=True),
+            "dang_QA": Options(),
+            "cau_q1": Options(quest=False),
+        }
+        assert resolve(store, "q1", "QA").quest is False
+        assert resolve(store, "q2", "QA").quest is True

@@ -86,9 +86,11 @@ from mfe.online.query_options import (  # noqa: E402
 )
 from mfe.online.query_text import (  # noqa: E402
     has_description,
+    quest_apply,
     quest_rewrite,
     strip_questions,
 )
+from mfe.online.quest import quest_clauses  # noqa: E402
 from mfe.online.rerank_tiers import DEFAULT_DEPTH  # noqa: E402
 from mfe.online.scene_order import MIN_CLAUSES_FOR_PRIOR, split_clauses  # noqa: E402
 from mfe.online.vqa_answer import DEFAULT_DEPTH as VQA_DEPTH  # noqa: E402
@@ -170,32 +172,68 @@ def render_options(scope_key: str, defaults, cascade) -> None:
 
     st.caption("**Arm truy hồi**")
     arms: dict[str, bool] = {}
+    # Arm không chạy được gom thành MỘT dòng, không phải mỗi cái một ô xám kèm
+    # hai dòng lý do — với 3 arm chết thì đó là 9 dòng nhiễu trên đầu mỗi bảng,
+    # và bảng này xuất hiện chín lần một trang.
+    #
+    # Gom lại chứ KHÔNG xoá hẳn: một arm biến mất không dấu vết là đúng cái bẫy
+    # CLAUDE.md §5 ghi — `sviptr_ocr` từng nằm trong danh sách arm mà vĩnh viễn
+    # không có dữ liệu, và không dòng log nào nói ra. Lý do vẫn đọc được ở tooltip.
+    broken = [a for a in cascade.arms if not a.available]
     for arm in cascade.arms:
         if not arm.available:
-            st.checkbox(
-                f"{arm.name} — không chạy được", value=False, disabled=True,
-                key=f"{scope_key}_arm_{arm.name}",
-            )
-            st.caption(f"↳ {arm.unavailable_reason}")
             continue
+        # Arm trọng số 0 mặc định TẮT. Không phải để cho gọn: `weighted_fusion`
+        # nhân điểm RRF với trọng số, nên một arm 0,0 **không thể** đổi thứ hạng
+        # dù có bật. Bật nó lên là trả tiền truy hồi cho một lá phiếu bị nhân 0.
+        # Ba arm đang ở 0,0 (`ocr`, `ocr_paddle`, `clap`) đều là kết luận có số
+        # đo, chốt lại lần thứ ba trên GT đã sửa 04-09.
+        dead = arm.weight <= 0
         arms[arm.name] = st.checkbox(
-            arm.name, value=current.arms.get(arm.name, arm.enabled),
-            help=arm.description, key=f"{scope_key}_arm_{arm.name}",
+            f"{arm.name} — trọng số 0" if dead else arm.name,
+            value=current.arms.get(arm.name, arm.enabled and not dead),
+            help=(
+                f"{arm.description}\n\n⚠ Trọng số hợp nhất = 0, nên bật lên "
+                "KHÔNG đổi được thứ hạng — chỉ tốn thêm thời gian truy hồi. "
+                "Muốn nó có tiếng nói thì phải sửa `fusion_weights` trong "
+                "config, không phải ô này."
+            ) if dead else arm.description,
+            key=f"{scope_key}_arm_{arm.name}",
         )
 
-    st.caption("**Tầng rerank** — đo trên 163 câu dev, nền 0,515")
+    if broken:
+        st.caption(
+            f"↳ {len(broken)} arm không chạy được: "
+            + ", ".join(f"`{a.name}`" for a in broken),
+            help="\n\n".join(f"**{a.name}** — {a.unavailable_reason}" for a in broken),
+        )
+
+    st.caption("**Tầng rerank** — cả bốn tầng đo ra ÂM")
     base_tiers = current.tiers if current.tiers is not None else list(defaults.rerank_tiers)
     tiers = st.multiselect(
         "Tầng", list(DEFAULT_DEPTH), default=base_tiers,
         format_func=lambda n: {
-            "vlm": "vlm  +0,015  (27,6 s/câu)",
-            "ta": "ta  −0,010",
-            "hf_cross": "hf_cross  −0,029",
-            "colpali": "colpali  −0,033  (36,6 s/câu)",
+            "vlm": "vlm · Gemini flash-lite  −0,026  (30 s/câu)",
+            "ta": "ta · SigLIP đa ngữ base-256  −0,010  (15 s/câu)",
+            "hf_cross": "hf_cross · HF cross-encoder  −0,029  (9 s/câu)",
+            "colpali": "colpali · ColPali v1.2  −0,033  (37 s/câu)",
         }.get(n, n),
         key=f"{scope_key}_tiers", label_visibility="collapsed",
-        help="Chỉ `vlm` có bằng chứng dương. Ba tầng kia đo ra ÂM — bật chúng "
-             "là đi ngược số đo, không phải thêm một lớp an toàn.",
+        # `vlm` từng ghi +0,015 (163 câu dev, 27-08). Con số đó đã bị bác trên
+        # heldout HAI lần: −0,027 (28-08) và −0,040 (04-09, 60 câu, tầng chạy
+        # thật 80/81 câu). Ba tầng kia âm ngay từ lượt đo đầu.
+        help="Không tầng nào còn bằng chứng dương TRÊN TOÀN BỘ. `vlm` từng đo "
+             "+0,015 trên dev nhưng heldout bác ba lần (−0,027 rồi −0,026 trung "
+             "bình 3 lượt), và nó KHÔNG tất định: hai lượt cùng dữ liệu ra 0,483 "
+             "và 0,503.\n\nNhưng số âm đó là TRUNG BÌNH — nó không nói rằng mọi "
+             "câu đều tệ đi. `vlm` dời 15–17 trong 20 ứng viên đầu, nên với một "
+             "câu ĐANG SAI HẲN thì xáo mạnh còn hơn giữ nguyên. Đừng bật cho cả "
+             "gói; bật cho MỘT câu đã trượt hết cần gạt rẻ thì đáng thử.",
+    )
+    st.caption(
+        "↳ Đừng bật cho cả gói. Nhưng nếu **một câu** không tìm ra sau khi đã "
+        "thử hết các cần gạt rẻ thì bật thử ở đây — trung bình âm không có "
+        "nghĩa là câu nào cũng âm."
     )
 
     scene = st.slider(
@@ -203,9 +241,40 @@ def render_options(scope_key: str, defaults, cascade) -> None:
         float(current.scene_order if current.scene_order is not None
               else defaults.scene_order_weight),
         0.1, key=f"{scope_key}_scene",
+        help="Thưởng cho video kể ĐÚNG THỨ TỰ các cảnh. Chỉ chạy khi câu tách "
+             "được ≥3 mệnh đề — với 2 mệnh đề, hai vị trí bất kỳ xếp đúng thứ "
+             "tự với xác suất ~½ nên ràng buộc không lọc được gì, và đo được là "
+             "LUÔN gây hại.",
     )
+    st.caption(
+        "↳ Ví dụ câu tách được: *“**Bắt đầu bằng** cảnh người đàn ông mở cửa "
+        "tiệm, **tiếp theo** ông ta bày hàng ra kệ, **cảnh cuối** là khách vào "
+        "mua.”* — ba mệnh đề, nối bằng từ chỉ trình tự. Tả kỹ **một** cảnh thì "
+        "không tách được, và đó là đường ra của 111/115 câu KIS bộ dev."
+    )
+
+    quest = st.checkbox(
+        "🪄 QUEST — chạy THẲNG, không hỏi",
+        value=bool(current.quest),
+        key=f"{scope_key}_quest",
+        help=(
+            "Tầng 0, áp cho cả phạm vi này mà KHÔNG dừng lại cho bạn xem. "
+            "Muốn xem chuỗi trước khi tìm thì đừng tick ở đây — dùng khung "
+            "🪄 QUEST của từng câu, nó có nút Xem thử.\n\n"
+            "Việc nó làm KHÁC nhau theo dạng đề:\n\n"
+            "• **QA** — `quest_decompose` tách câu hỏi thành chuỗi tìm tiếng Anh "
+            "(đi thẳng vào SigLIP, bỏ qua envit5) + từ khoá OCR tiếng Việt.\n\n"
+            "• **KIS / TRAKE** — `quest_expand` gọi tên thứ đề nhắc tới mà không "
+            "nêu tên (\"phim Spielberg 1975\" → \"cá mập\") rồi NỐI vào cuối truy "
+            "vấn, không thay thế.\n\n"
+            "⚠ Tắt mặc định vì nó vừa cứu vừa hại: trên 47 câu QA dev, phủ pool "
+            "36/47 → 38/47 và hạng trung vị 18 → 14, NHƯNG R@5 giảm 17 → 15.\n\n"
+            "Tốn 1 lượt gọi Gemini mỗi câu."
+        ),
+    )
+
     store[scope_key] = Options(
-        arms=arms, tiers=tuple(tiers), scene_order=scene
+        arms=arms, tiers=tuple(tiers), scene_order=scene, quest=quest
     )
 
 
@@ -227,8 +296,19 @@ def run_queries(queries: list[PackagedQuery], pool_k: int, penalty: float) -> No
         bar.progress(
             (index - 1) / len(queries), text=f"{query.query_id} ({index}/{len(queries)})"
         )
+        options = options_for(query)
         override = manual_search(query.query_id)
-        with apply_options(cascade, options_for(query)):
+        # Ô ghi đè tay THẮNG quest: người vận hành vừa gõ tay một chuỗi thì đó là
+        # ý định mới nhất, và để một lượt gọi LLM đè lên nó là xoá công người
+        # dùng vừa bỏ ra mà không báo.
+        if override is None and options.quest:
+            rewrite = quest_apply(query.text, query.type)
+            st.session_state[f"quest_out_{query.query_id}"] = rewrite
+            if rewrite.ok:
+                override = SearchText(vi=rewrite.vi, en=rewrite.en)
+            else:
+                st.warning(f"{query.query_id}: quest khong doi gi — {rewrite.reason}")
+        with apply_options(cascade, options):
             results.update(run_package(
                 cascade, relational, [query], pool_k=pool_k, penalty=penalty,
                 clauses={query.query_id: manual_clauses(query.query_id)}
@@ -496,6 +576,30 @@ def render_clause_editor(query: PackagedQuery, pool_k: int, penalty: float) -> N
         if len(lines) < MIN_CLAUSES_FOR_PRIOR:
             st.caption(f":orange[{len(lines)} dòng — tầng sẽ ngồi ngoài.]")
 
+        # QUEST tách hộ — nguồn THỨ BA, cạnh bộ luật và ô gõ tay. Nó chỉ ĐỔ VÀO
+        # ô ở trên, không tự chạy: mệnh đề LLM tách ra là thứ phải đọc trước khi
+        # tin, và tách sai một cảnh làm hỏng cả truy vấn.
+        if st.button(
+            "🪄 QUEST tách hộ", key=f"quest_clause_{query.query_id}",
+            help="Gọi Gemini tách câu thành mệnh đề theo trình tự, rồi ĐỔ VÀO ô "
+                 "trên để bạn sửa. CHƯA chạy lại. Bộ luật cứng chỉ tách được "
+                 "3/38 đề KIS thật vì nó dò từ nối; LLM đọc được cả câu không "
+                 "có từ nối nào.",
+        ):
+            with st.spinner("QUEST đang tách mệnh đề…"):
+                found = quest_clauses(query.text)
+            if found:
+                # `clause_text_*` là khoá WIDGET — ghi thẳng sau khi ô đã dựng là
+                # `StreamlitAPIException`. Hẹn qua `clause_fill_*`, y như hai ô kia.
+                st.session_state[f"clause_fill_{query.query_id}"] = "\n".join(found)
+                st.rerun()
+            else:
+                st.warning(
+                    "QUEST không tách được — câu này có thể chỉ tả MỘT khoảnh "
+                    f"khắc, hoặc tách ra dưới {MIN_CLAUSES_FOR_PRIOR} mệnh đề. "
+                    "Cả hai đều là câu trả lời đúng, không phải lỗi."
+                )
+
         left, right = st.columns(2)
         with left, st.container():
             if st.button(
@@ -521,6 +625,87 @@ def render_clause_editor(query: PackagedQuery, pool_k: int, penalty: float) -> N
                 # đầu lượt sau, y như hai ô chuỗi tìm.
                 st.session_state[f"clause_fill_{query.query_id}"] = "\n".join(auto)
                 st.rerun()
+
+
+# ---------------------------------------------------------------------------
+# QUEST — XEM rồi mới CHẠY, và dùng được cho CẢ BA dạng
+# ---------------------------------------------------------------------------
+
+
+def render_quest_box(query: PackagedQuery, pool_k: int, penalty: float) -> None:
+    """Gọi QUEST, in chuỗi nó đề nghị, rồi CHỜ người bấm chạy.
+
+    Vì sao tách khỏi ô tick trong bảng tuỳ chọn
+    --------------------------------------------
+    Ô tick là công tắc cho cả một *phạm vi* — 49 câu thì không ai duyệt tay
+    từng cái. Nhưng với **một** câu thì duyệt trước là đúng: QUEST đo được là
+    vừa cứu vừa hại (47 câu QA dev: phủ pool 36 → 38, hạng trung vị 18 → 14,
+    nhưng `R@5` **giảm** 17 → 15), nên thứ quyết định là *chuỗi nó đẻ ra có hợp
+    lý không*, và câu đó chỉ người đọc mới trả lời được.
+
+    Vì sao có mặt cả với TRAKE, khác `render_search_editor`
+    -------------------------------------------------------
+    `render_search_editor` cố ý bỏ TRAKE (mỗi mốc là một chuỗi riêng, một ô ghi
+    đè không đủ chỗ). Nhưng `quest_expand` **nối thêm** vào câu bao, không thay
+    thế, nên nó áp được cho TRAKE — và TRAKE là đúng dạng cần nó nhất: đề TRAKE
+    hay tả một chuỗi động tác mà không gọi tên môn thể thao.
+
+    Bỏ TRAKE ra khỏi đây là để một cần gạt tồn tại mà không có chỗ nhìn thấy nó
+    — đúng thứ đã xảy ra một lần với ô tick QUEST trước bản này.
+    """
+    key = f"quest_out_{query.query_id}"
+    rewrite = st.session_state.get(key)
+    state = "chưa gọi" if rewrite is None else ("có đề nghị" if rewrite.ok else "không đổi gì")
+
+    with st.expander(f"🪄 QUEST — {state}"):
+        st.caption("**QUEST làm được ba việc, và chúng nằm ở ba chỗ khác nhau:**")
+        st.caption(
+            "**1 · Gọi tên thứ lạ** — đề nhắc tới một thứ mà không nêu tên nó "
+            "(*“phim của đạo diễn Steven Spielberg 1975”* → *“cá mập”*, "
+            "*“đại học ở Lausanne”* → *“EPFL”*). Nối vào **cuối** truy vấn, "
+            "không thay thế. **Nút ở ngay đây**, cho KIS và TRAKE.  \n"
+            "**2 · Tách câu hỏi QA** — cắt câu hỏi thành chuỗi tìm tiếng Anh "
+            "(đi thẳng SigLIP, bỏ qua envit5) + từ khoá OCR tiếng Việt. "
+            "**Nút ở ngay đây**, cho QA.  \n"
+            "**3 · Tách mệnh đề** — cắt câu KIS nhiều cảnh thành danh sách theo "
+            "trình tự, cho tầng thứ tự cảnh. **Nút nằm trong khung "
+            "✂️ Mệnh đề**, không phải ở đây."
+        )
+        left, right = st.columns(2)
+        with left, st.container():
+            if st.button(
+                "🪄 Xem thử", key=f"quest_try_{query.query_id}",
+                help="Gọi Gemini một lượt. CHƯA tìm lại — chỉ in ra để bạn xem.",
+            ):
+                with st.spinner("QUEST đang đọc câu đề…"):
+                    st.session_state[key] = quest_apply(query.text, query.type)
+                st.rerun()
+        with right, st.container():
+            if rewrite is not None and rewrite.ok and st.button(
+                "▶️ Chạy với chuỗi này", key=f"quest_run_{query.query_id}",
+                type="primary",
+            ):
+                st.session_state[f"search_{query.query_id}"] = SearchText(
+                    vi=rewrite.vi, en=rewrite.en,
+                )
+                # Thu tu tay cu la cua mot danh sach ung vien KHAC.
+                st.session_state.pop(f"order_{query.query_id}", None)
+                run_queries([query], pool_k, penalty)
+                st.rerun()
+
+        if rewrite is None:
+            return
+        if rewrite.ok:
+            st.success(f"**Chuỗi tìm mới:** {rewrite.vi}")
+            if rewrite.en:
+                st.caption(f"tiếng Anh (đi thẳng SigLIP, bỏ qua envit5): {rewrite.en}")
+            if rewrite.reason:
+                st.caption(rewrite.reason)
+        else:
+            # Nói RÕ vì sao. `quest_expand` trả rỗng là câu trả lời ĐÚNG với
+            # 42/49 đề thật — nhưng "đúng mà không đổi gì" trông y hệt "hỏng",
+            # và người vận hành sẽ đi sửa khoá API thay vì đi tìm tiếp.
+            st.warning(f"QUEST không đổi gì — {rewrite.reason}")
 
 
 # ---------------------------------------------------------------------------
@@ -743,38 +928,57 @@ for tab, qtype in zip(tabs, TYPES, strict=True):
     with tab:
         pool = by_type[qtype]
 
-        # --- tìm riêng, kết quả nối vào chính tab này -----------------------
-        with st.form(key=f"adhoc_{qtype}", clear_on_submit=True):
-            typed = st.text_input(
-                f"Tìm riêng một câu {qtype} — kết quả sẽ được **thêm vào tab này**",
-                placeholder="gõ mô tả rồi Enter…",
-            )
-            st.caption(
-                f"Đẻ ra một câu **mới** (`{ADHOC_PREFIX}-N-{qtype.lower()}`) để dò — "
-                "**không** vào ZIP nộp. Muốn thay kết quả của một đề có sẵn thì "
-                "dùng ô `🔍 Chuỗi tìm` của chính câu đó."
-            )
-            if st.form_submit_button("🔍 Tìm và thêm vào tab") and typed.strip():
-                # Đi qua `parse_query` với một tên file dựng sẵn, nên câu tự tay
-                # có đủ `query_id`, `csv_name`, tra được `frame_id` — mọi luật đọc
-                # đề chỉ có một bản. Cái duy nhất khác là `build_zip` loại nó ra:
-                # tên file nộp phải là tên đề BTC ra.
-                index = sum(1 for q in parsed if is_adhoc(q.query_id)) + 1
-                name = f"{ADHOC_PREFIX}-{index}-{qtype.lower()}.txt"
-                extra = parse_query(name, typed.strip())
-                parsed.append(extra)
-                run_queries([extra], pool_k, penalty)
-                st.rerun()
+        # --- KHUNG 1: tìm thêm, kết quả nối vào chính tab này ---------------
+        #
+        # Ba khung có viền chứ không phải ba khối trôi nổi: mỗi khung có bộ tuỳ
+        # chọn RIÊNG, và khi ba bảng tuỳ chọn nằm cạnh nhau không ranh giới thì
+        # người vận hành chỉnh nhầm bảng — chỉnh cho "cả dạng" rồi bấm "chạy câu
+        # này" và tưởng mình vừa thử một cấu hình khác.
+        with st.container(border=True):
+            st.markdown(f"##### 🔍 Tìm thêm — câu {qtype} tự gõ")
+            with st.expander(f"⚙ Bộ tuỳ chọn — áp cho câu TÌM THÊM {qtype}"):
+                render_options(f"timthem_{qtype}", _defaults, _cascade)
+            with st.form(key=f"adhoc_{qtype}", clear_on_submit=True):
+                typed = st.text_input(
+                    "Mô tả cần tìm", placeholder="gõ mô tả rồi Enter…",
+                    label_visibility="collapsed",
+                )
+                st.caption(
+                    f"Đẻ ra một câu **mới** (`{ADHOC_PREFIX}-N-{qtype.lower()}`) để "
+                    "dò — **không** vào ZIP nộp. Muốn thay kết quả của một đề có "
+                    "sẵn thì dùng ô `🔍 Chuỗi tìm` của chính câu đó."
+                )
+                if st.form_submit_button("🔍 Tìm và thêm vào tab") and typed.strip():
+                    # Đi qua `parse_query` với một tên file dựng sẵn, nên câu tự
+                    # tay có đủ `query_id`, `csv_name`, tra được `frame_id` — mọi
+                    # luật đọc đề chỉ có một bản. Cái duy nhất khác là `build_zip`
+                    # loại nó ra: tên file nộp phải là tên đề BTC ra.
+                    index = sum(1 for q in parsed if is_adhoc(q.query_id)) + 1
+                    name = f"{ADHOC_PREFIX}-{index}-{qtype.lower()}.txt"
+                    extra = parse_query(name, typed.strip())
+                    # Bộ tuỳ chọn của khung "tìm thêm" phải theo được câu vừa đẻ
+                    # ra. Chép sang phạm vi `cau_<id>` thay vì sửa `resolve`: dây
+                    # xếp hạng gói < dạng < câu vẫn đúng một bản, và câu tự tay
+                    # vẫn kế thừa được cấp gói như mọi câu khác.
+                    store = st.session_state.setdefault("options", {})
+                    if f"timthem_{qtype}" in store:
+                        store[f"cau_{extra.query_id}"] = store[f"timthem_{qtype}"]
+                    parsed.append(extra)
+                    run_queries([extra], pool_k, penalty)
+                    st.rerun()
 
         if not pool:
             st.info(f"Chưa có đề {qtype} nào trong gói.")
             continue
 
-        with st.expander(f"⚙ Bộ tuỳ chọn — áp cho MỌI câu {qtype}"):
-            render_options(f"dang_{qtype}", _defaults, _cascade)
-        if st.button(f"▶️ Chạy lại {len(pool)} câu {qtype}", key=f"run_{qtype}"):
-            run_queries(pool, pool_k, penalty)
-            st.rerun()
+        # --- KHUNG 2: chạy cả loại ------------------------------------------
+        with st.container(border=True):
+            st.markdown(f"##### ▶️ Chạy cả {len(pool)} câu {qtype}")
+            with st.expander(f"⚙ Bộ tuỳ chọn — áp cho MỌI câu {qtype}"):
+                render_options(f"dang_{qtype}", _defaults, _cascade)
+            if st.button(f"▶️ Chạy lại {len(pool)} câu {qtype}", key=f"run_{qtype}"):
+                run_queries(pool, pool_k, penalty)
+                st.rerun()
 
         labels = {
             q.query_id: (
@@ -788,27 +992,42 @@ for tab, qtype in zip(tabs, TYPES, strict=True):
         # CUỐI cho cả ba tab. Streamlit vẽ ba tab trong cùng một lượt chạy nên
         # lỗi đó hiện ra ngay, nhưng ở dạng "nhãn tab KIS hiện tên câu TRAKE" —
         # trông như lẫn dữ liệu chứ không như một lỗi closure.
-        picked_id = st.selectbox(
-            "Câu nào", list(labels), format_func=labels.get, key=f"pick_{qtype}",
-        )
-        query = next(q for q in pool if q.query_id == picked_id)
-        st.caption(query.text)
-        if query.type == "TRAKE":
-            for index, event in enumerate(query.events, start=1):
-                st.caption(f"  E{index}: {event}")
+        # --- KHUNG 3: một câu đề cụ thể --------------------------------------
+        with st.container(border=True):
+            st.markdown("##### 🎯 Chọn một câu đề")
+            picked_id = st.selectbox(
+                "Câu nào", list(labels), format_func=labels.get, key=f"pick_{qtype}",
+            )
+            query = next(q for q in pool if q.query_id == picked_id)
+            st.caption(query.text)
+            if query.type == "TRAKE":
+                for index, event in enumerate(query.events, start=1):
+                    st.caption(f"  E{index}: {event}")
 
-        with st.expander("⚙ Bộ tuỳ chọn — áp cho RIÊNG câu này"):
-            render_options(f"cau_{picked_id}", _defaults, _cascade)
+            with st.expander("⚙ Bộ tuỳ chọn — áp cho RIÊNG câu này"):
+                render_options(f"cau_{picked_id}", _defaults, _cascade)
 
+            # Nút nằm TRONG khung, phần xử lý nằm NGOÀI: `st.rerun()` gọi bên
+            # trong `with` vẫn chạy đúng, nhưng nút "chạy lại" phải bấm được cả
+            # khi câu đã có kết quả — nên nhánh `continue` ở dưới không được cắt
+            # ngang trước khi nút kịp vẽ ra.
+            run_one = st.button(
+                "▶️ Chạy câu này" if picked_id not in results else "▶️ Chạy lại câu này",
+                key=f"run_one_{picked_id}", type="primary",
+            )
+        if run_one:
+            run_queries([query], pool_k, penalty)
+            st.rerun()
         if picked_id not in results:
-            if st.button("▶️ Chạy câu này", key=f"run_one_{picked_id}", type="primary"):
-                run_queries([query], pool_k, penalty)
-                st.rerun()
             continue
 
         result = results[picked_id]
         images = load_images()
 
+        # QUEST đứng NGOÀI nhánh `!= TRAKE`: nó nối thêm vào câu bao nên áp được
+        # cho cả TRAKE, và TRAKE là dạng cần nó nhất (đề hay tả một chuỗi động
+        # tác mà không gọi tên môn thể thao).
+        render_quest_box(query, pool_k, penalty)
         if query.type != "TRAKE":
             render_search_editor(query, pool_k, penalty)
             render_clause_editor(query, pool_k, penalty)

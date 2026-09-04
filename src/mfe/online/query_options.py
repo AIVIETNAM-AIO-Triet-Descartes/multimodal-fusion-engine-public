@@ -37,6 +37,14 @@ class Options:
     #: Danh sách tầng rerank theo tên (`mfe.online.rerank_tiers`).
     tiers: tuple[str, ...] | None = None
     scene_order: float | None = None
+    #: Tầng 0 QUEST — viết lại / mở rộng truy vấn trước khi tìm (`mfe.online.quest`).
+    #:
+    #: Là cần gạt chứ không phải mặc định, và đó là kết luận có số đo: trên 47
+    #: câu QA dev, quest đưa phủ pool-500 từ 36/47 lên 38/47 và hạng trung vị từ
+    #: 18 xuống 14, **nhưng `R@5` giảm 17 → 15**. Nó cứu câu hỏng nặng và làm
+    #: hỏng vài câu đang tốt — đúng hình dạng của một công cụ dùng cho câu bí,
+    #: không phải của một mặc định cho cả gói.
+    quest: bool | None = None
 
     def merge(self, other: Options) -> Options:
         """`other` đè lên `self`, nhưng trường `None` của `other` thì KHÔNG đè.
@@ -51,6 +59,7 @@ class Options:
             scene_order=(
                 other.scene_order if other.scene_order is not None else self.scene_order
             ),
+            quest=other.quest if other.quest is not None else self.quest,
         )
 
     def with_tiers(self, tiers) -> Options:

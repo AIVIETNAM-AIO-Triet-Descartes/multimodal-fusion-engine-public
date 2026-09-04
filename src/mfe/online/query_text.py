@@ -120,3 +120,62 @@ def quest_rewrite(
             reason="quest tra ve chinh cau hoi — API hong hoac thieu khoa",
         )
     return Rewrite(vi=keywords or strip_questions(question), en=hint, ok=True)
+
+
+def quest_apply(
+    text: str,
+    query_type: str,
+    *,
+    rewrite: Callable[[str], Rewrite] | None = None,
+    expand: Callable[[str], list] | None = None,
+) -> Rewrite:
+    """QUEST cho MỘT câu, chọn phép đúng theo **dạng đề**.
+
+    Ba việc của `mfe.online.quest` khác nhau, và dùng nhầm việc thì hại chứ
+    không phải vô ích:
+
+    * **QA** -> `quest_decompose` (qua `quest_rewrite`). Câu hỏi được tách thành
+      `search_hint` tiếng Anh — đi thẳng vào tháp SigLIP, **bỏ qua envit5**, mà
+      envit5 chính là một trong hai nguyên nhân làm `query-p1-9-qa` rơi khỏi
+      pool 500 — cộng `ocr_keywords` tiếng Việt cho các arm BM25.
+    * **KIS / TRAKE** -> `quest_expand`, và kết quả được **NỐI vào cuối** chứ
+      không thay thế. Câu KIS đã là mô tả thị giác, tức đã đúng thể loại mà
+      SigLIP ăn; đem `quest_decompose` vào đây là viết lại một câu vốn không cần
+      viết lại. Cái KIS thiếu là **tên** của thứ đề cố ý không gọi tên
+      (*"phim của đạo diễn Steven Spielberg 1975"* -> *"cá mập"*), và đó đúng là
+      việc của `quest_expand`.
+
+    **Rỗng là câu trả lời ĐÚNG, không phải lỗi.** 42/49 đề thật không cần thêm
+    gì, nên `quest_expand` trả `[]` là bình thường; khi đó hàm này trả
+    `ok=False` kèm lý do để giao diện nói ra, thay vì để người vận hành nhìn một
+    nút bấm xong không đổi gì và đoán.
+
+    Không bao giờ ném: nó chạy trong vòng vẽ Streamlit và giữa một lượt nộp.
+    """
+    text = (text or "").strip()
+    if not text:
+        return Rewrite(vi=text, reason="cau rong")
+
+    if query_type == "QA":
+        if rewrite is None:
+            rewrite = quest_rewrite
+        return rewrite(text)
+
+    if expand is None:
+        from mfe.online.quest import quest_expand  # noqa: PLC0415
+
+        expand = quest_expand
+    try:
+        terms = expand(text)
+    except Exception as err:  # noqa: BLE001 - mo rong hong thi van tim duoc
+        logger.warning("quest_apply: %s: %s", type(err).__name__, err)
+        return Rewrite(vi=text, reason=f"{type(err).__name__}: {str(err)[:160]}")
+
+    if not terms:
+        return Rewrite(vi=text, reason="quest khong goi ten them gi (42/49 de nhu vay)")
+
+    from mfe.online.quest import expanded_queries  # noqa: PLC0415
+
+    vi, _ = expanded_queries(text, None, terms)
+    named = ", ".join(t.vi or t.en for t in terms)
+    return Rewrite(vi=vi, ok=True, reason=f"goi ten: {named}")
