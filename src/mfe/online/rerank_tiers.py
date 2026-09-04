@@ -118,10 +118,21 @@ def _reorder(candidates: Sequence[Candidate], order: Sequence[str]) -> list[Cand
     Bám đuôi chứ không bỏ: một model trả thiếu id là chuyện thường (nó tóm tắt,
     nó gõ sai), và bỏ ứng viên đi thì tầng rerank có thể làm kết quả **tệ hơn**
     lúc chưa rerank. Nó chỉ được phép đổi thứ tự.
+
+    Và nó cũng không được phép **nhân đôi**. Cùng lý do model trả thiếu id, nó
+    cũng trả TRÙNG id — bản trước lọc theo `k in by_id` nên một id lặp hai lần
+    trong `order` sinh ra hai dòng cùng một keyframe. Trên đường nộp, hai dòng
+    trùng nhau trong 100 dòng là **mất trắng một chỗ**: BTC chấm R@k theo thứ
+    hạng, nên dòng thứ hai không thêm cơ hội nào mà vẫn chiếm một suất. (Bảo
+    tìm ra, nhánh `feature/bao/validator-mapping`.)
     """
     by_id = {c.keyframe_id: c for c in candidates}
-    ranked = [by_id[k] for k in order if k in by_id]
-    seen = {c.keyframe_id for c in ranked}
+    ranked: list[Candidate] = []
+    seen: set[str] = set()
+    for keyframe_id in order:
+        if keyframe_id in by_id and keyframe_id not in seen:
+            ranked.append(by_id[keyframe_id])
+            seen.add(keyframe_id)
     return ranked + [c for c in candidates if c.keyframe_id not in seen]
 
 

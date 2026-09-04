@@ -58,7 +58,13 @@ logger = logging.getLogger(__name__)
 #: chết ở câu 21 và 27 câu còn lại lặng lẽ rơi về `fallback` — tức là về đúng câu
 #: hỏi gốc, tức là phép đo báo "quest không cải thiện gì". Đã mất hai lượt đo
 #: `vlm` vì đúng trần này. `gemini-flash-lite-latest` có trần riêng.
-GEMINI_MODEL = os.getenv("MFE_GEMINI_QUEST_MODEL", "gemini-3.6-flash")
+#:
+#: 04-09: đổi MẶC ĐỊNH sang `gemini-flash-lite-latest` (Bảo đề xuất, nhánh
+#: `feature/bao/validator-mapping`). Chú thích trên đã nói đúng cái bẫy nhưng
+#: mặc định vẫn để model dính bẫy — tức là ai không đặt biến môi trường thì vẫn
+#: ăn trần 20/ngày. Đo trên 243 lượt gọi ngày 04-09: `gemini-flash-lite-latest`
+#: **0 lỗi 429**; chế độ hỏng thật của nó là `503 UNAVAILABLE` ngẫu nhiên.
+GEMINI_MODEL = os.getenv("MFE_GEMINI_QUEST_MODEL", "gemini-flash-lite-latest")
 
 QUEST_EXPAND_PROMPT = """You are a query analyst for a Vietnamese news-video search engine.
 

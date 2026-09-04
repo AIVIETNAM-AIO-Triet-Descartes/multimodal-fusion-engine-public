@@ -66,6 +66,23 @@ class TestXepLai:
             pool[1].keyframe_id, pool[0].keyframe_id
         ]
 
+    def test_id_TRUNG_khong_duoc_nhan_doi_ung_vien(self):
+        """Model trả trùng id cũng thường như trả thiếu — và trùng thì đắt hơn.
+
+        Bản trước lọc theo `k in by_id`, nên một id lặp hai lần trong `order`
+        sinh ra HAI dòng cùng một keyframe. Trên đường nộp đó là mất trắng một
+        suất trong 100 dòng: BTC chấm R@k theo thứ hạng, nên dòng thứ hai không
+        thêm cơ hội nào mà vẫn chiếm chỗ của một ứng viên khác.
+        """
+        pool = candidates(4)
+        after = _reorder(
+            pool,
+            [pool[2].keyframe_id, pool[2].keyframe_id, pool[0].keyframe_id],
+        )
+        ids = [c.keyframe_id for c in after]
+        assert len(ids) == len(set(ids)) == 4
+        assert ids[:2] == [pool[2].keyframe_id, pool[0].keyframe_id]
+
     def test_danh_sach_rong(self):
         assert _reorder([], ["gi do"]) == []
 
