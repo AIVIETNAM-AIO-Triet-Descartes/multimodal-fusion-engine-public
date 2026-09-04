@@ -59,24 +59,32 @@ def build_btc_subtitle_windows(
             frame_idx = int(row["frame_idx"])
         except (KeyError, TypeError, ValueError) as error:
             raise ValueError(f"invalid BTC mapping row {row_number}") from error
-        if ordinal != row_number:
-            raise ValueError("BTC mapping n must be contiguous and one-based")
         if frame_idx < 0:
             raise ValueError("BTC frame_idx must be non-negative")
         parsed.append((ordinal, frame_idx))
 
-    frame_indices = [frame_idx for _, frame_idx in parsed]
-    if frame_indices != sorted(frame_indices) or len(frame_indices) != len(set(frame_indices)):
-        raise ValueError("BTC mapping frame_idx must be strictly increasing")
+    ordinals = sorted(ordinal for ordinal, _ in parsed)
+    if ordinals != list(range(1, len(parsed) + 1)):
+        raise ValueError("BTC mapping n must be contiguous and one-based")
+
+    # BTC contains adjacent rows that point at the same source frame, and a few
+    # mapping files are not physically ordered by time.  Identity is based on
+    # the literal CSV frame_idx, so duplicate frame rows represent one store
+    # key and must be collapsed before half-open windows are built.  Sorting is
+    # only ordering those copied coordinates; it does not derive a timestamp or
+    # manufacture a frame number.
+    frame_indices = sorted({frame_idx for _, frame_idx in parsed})
 
     return tuple(
         BtcSubtitleWindow(
             keyframe_id=build_keyframe_id(video_id, frame_idx),
             video_id=video_id,
             frame_idx=frame_idx,
-            next_frame_idx=(frame_indices[index + 1] if index + 1 < len(parsed) else None),
+            next_frame_idx=(
+                frame_indices[index + 1] if index + 1 < len(frame_indices) else None
+            ),
         )
-        for index, (_, frame_idx) in enumerate(parsed)
+        for index, frame_idx in enumerate(frame_indices)
     )
 
 

@@ -68,13 +68,32 @@ def test_records_before_first_and_silent_windows_without_fake_text() -> None:
     "mapping",
     [
         [{"n": 2, "frame_idx": 10}],
-        [{"n": 1, "frame_idx": 20}, {"n": 2, "frame_idx": 10}],
-        [{"n": 1, "frame_idx": 10}, {"n": 2, "frame_idx": 10}],
+        [{"n": 1, "frame_idx": 10}, {"n": 3, "frame_idx": 20}],
     ],
 )
 def test_rejects_invalid_btc_mapping(mapping: list[dict[str, int]]) -> None:
     with pytest.raises(ValueError):
         build_btc_subtitle_windows("L21_V001", mapping)
+
+
+def test_orders_and_collapses_literal_btc_frame_indices() -> None:
+    windows = build_btc_subtitle_windows(
+        "L21_V001",
+        [
+            {"n": 2, "frame_idx": 20},
+            {"n": 1, "frame_idx": 40},
+            {"n": 3, "frame_idx": 20},
+            {"n": 4, "frame_idx": 10},
+        ],
+    )
+
+    assert [window.frame_idx for window in windows] == [10, 20, 40]
+    assert [window.next_frame_idx for window in windows] == [20, 40, None]
+    assert [window.keyframe_id for window in windows] == [
+        "L21_V001#000010",
+        "L21_V001#000020",
+        "L21_V001#000040",
+    ]
 
 
 def test_rejects_bad_or_duplicate_supplemental_identity() -> None:
