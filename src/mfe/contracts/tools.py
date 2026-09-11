@@ -67,6 +67,19 @@ class Candidate(BaseModel):
     matched_terms: list[str] = Field(
         default_factory=list, description="Populated by text_search (docs/03 §2)"
     )
+    #: Toạ độ nộp, CHỈ đặt cho khung **không có trong danh mục BTC** — khung người
+    #: vận hành tự tua tới trên bàn nộp, hoặc khung ta tự trích.
+    #:
+    #: Mặc định `None`, và `None` nghĩa là "tra Relational Map như mọi khung khác".
+    #: Đường nộp (`eval.official.candidate_frame_id`) cố ý **ném** khi tra không ra,
+    #: vì đoán `frame_id` từ `keyframe_id` là cách một lỗi đi thẳng tới bảng điểm.
+    #: Nhưng khung tự tua thì theo định nghĩa không nằm trong bản đồ, nên nó phải
+    #: **tự khai** toạ độ của mình thay vì để phép tra đoán hộ — khai tường minh
+    #: thì một khung thiếu thật vẫn ném đúng như cũ.
+    frame_idx: int | None = Field(
+        default=None,
+        description="Chỉ cho khung ngoài danh mục BTC; None = tra Relational Map",
+    )
 
 
 class Neighbor(BaseModel):

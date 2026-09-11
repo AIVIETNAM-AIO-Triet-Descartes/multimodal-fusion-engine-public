@@ -50,6 +50,7 @@ import sys
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -59,6 +60,7 @@ from mfe.contracts.errors import ContractError  # noqa: E402
 from mfe.contracts.tools import Candidate  # noqa: E402
 from mfe.core.config import load_config  # noqa: E402
 from mfe.eval.metrics.final_score import MAX_ANSWERS_PER_QUERY  # noqa: E402
+from mfe.eval.official import candidate_frame_id  # noqa: E402
 from mfe.eval.query_package import (  # noqa: E402
     ADHOC_PREFIX,
     PackagedQuery,
@@ -71,6 +73,7 @@ from mfe.eval.submission_bundle import (  # noqa: E402
     SearchText,
     apply_manual_order,
     build_zip,
+    replace_at_rank,
     run_package,
     submissions_for,
 )
@@ -93,6 +96,7 @@ from mfe.online.query_text import (  # noqa: E402
 from mfe.online.quest import quest_clauses  # noqa: E402
 from mfe.online.rerank_tiers import DEFAULT_DEPTH  # noqa: E402
 from mfe.online.scene_order import MIN_CLAUSES_FOR_PRIOR, split_clauses  # noqa: E402
+from mfe.online.video_source import resolve_video, why_missing  # noqa: E402
 from mfe.online.vqa_answer import DEFAULT_DEPTH as VQA_DEPTH  # noqa: E402
 from mfe.online.vqa_answer import available as vqa_available  # noqa: E402
 from mfe.online.vqa_answer import read_answer  # noqa: E402
@@ -800,6 +804,159 @@ def render_answer_box(query: PackagedQuery, result, images) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Tua video và thay khung
+# ---------------------------------------------------------------------------
+
+#: Khung `<video>` tự dựng, dùng khi video lấy được qua URL. Hơn `st.video` đúng
+#: một chỗ, và chỗ đó là lý do nó tồn tại: nó **hiện số khung ngay lúc đang tua**
+#: (`floor(currentTime × fps)`), nên người vận hành đọc được toạ độ nộp mà không
+#: phải tự nhân chia. `st.video` không cho biết mình đang dừng ở đâu.
+#:
+#: Iframe của Streamlit là một chiều — không có đường nào đẩy số khung ngược về
+#: Python. Nên có nút chép; người vận hành dán sang ô bên dưới. Thà một thao tác
+#: dán còn hơn một component hai chiều phải build bằng npm cho một ô nhập số.
+_PLAYER_HTML = """
+<style>
+  body {{ margin:0; background:#0E1117; color:#FAFAFA;
+         font-family:-apple-system,"Segoe UI",Roboto,sans-serif; }}
+  video {{ width:100%; max-height:360px; background:#000; border-radius:6px; }}
+  .bar {{ display:flex; gap:10px; align-items:center; margin-top:8px;
+          flex-wrap:wrap; font-size:13px; }}
+  .chip {{ background:#262730; border:1px solid #4B4B52; border-radius:6px;
+           padding:5px 9px; }}
+  .chip b {{ color:#FF4B4B; font-variant-numeric:tabular-nums; }}
+  button {{ background:#FF4B4B; color:#fff; border:0; border-radius:4px;
+            padding:5px 10px; font-weight:600; cursor:pointer; }}
+</style>
+<video id="v" src="{url}" controls preload="metadata"></video>
+<div class="bar">
+  <span class="chip">khung <b id="f">—</b></span>
+  <span class="chip">giây <b id="t">—</b></span>
+  <span class="chip">fps {fps:.3f}</span>
+  <button onclick="cp()">📋 Chép số khung</button>
+  <span id="ok"></span>
+</div>
+<script>
+  const v = document.getElementById("v"), fps = {fps};
+  v.addEventListener("loadedmetadata", () => {{ v.currentTime = {start:.3f}; }});
+  const upd = () => {{
+    document.getElementById("f").textContent = Math.floor(v.currentTime * fps);
+    document.getElementById("t").textContent = v.currentTime.toFixed(3);
+  }};
+  v.addEventListener("timeupdate", upd);
+  v.addEventListener("seeked", upd);
+  function cp() {{
+    const n = Math.floor(v.currentTime * fps);
+    navigator.clipboard.writeText(String(n));
+    document.getElementById("ok").textContent = "đã chép " + n;
+  }}
+</script>
+"""
+
+
+def frame_of(candidate: Candidate) -> int | None:
+    """Toạ độ nộp của một ứng viên, kể cả khung tự tua (không có trong bản đồ)."""
+    try:
+        return candidate_frame_id(candidate, _relational)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def render_scrub_box(query: PackagedQuery, ranked: list[Candidate]) -> None:
+    """Tua video quanh một ứng viên rồi **thay khung vừa tua vào đúng hạng đó**.
+
+    Vì sao việc này đáng có, nói bằng đúng bài học của câu 32 đợt 3: đáp án nằm ở
+    một khung mà kho **không có** — 1 trong 8 khung mang bằng chứng mới có trong
+    danh mục BTC, hai khe lân cận rộng 147 và 129 frame. Truy hồi đưa ta tới đúng
+    đoạn là đã làm xong việc của nó; phần còn lại là mở video ra và lấy đúng
+    khung. Đề cũng được BTC dựng y như vậy — tua video rồi khoanh cửa sổ.
+
+    Thay **tại chỗ**, không thêm vào cuối: thứ hạng đang đúng, chỉ toạ độ sai.
+    """
+    if not ranked:
+        return
+    with st.expander("🎞️ Tua video — đổi khung ở một hạng"):
+        st.caption(
+            "Ứng viên lệch vài giây vẫn dùng được: mở video quanh nó, tua tới "
+            "đúng khoảnh khắc rồi thay khung đó vào chính hạng này. Khung tự tua "
+            "**không** có trong danh mục BTC nên nó mang theo `frame_idx` của "
+            "riêng mình — xem lại ở mục *Toạ độ nộp*."
+        )
+        rank = st.number_input(
+            "Hạng muốn đổi", min_value=1, max_value=len(ranked), value=1, step=1,
+            key=f"scrub_rank_{query.query_id}",
+        )
+        target = ranked[int(rank) - 1]
+        current = frame_of(target)
+
+        source = resolve_video(target.video_id)
+        if source is None:
+            st.warning(why_missing(target.video_id))
+            return
+
+        try:
+            fps = float(_relational.get_video(target.video_id).fps)
+        except Exception:  # noqa: BLE001
+            st.error(
+                f"Không đọc được fps của `{target.video_id}` từ Relational Map. "
+                "Không đoán 25,0 — sai fps là sai khung, và batch 1 có 4 giá trị fps."
+            )
+            return
+
+        start = (current or 0) / fps
+        st.markdown(
+            f"Hạng **{int(rank)}** · `{target.keyframe_id}` · "
+            f"khung `{current if current is not None else '?'}` · "
+            f"giây `{start:.3f}` · fps `{fps:.3f}`"
+        )
+
+        if source.is_url:
+            components.html(
+                _PLAYER_HTML.format(url=source.location, fps=fps, start=start),
+                height=460,
+            )
+        else:
+            # File trên đĩa: trình duyệt không đọc được `file://` từ trong iframe,
+            # nên phải để Streamlit tự phục vụ. Đổi lại, mất phần hiện số khung —
+            # người vận hành đọc giây trên thanh điều khiển rồi nhập ở dưới.
+            st.video(source.location, start_time=int(start))
+            st.caption(
+                ":orange[Chế độ file trên đĩa không hiện được số khung.] Đọc giây "
+                "trên thanh điều khiển rồi nhân với fps, hoặc nhập giây vào ô "
+                "*giây* bên dưới. Đặt `MFE_VIDEO_BASE_URL` để có trình phát "
+                "hiện số khung trực tiếp."
+            )
+
+        left, right = st.columns(2)
+        with left, st.container():
+            giay = st.number_input(
+                "…hoặc nhập giây", min_value=0.0, value=float(f"{start:.3f}"),
+                step=0.04, format="%.3f", key=f"scrub_sec_{query.query_id}",
+            )
+        with right, st.container():
+            khung = st.number_input(
+                "Số khung mới (dán từ trình phát)", min_value=0,
+                value=int(giay * fps), step=1, key=f"scrub_frame_{query.query_id}",
+            )
+        st.caption(
+            f"Sẽ nộp khung **{int(khung)}** — `floor({khung / fps:.3f} × {fps:.3f})`. "
+            f"Công thức và fps đọc từ `map-keyframes`, đúng thứ BTC chấm."
+        )
+
+        if st.button(
+            f"🔁 Thay vào hạng {int(rank)}", type="primary",
+            key=f"scrub_apply_{query.query_id}",
+        ):
+            moi = replace_at_rank(ranked, int(rank), int(khung))
+            results[query.query_id] = moi
+            # Ghim luôn thứ tự: id của khung vừa thay là id MỚI, nên thứ tự tay cũ
+            # (lưu theo id) sẽ cho nó rơi ra rồi nối lại ở cuối — tức đúng cái hạng
+            # ta vừa sửa sẽ tự tụt xuống 87 mà không ai thấy.
+            st.session_state[f"order_{query.query_id}"] = [c.keyframe_id for c in moi]
+            st.rerun()
+
+
+# ---------------------------------------------------------------------------
 # Thứ tự do người xếp
 # ---------------------------------------------------------------------------
 
@@ -1088,17 +1245,21 @@ for tab, qtype in zip(tabs, TYPES, strict=True):
                 st.session_state.pop(f"order_{picked_id}")
                 st.rerun()
 
+            render_scrub_box(query, ranked)
+
             with st.expander(f"📄 Toạ độ nộp — {len(ranked)} khung"):
                 for position, candidate in enumerate(ranked[: int(pool_k)], start=1):
                     was = machine_rank.get(candidate.keyframe_id)
                     moved = f"  ✋ (máy xếp {was})" if was and was != position else ""
-                    try:
-                        frame_id = _relational.get_keyframe(
-                            candidate.keyframe_id
-                        ).frame_idx
-                        frame_text = f"frame `{frame_id}`"
-                    except Exception:  # noqa: BLE001
+                    frame_id = frame_of(candidate)
+                    if frame_id is None:
                         frame_text = ":red[không tra được frame_id]"
+                    elif candidate.frame_idx is not None:
+                        # Phân biệt hẳn khung tự tua với khung của BTC: đây là dòng
+                        # duy nhất nói ra rằng toạ độ này KHÔNG đến từ danh mục.
+                        frame_text = f"frame `{frame_id}` 🎞️ :orange[tua tay]"
+                    else:
+                        frame_text = f"frame `{frame_id}`"
                     st.markdown(
                         f"**{position}.** `{candidate.keyframe_id}` — "
                         f"{frame_text}{moved}"

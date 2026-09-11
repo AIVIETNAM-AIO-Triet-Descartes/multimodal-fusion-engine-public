@@ -23,6 +23,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 from mfe.contracts.errors import ContractError, ErrorCode
+from mfe.contracts.ids import build_keyframe_id
 from mfe.contracts.tools import Candidate
 from mfe.eval.metrics.final_score import MAX_ANSWERS_PER_QUERY
 from mfe.eval.metrics.trake import TRAKESubmission
@@ -166,6 +167,47 @@ def apply_manual_order(
     head = [by_id[key] for key in manual if key in by_id]
     seen = {c.keyframe_id for c in head}
     return head + [c for c in candidates if c.keyframe_id not in seen]
+
+
+def replace_at_rank(
+    candidates: Sequence[Candidate], rank: int, frame_idx: int
+) -> list[Candidate]:
+    """Thay ứng viên ở **hạng `rank`** (đếm từ 1) bằng khung `frame_idx` tự tua.
+
+    Vì sao là *thay tại chỗ* chứ không phải *thêm vào*
+    ----------------------------------------------------
+    Truy hồi thường đưa người vận hành tới **đúng đoạn** chứ không đúng khung —
+    ứng viên lệch vài giây là chuyện thường. Khi ấy thứ hạng đã đúng rồi, chỉ toạ
+    độ là sai. Thêm khung đúng vào cuối danh sách sẽ giữ nguyên cái sai ở hạng
+    cao và đặt cái đúng ở hạng 87; `Final Score` tính theo `R@k` nên đó gần như
+    là không sửa gì.
+
+    Khung mới **mang theo `frame_idx` của chính nó**: nó không có trong danh mục
+    BTC nên `RelationalMap` không tra ra, và `candidate_frame_id` cố ý ném thay vì
+    đoán. Xem `Candidate.frame_idx`.
+
+    Giữ nguyên `score` của ứng viên cũ, vì điểm ở đây chỉ còn là chỗ đứng trong
+    hàng — đổi nó là làm nhiễu mọi thứ đọc điểm mà không đổi được thứ hạng.
+    """
+    rows = list(candidates)
+    if not 1 <= rank <= len(rows):
+        raise ContractError(
+            ErrorCode.INVALID_ARGUMENT,
+            f"hang {rank} nam ngoai danh sach {len(rows)} ung vien",
+        )
+    if frame_idx < 0:
+        raise ContractError(
+            ErrorCode.INVALID_ARGUMENT, f"frame_idx am: {frame_idx}"
+        )
+    old = rows[rank - 1]
+    rows[rank - 1] = Candidate(
+        keyframe_id=build_keyframe_id(old.video_id, frame_idx),
+        video_id=old.video_id,
+        score=old.score,
+        evidence_id=f"tua_tay:{old.video_id}:{frame_idx}",
+        frame_idx=frame_idx,
+    )
+    return rows
 
 
 def submissions_for(

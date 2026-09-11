@@ -366,7 +366,16 @@ def candidate_frame_id(candidate: Candidate, relational: RelationalMap) -> int:
 
     Raises rather than guessing when the keyframe is unknown — docs/05 §2,
     "nếu keyframe_id không có trong Relational Map -> lỗi, không đoán".
+
+    **One exception, and it declares itself.** A frame the operator scrubbed to in
+    the submission desk is not in BTC's catalogue at all, so the lookup can only
+    fail for it. Such a candidate carries its own `frame_idx`, and carrying it is
+    the whole point: the override is explicit per candidate, so a genuinely
+    missing keyframe still raises exactly as before instead of being papered over
+    by a blanket "parse the id" fallback.
     """
+    if candidate.frame_idx is not None:
+        return candidate.frame_idx
     return relational.get_keyframe(candidate.keyframe_id).frame_idx
 
 
