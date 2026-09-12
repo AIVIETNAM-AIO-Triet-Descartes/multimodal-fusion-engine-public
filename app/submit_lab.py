@@ -50,12 +50,12 @@ import sys
 from pathlib import Path
 
 import streamlit as st
-import streamlit.components.v1 as components
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from mfe.browser.sortable_grid import sortable_grid  # noqa: E402
+from mfe.browser.video_scrub import video_scrub  # noqa: E402
 from mfe.contracts.errors import ContractError  # noqa: E402
 from mfe.contracts.tools import Candidate  # noqa: E402
 from mfe.core.config import load_config  # noqa: E402
@@ -96,7 +96,11 @@ from mfe.online.query_text import (  # noqa: E402
 from mfe.online.quest import quest_clauses  # noqa: E402
 from mfe.online.rerank_tiers import DEFAULT_DEPTH  # noqa: E402
 from mfe.online.scene_order import MIN_CLAUSES_FOR_PRIOR, split_clauses  # noqa: E402
-from mfe.online.video_source import resolve_video, why_missing  # noqa: E402
+from mfe.online.video_source import (  # noqa: E402
+    ENV_BASE_URL,
+    resolve_video,
+    why_missing,
+)
 from mfe.online.vqa_answer import DEFAULT_DEPTH as VQA_DEPTH  # noqa: E402
 from mfe.online.vqa_answer import available as vqa_available  # noqa: E402
 from mfe.online.vqa_answer import read_answer  # noqa: E402
@@ -807,51 +811,6 @@ def render_answer_box(query: PackagedQuery, result, images) -> None:
 # Tua video và thay khung
 # ---------------------------------------------------------------------------
 
-#: Khung `<video>` tự dựng, dùng khi video lấy được qua URL. Hơn `st.video` đúng
-#: một chỗ, và chỗ đó là lý do nó tồn tại: nó **hiện số khung ngay lúc đang tua**
-#: (`floor(currentTime × fps)`), nên người vận hành đọc được toạ độ nộp mà không
-#: phải tự nhân chia. `st.video` không cho biết mình đang dừng ở đâu.
-#:
-#: Iframe của Streamlit là một chiều — không có đường nào đẩy số khung ngược về
-#: Python. Nên có nút chép; người vận hành dán sang ô bên dưới. Thà một thao tác
-#: dán còn hơn một component hai chiều phải build bằng npm cho một ô nhập số.
-_PLAYER_HTML = """
-<style>
-  body {{ margin:0; background:#0E1117; color:#FAFAFA;
-         font-family:-apple-system,"Segoe UI",Roboto,sans-serif; }}
-  video {{ width:100%; max-height:360px; background:#000; border-radius:6px; }}
-  .bar {{ display:flex; gap:10px; align-items:center; margin-top:8px;
-          flex-wrap:wrap; font-size:13px; }}
-  .chip {{ background:#262730; border:1px solid #4B4B52; border-radius:6px;
-           padding:5px 9px; }}
-  .chip b {{ color:#FF4B4B; font-variant-numeric:tabular-nums; }}
-  button {{ background:#FF4B4B; color:#fff; border:0; border-radius:4px;
-            padding:5px 10px; font-weight:600; cursor:pointer; }}
-</style>
-<video id="v" src="{url}" controls preload="metadata"></video>
-<div class="bar">
-  <span class="chip">khung <b id="f">—</b></span>
-  <span class="chip">giây <b id="t">—</b></span>
-  <span class="chip">fps {fps:.3f}</span>
-  <button onclick="cp()">📋 Chép số khung</button>
-  <span id="ok"></span>
-</div>
-<script>
-  const v = document.getElementById("v"), fps = {fps};
-  v.addEventListener("loadedmetadata", () => {{ v.currentTime = {start:.3f}; }});
-  const upd = () => {{
-    document.getElementById("f").textContent = Math.floor(v.currentTime * fps);
-    document.getElementById("t").textContent = v.currentTime.toFixed(3);
-  }};
-  v.addEventListener("timeupdate", upd);
-  v.addEventListener("seeked", upd);
-  function cp() {{
-    const n = Math.floor(v.currentTime * fps);
-    navigator.clipboard.writeText(String(n));
-    document.getElementById("ok").textContent = "đã chép " + n;
-  }}
-</script>
-"""
 
 
 def frame_of(candidate: Candidate) -> int | None:
@@ -875,16 +834,35 @@ def render_scrub_box(query: PackagedQuery, ranked: list[Candidate]) -> None:
     """
     if not ranked:
         return
-    with st.expander("🎞️ Tua video — đổi khung ở một hạng"):
+    rank_key = f"scrub_rank_{query.query_id}"
+    # Bấm một ô trong lưới đặt sẵn hai khoá này rồi `st.rerun()`, nên hộp phải
+    # tự mở ở lượt vẽ kế tiếp — bấm ảnh mà hộp vẫn đóng thì trông như không có
+    # gì xảy ra.
+    mo_san = st.session_state.pop(f"scrub_open_{query.query_id}", False)
+    xong = st.session_state.pop(f"scrub_msg_{query.query_id}", None)
+    with st.expander(
+        "🎞️ Tua video — đổi khung ở một hạng", expanded=mo_san or bool(xong)
+    ):
+        if xong:
+            st.success(xong)
         st.caption(
-            "Ứng viên lệch vài giây vẫn dùng được: mở video quanh nó, tua tới "
-            "đúng khoảnh khắc rồi thay khung đó vào chính hạng này. Khung tự tua "
-            "**không** có trong danh mục BTC nên nó mang theo `frame_idx` của "
-            "riêng mình — xem lại ở mục *Toạ độ nộp*."
+            "Bấm một tấm ảnh trong lưới bên dưới, hoặc gõ số hạng vào đây. Ứng "
+            "viên lệch vài giây vẫn dùng được: mở video quanh nó, tua tới đúng "
+            "khoảnh khắc rồi thay khung đó vào chính hạng này. Khung tự tua "
+            "**không** có trong danh mục BTC nên nó mang theo toạ độ của riêng "
+            "mình — xem lại ở mục *Toạ độ nộp*."
         )
+        # KHÔNG truyền `value=`: đã có `key` thì `session_state` là nguồn duy
+        # nhất, và đưa cả hai vào là hai nguồn sự thật cho cùng một ô.
+        st.session_state.setdefault(rank_key, 1)
+        # Hạng do người dùng bấm ở lưới được hẹn qua `scrub_fill_*` và đổ vào
+        # đây, TRƯỚC khi ô nhập dựng — xem chỗ xử lý `clicked` ở phần lưới.
+        pending_rank = st.session_state.pop(f"scrub_fill_{query.query_id}", None)
+        if pending_rank is not None:
+            st.session_state[rank_key] = min(int(pending_rank), len(ranked))
         rank = st.number_input(
-            "Hạng muốn đổi", min_value=1, max_value=len(ranked), value=1, step=1,
-            key=f"scrub_rank_{query.query_id}",
+            "Hạng muốn đổi", min_value=1, max_value=len(ranked), step=1,
+            key=rank_key,
         )
         target = ranked[int(rank) - 1]
         current = frame_of(target)
@@ -910,49 +888,50 @@ def render_scrub_box(query: PackagedQuery, ranked: list[Candidate]) -> None:
             f"giây `{start:.3f}` · fps `{fps:.3f}`"
         )
 
-        if source.is_url:
-            components.html(
-                _PLAYER_HTML.format(url=source.location, fps=fps, start=start),
-                height=460,
-            )
-        else:
-            # File trên đĩa: trình duyệt không đọc được `file://` từ trong iframe,
-            # nên phải để Streamlit tự phục vụ. Đổi lại, mất phần hiện số khung —
-            # người vận hành đọc giây trên thanh điều khiển rồi nhập ở dưới.
+        if not source.is_url:
+            # File trên đĩa: trình duyệt không đọc `file://` từ trong iframe, nên
+            # phải để Streamlit tự phục vụ — và khi đó mất luôn đường trả số khung
+            # về. Nói thẳng thay vì bày một trình phát không chọn được khung.
             st.video(source.location, start_time=int(start))
-            st.caption(
-                ":orange[Chế độ file trên đĩa không hiện được số khung.] Đọc giây "
-                "trên thanh điều khiển rồi nhân với fps, hoặc nhập giây vào ô "
-                "*giây* bên dưới. Đặt `MFE_VIDEO_BASE_URL` để có trình phát "
-                "hiện số khung trực tiếp."
+            st.warning(
+                "Chế độ **file trên đĩa** chỉ xem được, không chọn được khung: "
+                f"trình duyệt chặn `file://` bên trong iframe. Đặt "
+                f"`{ENV_BASE_URL}` (URL kho video) để tua và chọn khung."
             )
+            return
 
-        left, right = st.columns(2)
-        with left, st.container():
-            giay = st.number_input(
-                "…hoặc nhập giây", min_value=0.0, value=float(f"{start:.3f}"),
-                step=0.04, format="%.3f", key=f"scrub_sec_{query.query_id}",
-            )
-        with right, st.container():
-            khung = st.number_input(
-                "Số khung mới (dán từ trình phát)", min_value=0,
-                value=int(giay * fps), step=1, key=f"scrub_frame_{query.query_id}",
-            )
-        st.caption(
-            f"Sẽ nộp khung **{int(khung)}** — `floor({khung / fps:.3f} × {fps:.3f})`. "
-            f"Công thức và fps đọc từ `map-keyframes`, đúng thứ BTC chấm."
+        picked = video_scrub(
+            source.location, fps, start,
+            action_label=f"Thay khung này vào hạng {int(rank)}",
+            key=f"scrub_player_{query.query_id}",
         )
 
-        if st.button(
-            f"🔁 Thay vào hạng {int(rank)}", type="primary",
-            key=f"scrub_apply_{query.query_id}",
-        ):
-            moi = replace_at_rank(ranked, int(rank), int(khung))
+        st.caption(
+            "Tua tới đúng khoảnh khắc rồi bấm nút trên trình phát. Số khung lấy "
+            f"bằng `floor(giây × {fps:.3f})`, fps đọc từ `map-keyframes` — đúng "
+            "thứ BTC chấm."
+        )
+
+        # Giá trị component sống qua mọi lượt vẽ lại, nên phải so `nonce` mới
+        # biết đây là một lần bấm MỚI hay chỉ là giá trị cũ còn nằm đó. Thiếu
+        # phép so này thì trang tự thay khung lại sau mỗi lần vẽ.
+        nonce_key = f"scrub_nonce_{query.query_id}"
+        if picked and picked.get("nonce") != st.session_state.get(nonce_key):
+            st.session_state[nonce_key] = picked.get("nonce")
+            moi = replace_at_rank(ranked, int(rank), int(picked["frame"]))
             results[query.query_id] = moi
             # Ghim luôn thứ tự: id của khung vừa thay là id MỚI, nên thứ tự tay cũ
             # (lưu theo id) sẽ cho nó rơi ra rồi nối lại ở cuối — tức đúng cái hạng
             # ta vừa sửa sẽ tự tụt xuống 87 mà không ai thấy.
             st.session_state[f"order_{query.query_id}"] = [c.keyframe_id for c in moi]
+            # Nói ra việc vừa làm: thay khung là thao tác ăn thẳng vào bài nộp,
+            # mà nó chỉ đổi vài chữ số trên màn hình. Không báo thì người vận
+            # hành không chắc mình đã bấm trúng hay chưa.
+            st.session_state[f"scrub_msg_{query.query_id}"] = (
+                f"Đã thay hạng {int(rank)} → khung "
+                f"`{int(picked['frame'])}` của `{target.video_id}` "
+                f"(giây {picked['seconds']:.3f})."
+            )
             st.rerun()
 
 
@@ -1215,15 +1194,21 @@ for tab, qtype in zip(tabs, TYPES, strict=True):
                 key=f"depth_{picked_id}",
             )
             grid = ranked[: int(depth)]
+            # Hộp tua đặt TRƯỚC lưới. Đặt sau thì với `depth` 100 và 5 cột,
+            # người vận hành phải cuộn qua 20 hàng ảnh mới thấy nó — tức là
+            # không thấy.
+            render_scrub_box(query, ranked)
+
             st.caption(
-                "Kéo **chính tấm ảnh** sang chỗ mới. Mép đỏ báo nó chèn vào "
+                "**Bấm một tấm ảnh** để mở video quanh khung đó. **Kéo** tấm "
+                "ảnh sang chỗ khác để đổi thứ hạng — mép đỏ báo nó chèn vào "
                 "trước hay sau ô đang thả."
             )
             if show_images:
                 with st.spinner(f"Tải {len(grid)} ảnh …"):
                     images.prefetch([c.keyframe_id for c in grid])
 
-            dragged = sortable_grid(
+            action = sortable_grid(
                 [c.keyframe_id for c in grid],
                 # `cached`, KHONG `get`: `prefetch` da tai song song 8 luong.
                 # `get` se tai TUAN TU tung anh thieu ngay giua vong dung luoi.
@@ -1231,6 +1216,32 @@ for tab, qtype in zip(tabs, TYPES, strict=True):
                 machine_rank=machine_rank, cols=grid_cols,
                 key=f"grid_{picked_id}_{depth}",
             )
+            dragged = (action or {}).get("order")
+            clicked = (action or {}).get("click")
+
+            # Giá trị của một component Streamlit **sống qua mọi lượt vẽ lại**,
+            # không phải chỉ lượt ngay sau thao tác. Nên `clicked` vẫn còn nguyên
+            # ở lượt kế tiếp, và `st.rerun()` vô điều kiện sẽ tự gọi lại mình mãi
+            # — trang đứng im, không có gì đỏ lên. Nhớ id đã xử lý là cách thoát.
+            seen_key = f"scrub_seen_{picked_id}"
+            if clicked and st.session_state.get(seen_key) != clicked:
+                st.session_state[seen_key] = clicked
+                # Bấm ô nào thì hộp tua nhảy tới hạng ĐANG HIỆN của ô đó. Đi qua
+                # `ranked` chứ không qua `grid`: hai danh sách chỉ trùng nhau
+                # khi `depth` đủ sâu, và lệch thì sẽ mở nhầm khung.
+                vi_tri = next(
+                    (i for i, c in enumerate(ranked, start=1)
+                     if c.keyframe_id == clicked), None
+                )
+                if vi_tri is not None:
+                    # KHÔNG ghi thẳng vào khoá của ô nhập: `render_scrub_box`
+                    # chạy TRƯỚC lưới nên ô đó đã dựng xong trong chính lượt
+                    # này, và ghi đè lúc ấy là `StreamlitAPIException`. Hẹn qua
+                    # một khoá riêng, lượt sau mới đổ vào.
+                    st.session_state[f"scrub_fill_{picked_id}"] = vi_tri
+                    st.session_state[f"scrub_open_{picked_id}"] = True
+                    st.rerun()
+
             if dragged and dragged != [c.keyframe_id for c in grid]:
                 # Đuôi ngoài `depth` giữ thứ tự máy và VẪN được nộp — cắt nó đi
                 # là vứt bốn trong năm số hạng của Final Score.
@@ -1244,8 +1255,6 @@ for tab, qtype in zip(tabs, TYPES, strict=True):
             ):
                 st.session_state.pop(f"order_{picked_id}")
                 st.rerun()
-
-            render_scrub_box(query, ranked)
 
             with st.expander(f"📄 Toạ độ nộp — {len(ranked)} khung"):
                 for position, candidate in enumerate(ranked[: int(pool_k)], start=1):

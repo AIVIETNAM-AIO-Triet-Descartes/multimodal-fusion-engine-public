@@ -32,6 +32,8 @@
   .cell:active { cursor: grabbing; }
   .cell img { display: block; width: 100%; aspect-ratio: 16/9; object-fit: cover; }
   .cell.dragging { opacity: .35; }
+  .cell.picked { outline: 2px solid #ff4b4b; outline-offset: -2px; }
+  .cell:hover { filter: brightness(1.15); }
   /* Chỉ tô mép ĐANG thả vào, không tô cả ô: người kéo cần biết nó chèn vào
      TRƯỚC hay SAU ô này, mà một viền quanh ô thì không nói được điều đó. */
   .cell.over-before { border-left-color: #ff4b4b; }
@@ -63,6 +65,7 @@ const setValue = (value) =>
 
 let order = [];      // keyframe_id theo thứ tự hiện tại
 let dragId = null;
+let justDragged = false;   // trình duyệt bắn 1 click ngay sau mỗi lần kéo
 
 function fit() {
   send("streamlit:setFrameHeight", {
@@ -113,6 +116,7 @@ document.addEventListener("dragstart", (e) => {
   const cell = e.target.closest(".cell");
   if (!cell) return;
   dragId = cell.dataset.id;
+  justDragged = true;
   cell.classList.add("dragging");
   e.dataTransfer.effectAllowed = "move";
 });
@@ -121,6 +125,18 @@ document.addEventListener("dragend", () => {
   dragId = null;
   document.querySelectorAll(".cell").forEach((c) =>
     c.classList.remove("dragging", "over-before", "over-after"));
+});
+
+// Bam mot o = "mo khung nay ra xem". Phai loc bo cai click ma trinh duyet ban
+// ra ngay sau mot lan keo, neu khong thi moi lan xep lai thu tu se keo theo mot
+// lan mo video khong ai yeu cau.
+document.addEventListener("click", (e) => {
+  const cell = e.target.closest(".cell");
+  if (!cell) return;
+  if (justDragged) { justDragged = false; return; }
+  document.querySelectorAll(".cell").forEach((c) => c.classList.remove("picked"));
+  cell.classList.add("picked");
+  setValue({ order, click: cell.dataset.id });
 });
 
 document.addEventListener("dragover", (e) => {
@@ -150,7 +166,7 @@ document.addEventListener("drop", (e) => {
   const at = order.indexOf(targetId);
   order.splice(before ? at : at + 1, 0, dragId);
 
-  setValue(order);
+  setValue({ order, click: null });
   window.__items && paint(window.__items, window.__cols);
 });
 

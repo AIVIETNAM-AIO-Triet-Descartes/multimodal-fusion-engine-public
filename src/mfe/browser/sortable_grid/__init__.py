@@ -96,12 +96,17 @@ def sortable_grid(
     machine_rank: dict[str, int] | None = None,
     cols: int = 5,
     key: str | None = None,
-) -> list[str] | None:
-    """Bày lưới ảnh kéo thả. Trả thứ tự MỚI, hoặc `None` khi chưa ai kéo.
+) -> dict[str, Any] | None:
+    """Bày lưới ảnh kéo thả. Trả `{"order": [...], "click": id|None}`, hoặc
+    `None` khi chưa ai đụng vào.
 
     `None` khác `[]` và khác "thứ tự cũ": phần gọi phải phân biệt được "người
     dùng chưa đụng vào" với "người dùng đã kéo và thứ tự tình cờ giống cũ" —
     cái đầu không được ghi đè gì cả.
+
+    **`click` là ô người dùng vừa bấm**, để phần gọi mở đúng khung đó ra xem.
+    Kéo và bấm đi chung một đường trả về vì component của Streamlit chỉ có
+    **một** giá trị: tách thành hai component là tách luôn trạng thái kéo.
 
     `image_of(keyframe_id) -> Path | None` để component này không biết gì về
     Modal, cache hay đĩa; nó chỉ biết có ảnh hay không.
