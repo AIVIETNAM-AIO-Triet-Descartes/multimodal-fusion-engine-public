@@ -1644,6 +1644,23 @@ def parse_qwen25_caption_ocr(text: str) -> tuple[str, str, bool]:
     return caption, "\n".join(kept).strip(), (has_caption and has_text)
 
 
+def parse_qwen25_sota_caption(text: str) -> tuple[str, str, bool]:
+    """`(caption, scene_graph, has_both)` for the new SOTA instruction format."""
+    raw = (text or "").strip()
+    has_graph = "[SCENE_GRAPH]" in raw
+    has_caption = "[CAPTION]" in raw
+
+    if has_caption:
+        head, _, tail = raw.partition("[CAPTION]")
+        scene_graph = head.replace("[SCENE_GRAPH]", "", 1).strip() if has_graph else head.strip()
+        caption = tail.strip()
+    else:
+        scene_graph = raw.replace("[SCENE_GRAPH]", "", 1).strip() if has_graph else raw.strip()
+        caption = ""
+
+    return caption, scene_graph, (has_graph and has_caption)
+
+
 def qwen25_scan(ctx: StageContext, keyframes: list[Keyframe], *, label: str) -> list[str]:
     """Cau tra loi tho cho `keyframes`, dung lai neu phien nay da sinh.
 
@@ -1879,6 +1896,60 @@ def _qwen25_common(ctx: StageContext) -> tuple[dict, dict, dict]:
     return params, facts, parsed
 
 
+def _qwen25_common_sota(ctx: StageContext) -> tuple[dict, dict, dict]:
+    """`(params, facts, {n: (caption, scene_graph)})` for SOTA prompt variant."""
+    answers = qwen25_scan(ctx, ctx.keyframes, label=f"qwen2.5-vl {ctx.video_id}")
+    parsed: dict[int, tuple[str, str]] = {}
+    unmarked = 0
+    for keyframe, answer in zip(ctx.keyframes, answers, strict=True):
+        caption, scene_graph, marked = parse_qwen25_sota_caption(answer)
+        parsed[keyframe.n] = (caption, scene_graph)
+        unmarked += 0 if marked else 1
+
+    prompt_text = qwen25_prompt(ctx)
+    params = {
+        "checkpoint": ctx.params.get("checkpoint", "Qwen/Qwen2.5-VL-7B-Instruct"),
+        "max_tokens": qwen25_max_tokens(ctx),
+        "temperature": float(ctx.params.get("temperature", 0.1)),
+        "engine": "vllm",
+        "prompt_variant": str(ctx.params.get("prompt_variant", "sota")),
+        "prompt_sha": hashlib.sha256(prompt_text.encode()).hexdigest()[:16],
+        "text_first": bool(ctx.params.get("text_first", True)),
+    }
+    images = _QWEN_VL_TIMING.get("images", 0.0)
+    seconds = _QWEN_VL_TIMING.get("seconds", 0.0)
+    facts = {
+        "unmarked": unmarked,
+        "tensor_parallel_size": int(ctx.params.get("tensor_parallel_size", 2)),
+        "batch_size": int(ctx.params.get("batch_size", QWEN25_BATCH)),
+        "prefix_caching": bool(_QWEN_VL_TIMING.get("prefix_caching", 0.0)),
+        "kv_cache_bytes": int(_QWEN_VL_TIMING.get("kv_cache_bytes", 0.0)),
+        "images_per_s": round(images / seconds, 3) if seconds else None,
+    }
+    return params, facts, parsed
+
+
+def stage_n6_caption_sota_qwen(ctx: StageContext) -> dict:
+    """Nua `[CAPTION]` cua mot lan sinh Qwen2.5-VL theo chuan SOTA."""
+    with Stopwatch() as timer:
+        params, facts, parsed = _qwen25_common_sota(ctx)
+        mapping = {
+            build_keyframe_id(ctx.video_id, kf.frame_idx): parsed[kf.n][0]
+            for kf in ctx.keyframes
+            if parsed[kf.n][0]
+        }
+
+    return ctx.writer.write_text_part(
+        "qwen_captions",
+        ctx.video_id,
+        mapping,
+        model=params["checkpoint"],
+        params={**params, "field": "caption"},
+        facts=facts,
+        elapsed_s=timer.seconds,
+    )
+
+
 def stage_n6_caption_qwen(ctx: StageContext) -> dict:
     """Nua `[CAPTION]` cua mot lan sinh Qwen2.5-VL. Chay TRUOC `n6_ocr_qwen25`.
 
@@ -2070,6 +2141,7 @@ STAGES = {
     "n5_ocr_paddle": stage_n5_ocr_paddle,
     "n5_ocr_vietocr": stage_n5_ocr_vietocr,
     "n6_caption_qwen": stage_n6_caption_qwen,
+    "n6_caption_sota_qwen": stage_n6_caption_sota_qwen,
     "n6_ocr_qwen25": stage_n6_ocr_qwen25,
     "n6_bge_m3": stage_n6_bge_m3,
     "n7_bge_m3_subtitles": stage_n7_bge_m3_subtitles,

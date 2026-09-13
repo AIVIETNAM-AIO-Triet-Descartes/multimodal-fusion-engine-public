@@ -186,14 +186,70 @@ Now do exactly the same for the frame you are given."""
 
 _QWEN25_PROMPT_AIC = f"{_QWEN25_INSTRUCTION_AIC}\n\n{_QWEN25_FEWSHOT_AIC}"
 
+_QWEN25_INSTRUCTION_SOTA = """You are describing ONE frame taken from a Vietnamese television video.
+Practice strict OBJECTIVE REALISM: Describe the precise physical and geometric state of every object exactly as it appears. Do not use semantic shortcuts, and do not guess what you cannot clearly see. If a component is unclear, distant or tiny, describe it generally (e.g., "a vehicle", "an object").
+
+Return EXACTLY two blocks, in this order, each starting with its label:
+
+[SCENE_GRAPH]
+Exhaustively list ALL visible entities and interactions as (Subject) -[RELATION]-> (Object) triplets.
+- Include key visual attributes (color, clothing) and precise physical condition.
+- Define actions (e.g., "holding") and spatial geometry (left, right, behind).
+- Group identical objects collectively. Do not list individually.
+
+[CAPTION] 
+Using your [SCENE_GRAPH] and direct visual observation of the image, write a 3-5 sentence description in ENGLISH covering ONLY what is visible.
+
+RULES FOR [CAPTION] — five things you MUST state whenever the frame shows them:
+1. WHAT THE PEOPLE AND OBJECTS ARE DOING WITH EACH OTHER. Never list things side by side; join them with a verb that says what is happening.
+   **Your FIRST sentence must be the action.** Say what is happening, then spend the rest of the caption on who and what: colours, counts, positions.
+   GOOD: "a man in a blue shirt waters a row of potted plants with a green hose"
+   BAD:  "a man, a green hose, and several potted plants"
+2. COLOUR attached to EACH object.
+3. HOW MANY, whenever they can be counted: "three people", "two motorbikes".
+4. WHERE things are, relative to each other: on the left / in the middle / on the right / in front of / behind.
+5. CAMERA ANGLE only when it is UNUSUAL (close-up, aerial).
+
+FORBIDDEN in [CAPTION]:
+- Guessing what you cannot see: place names, personal names, emotions, intentions, unseen structural damage.
+- Starting with "The image shows", "This image", "In the picture", "A photo of" — start with the content itself.
+- Writing the caption in Vietnamese.
+"""
+
+_QWEN25_FEWSHOT_SOTA = """Here are two examples of the correct output FORMAT.
+Learn the shape of the answer; do not copy the content.
+
+### Example 1
+[SCENE_GRAPH]
+1. Presenter in dark navy shirt and pale tie -[STANDING BEHIND]-> Curved white desk
+2. Presenter in light blue blouse -[STANDING BEHIND]-> Curved white desk
+3. Presenter in dark navy shirt -[RESTING HAND ON]-> Curved white desk
+4. Presenter in light blue blouse -[TURNING PAGE OF]-> Red folder
+5. City skyline glowing orange -[LOCATED BEHIND]-> Presenters
+
+[CAPTION]
+Two presenters read from a red folder and speak toward the camera from behind a curved white desk. The man on the left wears glasses, a dark navy shirt and a pale tie; the woman on the right has long hair and wears a light blue blouse. The man rests his free hand on the desk while the woman turns a page. Behind them a wide city skyline glows orange at sunset.
+
+### Example 2
+[SCENE_GRAPH]
+1. Five people -[SITTING ON]-> Low plastic stools
+2. Five people -[SURROUNDING]-> Heap of bamboo shoots
+3. Woman in red and white checked shirt and yellow trousers -[STRIPPING HUSK FROM]-> Bamboo shoot
+4. Person in green t-shirt -[PASSING]-> Peeled shoot
+5. Man in camouflage clothing -[SORTING]-> Shoots
+6. Shoots -[INTO]-> Yellow plastic basket
+7. Row of blue plastic drums -[LOCATED BEHIND]-> People
+
+[CAPTION]
+Five people peel bamboo shoots together on a concrete yard, sitting on low plastic stools around the heap. The woman on the far left, in a red and white checked shirt and yellow trousers, strips the husk from a shoot; the person in the middle in a green t-shirt passes a peeled shoot toward her; the man on the far right in camouflage-patterned clothing sorts the shoots into a yellow plastic basket. A row of blue plastic drums stands behind them.
+
+Now do exactly the same for the frame you are given."""
+
+_QWEN25_PROMPT_SOTA = f"{_QWEN25_INSTRUCTION_SOTA}\n\n{_QWEN25_FEWSHOT_SOTA}"
+
 #: `ten bien the -> (prompt, max_tokens mac dinh)`.
-#:
-#: `max_tokens` khac nhau la mot phep do chu khong phai so thich: 256 cua Bao da
-#: cat cut mot phan ngay tren ban chay cua chinh ban ay ("...and the corr"), va
-#: bien the `aic` con dai hon vi no bat neu them QUAN HE giua cac vat.
-#: 384 la gia tri khoi diem; o probe cua notebook 08 do lai ca throughput lan ti
-#: le `unmarked` (cau bi cat mat nhan `[TEXT]`) truoc khi ap len 177.321 anh.
 PROMPT_VARIANTS: dict[str, tuple[str, int]] = {
     "bao": (_QWEN25_PROMPT_BAO, 256),
     "aic": (_QWEN25_PROMPT_AIC, 384),
+    "sota": (_QWEN25_PROMPT_SOTA, 768),
 }

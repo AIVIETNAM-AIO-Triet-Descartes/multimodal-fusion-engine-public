@@ -134,3 +134,7 @@ params:
   # tra loi truot, va tang thu hai sinh lai toan bo — gap doi tien GPU cua ca
   # luot, khong loi nao bao.
   n6_ocr_qwen25: *qwen25
+
+  n6_caption_sota_qwen:
+    <<: *qwen25
+    prompt_variant: sota
