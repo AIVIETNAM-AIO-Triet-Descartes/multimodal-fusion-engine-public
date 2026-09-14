@@ -97,9 +97,12 @@ def normalise(payload: dict[str, str], table, label: str) -> tuple[dict[str, str
     return out, dropped
 
 
-def split_fields(text: str) -> tuple[str, str, bool]:
-    from mfe.offline.stages import parse_qwen25_caption_ocr
+def split_fields(text: str, is_sota: bool = False) -> tuple[str, str, bool]:
+    from mfe.offline.stages import parse_qwen25_caption_ocr, parse_qwen25_sota_caption
 
+    if is_sota:
+        caption, scene_graph, marked = parse_qwen25_sota_caption(text)
+        return caption, "", marked
     return parse_qwen25_caption_ocr(text)
 
 
@@ -159,6 +162,8 @@ def main() -> None:  # noqa: PLR0915 — mot bao cao tuyen tinh, tach ra chi kho
     ours, _ = normalise(ours_raw, table, "ta")
     theirs, _ = normalise(theirs_raw, table, "Bao")
 
+    is_sota = any("[SCENE_GRAPH]" in str(v) for v in ours.values())
+
     shared = sorted(set(ours) & set(theirs))
     only_ours = sorted(set(ours) - set(theirs))
     only_theirs = sorted(set(theirs) - set(ours))
@@ -186,8 +191,8 @@ def main() -> None:  # noqa: PLR0915 — mot bao cao tuyen tinh, tach ra chi kho
     worst: list[tuple[float, str]] = []
 
     for key in shared:
-        our_caption, our_ocr, our_marked_ok = split_fields(ours[key])
-        their_caption, their_ocr, their_marked_ok = split_fields(theirs[key])
+        our_caption, our_ocr, our_marked_ok = split_fields(ours[key], is_sota)
+        their_caption, their_ocr, their_marked_ok = split_fields(theirs[key], False)
         ours_marked += int(our_marked_ok)
         theirs_marked += int(their_marked_ok)
         ours_with_ocr += int(bool(our_ocr))
@@ -249,7 +254,7 @@ def main() -> None:  # noqa: PLR0915 — mot bao cao tuyen tinh, tach ra chi kho
             f"chong lan caption trung vi {median_overlap:.3f} < {args.min_overlap} — "
             "hai ben rat co the dang mo ta HAI ANH KHAC NHAU, kiem lai anh xa khoa"
         )
-    if args.caption_gate == "none" and ocr_overlap:
+    if args.caption_gate == "none" and ocr_overlap and not is_sota:
         # Voi hai prompt khac ngon ngu, nua `[TEXT]` VAN so duoc: chep chu tren
         # man hinh la cung mot viec o ca hai prompt. Neu ca truc nay cung sap thi
         # do khong con la chuyen prompt — do la dia chi hoac dong co.
