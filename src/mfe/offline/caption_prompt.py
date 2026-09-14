@@ -251,5 +251,5 @@ _QWEN25_PROMPT_SOTA = f"{_QWEN25_INSTRUCTION_SOTA}\n\n{_QWEN25_FEWSHOT_SOTA}"
 PROMPT_VARIANTS: dict[str, tuple[str, int]] = {
     "bao": (_QWEN25_PROMPT_BAO, 256),
     "aic": (_QWEN25_PROMPT_AIC, 384),
-    "sota": (_QWEN25_PROMPT_SOTA, 768),
+    "sota": (_QWEN25_PROMPT_SOTA, 1536),
 }
