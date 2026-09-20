@@ -90,7 +90,7 @@ build_keyframe_id("L21_V001", 1)   # 'L21_V001#001'  (keyframe_index, khớp fil
 
 Không tự f-string. docs/02 §4 gọi đây là *"điểm dễ sai nhất — sai một chỗ là cả pipeline lệch"*.
 
-**2. `frame_idx` và `pts_time` đọc thẳng từ `map-keyframes` CSV, KHÔNG tự tính.** `round(pts_time×fps)` đã được chứng minh sai trên 83–93% dòng video 29.97fps (NTSC drop-frame). BTC chưa chốt submit theo cái nào nên lưu đủ — xem [`adr/0002`](docs/adr/0002-id-format.md).
+**2. `frame_idx` và `pts_time` đọc thẳng từ `map-keyframes` CSV khi dòng đó tồn tại.** Hàm bị cấm là `round(pts_time×fps)` — sai 83–93% dòng video 29.97fps (NTSC drop-frame), luôn lệch +1 khung. **`floor(pts_time×fps)` thì đúng 100%** trên cả 177.321 dòng và là cách hợp lệ duy nhất để đặt id cho một khung **ngoài** danh mục BTC (khung tự trích, hoặc khung người vận hành tua tới). BTC chưa chốt submit theo cái nào nên lưu đủ cả hai cột — xem `CLAUDE.md` §2.
 
 **3. Submit sai còn tệ hơn không submit.** Validator thà chặn nhầm còn hơn cho lọt (docs/05 §3).
 

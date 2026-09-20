@@ -14,11 +14,18 @@ speak different languages, and this module is the translation:
 
 Two things are deliberate about that arrow.
 
-**`frame_idx` is read, never recomputed.** The keyframe's real source frame
-comes out of `map-keyframes/*.csv` at ingest time and is stored on the row. Our
-own docs once carried three mutually inconsistent worked examples of the
-frame/timestamp formula (adr/0002); deriving at submit time is exactly how that
+**`frame_idx` is looked up, not re-derived from the id.** The keyframe's real
+source frame comes out of `map-keyframes/*.csv` at ingest time and is stored on
+the row. Our own docs once carried three mutually inconsistent worked examples of
+the frame/timestamp formula; re-deriving it at submit time is exactly how that
 class of bug reaches a scoreboard.
+
+The one exception is a frame the operator scrubbed to on the submission desk: it
+is not in BTC's catalogue, so no lookup can succeed for it. Such a candidate
+carries its own `frame_idx` (computed with `floor(pts_time * fps)`, which is 100%
+exact — see `mfe.contracts.ids`), and `candidate_frame_id` honours it. That is an
+explicit per-candidate override, not a blanket fallback: a genuinely missing
+keyframe still raises.
 
 **BTC calls the field `frame_id`, we call it `frame_idx`.** The rename happens
 here, once, at the boundary — not inside the scorers, which use BTC's name, and

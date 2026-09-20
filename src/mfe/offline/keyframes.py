@@ -78,9 +78,12 @@ def extract_keyframes(
     "extraction" is really registration: read `keyframes/{video_id}/{n:03d}.jpg`
     and pair it with its `map-keyframes/{video_id}.csv` row.
 
-    `frame_idx` and `pts_time` are copied straight from the CSV and NEVER
-    recomputed — `round(pts_time*fps)` was wrong on 83-93% of 29.97fps rows
-    (docs/00 §3, adr/0002). `keyframe_index` (n) is the keyframe's ordinal and
+    `frame_idx` and `pts_time` are copied straight from the CSV — on this path
+    the row always exists, so copying is both cheaper and impossible to get
+    wrong. What is banned is `round(pts_time*fps)`, wrong on 83-93% of 29.97fps
+    rows; `floor(pts_time*fps)` is 100% exact and is what
+    `mfe.contracts.ids.frame_idx_from_pts` does for frames outside the BTC
+    catalogue (CLAUDE.md §2). `keyframe_index` (n) is the keyframe's ordinal and
     image filename; it is a different number from `frame_idx`.
 
     Note the asymmetry: the *id* keys off `frame_idx` while the *image file* is

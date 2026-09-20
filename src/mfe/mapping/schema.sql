@@ -21,10 +21,12 @@ CREATE TABLE IF NOT EXISTS keyframes (
     keyframe_id    TEXT PRIMARY KEY,          -- {video_id}#{frame_idx:06d}
     video_id       TEXT    NOT NULL REFERENCES videos(video_id),
     keyframe_index INTEGER NOT NULL CHECK (keyframe_index >= 0),  -- ordinal n, names the image file
-    -- frame_idx and pts_time come straight from map-keyframes/{video_id}.csv and
-    -- are NEVER computed: round(pts_time*fps) was wrong on 83-93% of 29.97fps
-    -- rows (docs/00 §3, adr/0002). Both stored because BTC has not fixed which
-    -- the submission uses (TO_CONFIRM).
+    -- frame_idx and pts_time come straight from map-keyframes/{video_id}.csv:
+    -- every catalogue row has them, so copying beats computing. The banned
+    -- function is round(pts_time*fps), wrong on 83-93% of 29.97fps rows;
+    -- floor(pts_time*fps) is 100% exact and is how a frame OUTSIDE the
+    -- catalogue gets its id (CLAUDE.md §2). Both columns stored because BTC has
+    -- not fixed which the submission uses (TO_CONFIRM).
     frame_idx      INTEGER NOT NULL CHECK (frame_idx >= 0),       -- real source-video frame
     pts_time       REAL    NOT NULL CHECK (pts_time >= 0),        -- seconds
     timestamp_ms   INTEGER NOT NULL CHECK (timestamp_ms >= 0),    -- pts_time * 1000

@@ -58,8 +58,10 @@ _TOKEN = re.compile(r"\w+", re.UNICODE)
 def ordinal_to_frame(maps: Path) -> dict[tuple[str, int], int]:
     """`{(video_id, n): frame_idx}` đọc từ map-keyframes.
 
-    Đọc từ CSV, **không** tính lại từ `pts_time × fps`: sai 83–93% số dòng ở
-    video 29,97fps (CLAUDE.md §2).
+    Đọc từ CSV vì hàm này đi theo chiều `n -> frame_idx`, mà `n` thì chỉ
+    `map-keyframes` nối được — không công thức nào suy ra. Đây KHÔNG phải lệnh
+    cấm tính `frame_idx`: `floor(pts_time × fps)` đúng 100%, chỉ `round` mới sai
+    83–93% ở video 29,97fps (CLAUDE.md §2).
     """
     table: dict[tuple[str, int], int] = {}
     for path in sorted(maps.glob("*.csv")):

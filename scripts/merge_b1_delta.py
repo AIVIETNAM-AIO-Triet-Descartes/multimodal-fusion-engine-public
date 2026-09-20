@@ -17,8 +17,21 @@ là giống nhau.
 
 `objects_text.json` và `audio_features.npz` chỉ có ở B0 và được chép nguyên: các
 keyframe B1 đơn giản là không có hàng trong hai nguồn đó, y hệt cách một khung
-không có chữ thì không có hàng OCR. Arm `object` đang trọng số 0,0 và `clap`
-đang tắt, nên chúng không tham gia phép so.
+không có chữ thì không có hàng OCR.
+
+⚠ Lý do cũ ở đây ghi "arm `object` đang trọng số 0,0 nên không tham gia phép so"
+— **hết đúng từ 28-08**: leo dốc trên kho 12 arm đã đảo `object` lên **0,5**.
+`clap` thì vẫn 0,0. Nên phép so B0/B1 KHÔNG còn trung tính với arm `object`:
+5.301 khung delta không nhận rank từ nó, còn khung B0 thì có. Kết luận vẫn giữ
+(xem `docs/task/quyet-dinh-object-coverage-thua.md`), nhưng giữ vì đã đo chứ
+không phải vì trọng số bằng 0:
+
+  - `object` đóng tối đa `0,5/61 = 0,0082`, tức 5,9% trần điểm hợp nhất;
+  - và 8.698 khung B0 (4,92%) VỐN ĐÃ không có object text, nên coverage thưa là
+    hiện trạng của cả hai phía chứ không phải đặc thù của delta.
+
+Sau khi gộp, `stores/flat_b1` có 182.008 khung nhưng vẫn chỉ 168.009 hàng object
+— thiếu 13.999 (7,69%). Đừng đọc con số đó thành lỗi gộp.
 """
 
 from __future__ import annotations

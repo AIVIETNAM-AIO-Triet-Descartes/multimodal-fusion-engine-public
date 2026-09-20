@@ -184,13 +184,20 @@ def pts_time_to_timestamp_ms(pts_time: float) -> int:
 
     ``timestamp_ms = round(pts_time * 1000)``
 
-    This is the *only* time conversion the contract sanctions, and it is exact
-    up to float representation — seconds to milliseconds, no fps involved.
+    This conversion is exact up to float representation — seconds to
+    milliseconds, no fps involved.
 
-    What is **forbidden** (docs/00 §3, docs/adr/0002-id-format.md): deriving
-    `frame_idx` from `pts_time` and `fps`, or vice versa. Both come straight from
-    `map-keyframes/{video_id}.csv`. `round(pts_time * fps)` disagreed with the
-    dataset on 83-93% of 29.97fps rows.
+    What is forbidden is **`round(pts_time * fps)`**, which disagreed with the
+    dataset on 83-93% of 29.97fps rows. It is the rounding function that is
+    wrong, not the formula: `floor(pts_time * fps)` is 100% exact on every row
+    (see the module docstring, and `frame_idx_from_pts` above, which is the
+    sanctioned way to compute a `frame_idx` for a frame outside the BTC
+    catalogue). Prefer the CSV when the row exists — it is the cheaper and
+    more obvious source — but computing is not a contract violation.
+
+    An earlier version of this docstring banned the formula outright and cited
+    `docs/00 §3` / `docs/adr/0002-id-format.md`; both documents are deleted, and
+    the ban contradicted lines 36-45 of this same module.
 
     >>> pts_time_to_timestamp_ms(3.0)
     3000

@@ -71,8 +71,12 @@ class KeyframeRow(_Record):
         ge=0,
         description="Ordinal n; names the BTC image file and backs rank windows. NOT the key.",
     )
-    frame_idx: int = Field(ge=0, description="Real source-video frame, from CSV — never computed")
-    pts_time: float = Field(ge=0, description="Seconds, from CSV — never computed")
+    frame_idx: int = Field(
+        ge=0,
+        description="Real source-video frame; copied from CSV — this row only ever "
+        "describes a BTC catalogue keyframe, which always has one",
+    )
+    pts_time: float = Field(ge=0, description="Seconds, copied from CSV")
     timestamp_ms: int = Field(ge=0, description="pts_time * 1000")
     shot_id: str | None = Field(default=None, description="Optional in Sprint 1")
 

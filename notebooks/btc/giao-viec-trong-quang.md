@@ -91,8 +91,11 @@ Notebook đã làm đúng những điều dưới đây; ghi ra để khi đọc
 keyframe_id = {video_id}#{frame_idx:06d}        ví dụ  L21_V001#037716
 ```
 
-`frame_idx` là **frame của video gốc**, và nó được **copy** từ cột `frame_idx` trong
-`map-keyframes/{video_id}.csv` của BTC — không bao giờ tính lại từ `pts_time × fps`.
+`frame_idx` là **frame của video gốc**, và với keyframe của BTC thì nó được **copy**
+từ cột `frame_idx` trong `map-keyframes/{video_id}.csv` — có sẵn thì đừng tính lại.
+Với khung **tự trích** (không có dòng trong CSV) thì dùng `floor(pts_time × fps)`,
+đúng 100% trên cả 177.321 dòng. Tuyệt đối không dùng `round` — sai 83–93% ở video
+29,97 fps.
 
 Số thứ tự keyframe `n` (1, 2, 3…) là thuộc tính của **lần trích**, không phải của video. Dùng `n`
 làm khoá thì hai bộ keyframe khác nhau cho ra cùng một khoá trỏ vào hai frame khác nhau — và không
