@@ -41,17 +41,36 @@ logger = logging.getLogger(__name__)
 #: Elasticsearch caps `size`; the store itself refuses top_k > 500.
 _MAX_TOP_K = 500
 
-#: `arm name -> (source, phrase)`. Order is display order in the browser.
-TEXT_ARM_SPECS: dict[str, tuple[str, bool]] = {
-    "subtitle_exact": ("subtitle", True),
-    "subtitle_partial": ("subtitle", False),
-    "ocr": ("ocr", False),
-    "ocr_paddle": ("ocr_paddle", False),
-    "ocr_vietocr": ("ocr_vietocr", False),
-    "object": ("object", False),
-    "caption": ("caption", False),
-    "caption_qwen": ("caption_qwen", False),
-    "ocr_qwen25": ("ocr_qwen25", False),
+#: `arm name -> (source, phrase, query_language)`. Order is display order.
+#:
+#: ⚠ Cột thứ BA thêm 21-09-2026, và nó sửa một lỗi im lặng có trọng số 1,0.
+#:
+#: Trước đó bảng này chỉ có `(source, phrase)`, nên **không có cách nào khai ngôn
+#: ngữ** và mọi arm văn bản nhận mặc định `"vi"` của dataclass `Arm`. Nhưng
+#: `caption_qwen` đọc `qwen_captions.json` — nửa `[CAPTION]`, **viết tiếng Anh**
+#: theo đúng quyết định 25-08. Nên một arm chỉ mục tiếng Anh đã bị tìm bằng truy
+#: vấn tiếng Việt suốt từ đó.
+#:
+#: Người viết BIẾT điều này: `_DESCRIPTIONS["caption_qwen"]` ghi thẳng "cần bản
+#: dịch truy vấn", và CLAUDE.md §4 ghi arm này "dùng truy vấn đã dịch". Cả hai
+#: mô tả một hành vi mà cơ chế khai báo không cho phép nói ra.
+#:
+#: Đây đúng lớp lỗi §5 đã trả giá: "dịch một chuỗi rồi tìm bằng chuỗi khác" —
+#: lần trước kéo `siglip` từ 34/42 xuống 31/42.
+TEXT_ARM_SPECS: dict[str, tuple[str, bool, str]] = {
+    # Phụ đề là tiếng Việt -> truy vấn tiếng Việt. Đúng sẵn.
+    "subtitle_exact": ("subtitle", True, "vi"),
+    "subtitle_partial": ("subtitle", False, "vi"),
+    # OCR chép chữ trên màn hình, phần lớn tiếng Việt, và prompt CẤM dịch nửa này.
+    "ocr": ("ocr", False, "vi"),
+    "ocr_paddle": ("ocr_paddle", False, "vi"),
+    "ocr_vietocr": ("ocr_vietocr", False, "vi"),
+    "ocr_qwen25": ("ocr_qwen25", False, "vi"),
+    # Nhãn vật thể đã dịch sang tiếng Việt lúc dựng chỉ mục (`labels_vi`).
+    "object": ("object", False, "vi"),
+    # Hai arm caption: chỉ mục TIẾNG ANH, nên phải ăn bản dịch.
+    "caption": ("caption", False, "en"),
+    "caption_qwen": ("caption_qwen", False, "en"),
 }
 
 _DESCRIPTIONS = {
@@ -106,7 +125,7 @@ def build_text_arms(
     enabled = enabled or {}
     arms: list[Arm] = []
 
-    for arm_name, (source, phrase) in TEXT_ARM_SPECS.items():
+    for arm_name, (source, phrase, lang) in TEXT_ARM_SPECS.items():
         if text_store is None:
             arms.append(
                 Arm(
@@ -114,6 +133,7 @@ def build_text_arms(
                     weight=float(weights.get(arm_name, 1.0)),
                     unavailable_reason="Elasticsearch text store not configured",
                     description=_DESCRIPTIONS[arm_name],
+                    query_language=lang,
                 )
             )
             continue
@@ -131,6 +151,7 @@ def build_text_arms(
                 weight=float(weights.get(arm_name, 1.0)),
                 enabled=bool(enabled.get(arm_name, True)),
                 description=_DESCRIPTIONS[arm_name],
+                query_language=lang,
             )
         )
 

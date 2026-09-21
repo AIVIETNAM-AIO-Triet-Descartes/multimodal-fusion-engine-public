@@ -1,0 +1,226 @@
+"""Cổng API tương thích OpenAI của Đạt (`llm-gateway.invalid`) — dùng chung cho mọi tầng gọi API.
+
+Vì sao có file này thay vì mỗi tầng tự gọi
+-------------------------------------------
+Ba tầng cần LLM — `translate`, `quest`, `rerank_tiers.VlmTier` — và trước đây mỗi
+tầng nối một nhà cung cấp riêng: NVIDIA NIM, OpenRouter, Gemini trực tiếp. Mỗi
+nhà cung cấp là một hạn mức riêng, một dạng lỗi riêng, một chỗ hỏng im lặng riêng.
+`gemini-3.6-flash` free tier cho **20 request MỖI NGÀY** và đó là lý do thật của
+hai lượt đo `vlm` dở dang (§4 CLAUDE.md).
+
+Cổng của Đạt xoay vòng usage qua nhiều tài khoản nên trần cao hơn hẳn. Đo 20-09
+trên 800 lượt gọi liên tiếp: **0 lỗi**.
+
+Ba cái bẫy đã trả giá khi nối cổng này — đừng gỡ ra
+----------------------------------------------------
+**1. KHÔNG có `User-Agent` thì Cloudflare chặn 403 `error code: 1010`.** Không
+phải lỗi khoá. `urllib` trần không tự đặt UA nên bị chặn; `curl` thì qua. Đây là
+lỗi theo *chữ ký client*, và nó không nói gì về API.
+
+**2. `401 "Missing or invalid API key"` thường là khoá KHÔNG được nạp.**
+`load_dotenv()` tìm `.env` đi lên từ **thư mục của file gọi**, không phải cwd —
+một script ngoài cây repo sẽ nhận `None` và gửi đi header `Bearer None`. Thông
+báo lỗi đổ tội cho khoá trong khi khoá vô can. Cùng lớp lỗi với
+`mfe.eval.official` quên nạp `.env` (§5).
+
+**3. `503` kèm `[403] ... (reset after 1m 52s)` là MỘT TÀI KHOẢN thượng nguồn
+cạn, không phải cổng chết.** Pool sẽ xoay sang tài khoản khác. Phải thử lại chứ
+đừng coi là hỏng — nếu không thì một lượt ingest sẽ bỏ khung một cách im lặng.
+"""
+
+from __future__ import annotations
+
+import base64
+import json
+import logging
+import os
+import time
+import urllib.error
+import urllib.request
+from dataclasses import dataclass
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+ENV_KEY = "TRAMMAY_API_KEY"
+ENV_BASE = "MFE_TRAMMAY_BASE_URL"
+ENV_MODEL = "MFE_TRAMMAY_MODEL"
+
+DEFAULT_BASE = "https://llm-gateway.invalid/v1"
+#: Đo 20-09 trên 200 ảnh: caption có động từ ở 90,2%, 0 lỗi trên 800 lượt.
+DEFAULT_MODEL = "ag/gemini-3.8-flash"
+
+#: Cloudflare chặn client không có UA bằng `error code: 1010`. Giá trị cụ thể
+#: không quan trọng — sự CÓ MẶT của header mới quan trọng.
+USER_AGENT = "mfe/1.0 (+https://llm-gateway.invalid)"
+
+#: Mã đáng thử lại, gộp hai nhóm rất khác nhau:
+#:
+#: **5xx thường** (500, 502, 503, 504) — `503` của cổng này kèm chuỗi
+#: `[403] ... (reset after 1m 52s)`, tức một tài khoản thượng nguồn vừa cạn và
+#: pool sẽ xoay sang tài khoản khác. Không phải cổng chết.
+#:
+#: **5xx của Cloudflare** (520–527) — `520 "error code: 520"` là lỗi gateway tạm
+#: thời giữa Cloudflare và origin, **không** nói gì về khoá hay về request.
+#: Thiếu nhóm này trong bảng đã làm một lượt dịch 163 câu chết ở câu ~92 sau khi
+#: đã chạy trơn 800 lượt trước đó.
+RETRY_CODES = frozenset({429, 500, 502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 527})
+
+
+class TrammayError(RuntimeError):
+    """Gọi thất bại sau khi đã thử lại hết lượt."""
+
+
+@dataclass(frozen=True)
+class TrammayClient:
+    """Client tối giản cho cổng. Không phụ thuộc SDK `openai`.
+
+    Cố ý dùng `urllib` thay vì `openai`: gói đó **không có trong venv** và chính
+    sự vắng mặt của nó đã làm hai trong ba nhà cung cấp của `quest` biến mất im
+    lặng (§5). Một phụ thuộc không bắt buộc là một tầng có thể biến mất.
+    """
+
+    api_key: str
+    base_url: str = DEFAULT_BASE
+    model: str = DEFAULT_MODEL
+    timeout: int = 180
+    #: 4 chứ không 3, và giãn cách dài hơn — xem `_post`.
+    max_retries: int = 4
+
+    @classmethod
+    def from_env(cls, **kwargs) -> TrammayClient | None:
+        """Client đọc từ `.env`, hoặc None khi chưa có khoá.
+
+        Trả None chứ không ném: người gọi hỏi `available()` để biết **vì sao**.
+        """
+        key = os.getenv(ENV_KEY)
+        if not key:
+            return None
+        return cls(
+            api_key=key,
+            base_url=os.getenv(ENV_BASE) or DEFAULT_BASE,
+            model=os.getenv(ENV_MODEL) or DEFAULT_MODEL,
+            **kwargs,
+        )
+
+    def _headers(self) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            # Bỏ dòng này là ăn 403 `error code: 1010` từ Cloudflare.
+            "User-Agent": USER_AGENT,
+        }
+
+    def _post(self, payload: dict) -> dict:
+        body = json.dumps(payload).encode()
+        cuoi: Exception | None = None
+        for lan in range(self.max_retries):
+            req = urllib.request.Request(
+                f"{self.base_url}/chat/completions",
+                data=body,
+                headers=self._headers(),
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                    return json.loads(r.read())
+            except urllib.error.HTTPError as e:
+                chi_tiet = e.read().decode("utf-8", "replace")[:200]
+                cuoi = TrammayError(f"HTTP {e.code}: {chi_tiet}")
+                if e.code not in RETRY_CODES:
+                    raise cuoi from e
+                logger.warning(
+                    "trammay HTTP %s (lần %d/%d), thử lại: %s",
+                    e.code, lan + 1, self.max_retries, chi_tiet,
+                )
+            except Exception as e:  # noqa: BLE001 — timeout, DNS, reset
+                cuoi = e
+                logger.warning(
+                    "trammay %s (lần %d/%d), thử lại", type(e).__name__, lan + 1, self.max_retries
+                )
+            if lan + 1 < self.max_retries:
+                # Giãn cách 2·2^n (2s · 4s · 8s), KHÔNG phải 2^n (1s · 2s).
+                #
+                # Đo 21-09: ở 30 luồng, cổng trả `EOF occurred in violation of
+                # protocol` và `RemoteDisconnected` hàng loạt — đứt ở tầng TLS
+                # chứ không phải HTTP, tức bị chặn ở mức KẾT NỐI. Ở 16 luồng thì
+                # 800/800 lượt sạch. Lùi 1s là cả 30 luồng cùng đập lại một lúc
+                # vào đúng thứ vừa từ chối chúng.
+                time.sleep(2 * (2**lan))
+        raise TrammayError(f"thất bại sau {self.max_retries} lần: {cuoi}")
+
+    def chat(
+        self,
+        prompt: str,
+        *,
+        images: list[Path | str] | None = None,
+        model: str | None = None,
+        max_tokens: int = 512,
+        temperature: float = 0.0,
+    ) -> str:
+        """Một lượt hỏi. `images` biến nó thành lượt hỏi thị giác."""
+        noi_dung: list[dict] = [{"type": "text", "text": prompt}]
+        for p in images or []:
+            b64 = base64.b64encode(Path(p).read_bytes()).decode()
+            noi_dung.append(
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
+            )
+        payload = {
+            "model": model or self.model,
+            "messages": [{"role": "user", "content": noi_dung}],
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        d = self._post(payload)
+        try:
+            return d["choices"][0]["message"]["content"].strip()
+        except (KeyError, IndexError, TypeError) as e:
+            raise TrammayError(f"hình dạng trả về lạ: {json.dumps(d)[:200]}") from e
+
+    def models(self) -> list[str]:
+        req = urllib.request.Request(f"{self.base_url}/models", headers=self._headers())
+        with urllib.request.urlopen(req, timeout=self.timeout) as r:
+            return [m.get("id", "") for m in json.loads(r.read()).get("data", [])]
+
+
+def available() -> tuple[bool, str]:
+    """`(dùng được, vì sao không)` — bắt buộc với mọi lớp bọc API (§5).
+
+    `QuestClient` từng bọc `from openai import OpenAI` trong `try/except
+    ImportError: pass`, và vì `openai` không có trong venv nên hai trong ba nhà
+    cung cấp **không tồn tại mà không dòng log nào nói ra**.
+    """
+    if not os.getenv(ENV_KEY):
+        return False, f"chưa có {ENV_KEY} trong môi trường (kiểm .env)"
+    return True, ""
+
+
+#: Chỉ dẫn dịch. Ràng "CHỈ trả bản dịch" vì tầng gọi lấy nguyên chuỗi trả về làm
+#: truy vấn — một câu rào đầu kiểu "Sure, here is..." sẽ đi thẳng vào BM25.
+_TRANSLATE_PROMPT = (
+    "Translate this Vietnamese video-search query into natural English.\n"
+    "It describes a scene in a video. Keep every visual detail: colours, counts, "
+    "positions, actions, and any on-screen text.\n"
+    "Reply with ONLY the English translation — no quotes, no preamble, no notes.\n\n"
+    "Vietnamese: {text}\nEnglish:"
+)
+
+
+def translate_backend(client: TrammayClient | None = None, model: str | None = None):
+    """`TranslationBackend` cho tầng `llm` của `mfe.online.translate`.
+
+    Nối vào qua `build_translator(config, extra_backends={"llm": ...})` — đúng
+    điểm mở rộng mà `translate.py` đã chừa sẵn, nên module đó không phải biết
+    một client API nào tồn tại.
+    """
+    from mfe.online.translate import callable_backend  # noqa: PLC0415
+
+    c = client or TrammayClient.from_env()
+    if c is None:
+        raise TrammayError(available()[1])
+    ten = model or c.model
+
+    def _dich(text: str) -> str:
+        return c.chat(_TRANSLATE_PROMPT.format(text=text), model=ten, max_tokens=256)
+
+    return callable_backend(f"trammay:{ten}", _dich)

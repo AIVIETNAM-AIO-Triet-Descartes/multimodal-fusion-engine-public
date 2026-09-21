@@ -19,6 +19,7 @@ import pytest
 
 from mfe.offline.caption_audit import (
     audit,
+    count_relation_stems,
     format_audit,
     has_banned_opener,
     has_camera,
@@ -287,3 +288,67 @@ class TestCumLapMoiLaStopword:
     def test_hut_van_duoc_goi_ten(self):
         out = format_audit({**self.BASE, "quan_he": 0.2}, "x")
         assert "HỤT" in out
+
+
+class TestDemGocDongTuKhacNhau:
+    """`count_relation_stems` — hàng thay cho `has_relation` khi SO SÁNH hai bộ.
+
+    Lý do tồn tại, đo 21-09-2026 trên 200 keyframe: hàng có/không gần như không
+    phân biệt được gì (66,0% · 62,5% · 71,5%), trong khi hàng ≥3 gốc giãn 4,3 lần
+    (4,5% · 10,0% · 19,5%).
+    """
+
+    def test_lap_MOT_dong_tu_van_chi_tinh_mot_goc(self):
+        """Đây là cả lý do hàm này tồn tại.
+
+        Hai caption dưới đây bằng điểm nhau theo `has_relation`, nhưng caption
+        đầu chỉ nói một hành động lặp ba lần.
+        """
+        lap = "a man holding a bag, a woman holding a cup, a boy holding a pen"
+        da_dang = "a man holds a bag while a woman passes a cup and a boy points at it"
+        assert has_relation(lap) and has_relation(da_dang)
+        assert count_relation_stems(lap) == 1
+        assert count_relation_stems(da_dang) >= 3
+
+    def test_khong_co_dong_tu_thi_bang_khong(self):
+        assert count_relation_stems("a man, a green hose, and several potted plants") == 0
+        assert count_relation_stems("") == 0
+
+    def test_DANH_TU_trung_dong_tu_van_khong_duoc_tinh(self):
+        """Thừa hưởng đúng luật của `_contains_verb`: dạng gốc trần không tính.
+
+        `water`/`tie`/`hand` ở đây là nước, cà vạt, bàn tay — từng thổi `quan hệ`
+        lên 71,3% trên caption của Bảo.
+        """
+        assert count_relation_stems("brown water, a red tie and a hand") == 0
+
+    def test_audit_in_ra_du_bon_hang_moi(self):
+        bao_cao = audit(
+            [
+                ("a man holds a bag while a woman passes a cup", ""),
+                ("a table, a chair and a lamp", ""),
+            ]
+        )
+        assert bao_cao["quan_he"] == pytest.approx(0.5)
+        assert bao_cao["quan_he_2goc"] == pytest.approx(0.5)
+        assert bao_cao["quan_he_goc_tb"] == pytest.approx(1.0)
+        assert bao_cao["quan_he_mat_do"] > 0
+
+    def test_mat_do_phat_caption_DAI_ma_khong_dac_hon(self):
+        """Hai caption cùng 2 gốc; bản dài phải có mật độ THẤP hơn.
+
+        Đây là hàng tách được "nhiều động từ vì tả nhiều hành động" khỏi "nhiều
+        động từ vì viết dài" — thứ đã làm `sota_v2` trông như thắng.
+        """
+        ngan = "a man holds a bag and passes a cup"
+        dai = ngan + " " + " ".join(["a blue plastic chair stands nearby"] * 6)
+        assert count_relation_stems(ngan) == count_relation_stems(dai)
+        bc_ngan = audit([(ngan, "")])
+        bc_dai = audit([(dai, "")])
+        assert bc_dai["quan_he_mat_do"] < bc_ngan["quan_he_mat_do"]
+
+    def test_format_audit_neu_ten_hang_phan_biet_tot_nhat(self):
+        bao_cao = audit([("a man holds a bag while a woman passes a cup", "")])
+        out = format_audit(bao_cao, "x")
+        assert "≥3 gốc động từ" in out
+        assert "gốc/100 token" in out

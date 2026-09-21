@@ -369,7 +369,7 @@ def build_flat_text_arms(bundle: FlatBundle, weights=None, enabled=None) -> list
     weights = weights or {}
     enabled = enabled or {}
     arms: list[Arm] = []
-    for name, (source, is_phrase) in TEXT_ARM_SPECS.items():
+    for name, (source, is_phrase, lang) in TEXT_ARM_SPECS.items():
         if source not in bundle.texts:
             arms.append(
                 Arm(
@@ -380,6 +380,7 @@ def build_flat_text_arms(bundle: FlatBundle, weights=None, enabled=None) -> list
                     unavailable_reason=bundle.missing.get(
                         source, f"khong co nguon {source} trong ban gop"
                     ),
+                    query_language=lang,
                 )
             )
             continue
@@ -424,6 +425,7 @@ def build_flat_text_arms(bundle: FlatBundle, weights=None, enabled=None) -> list
                 weight=float(weights.get(name, 1.0)),
                 enabled=bool(enabled.get(name, True)),
                 description=f"{'khop cum' if is_phrase else 'BM25'} tren `{source}` (ban gop)",
+                query_language=lang,
             )
         )
     return arms

@@ -267,6 +267,28 @@ def has_relation(caption: str) -> bool:
     return any(_contains_verb(folded, stem) for stem in RELATION_STEMS_EN)
 
 
+def count_relation_stems(caption: str) -> int:
+    """Đếm **số gốc động từ KHÁC NHAU** khớp được, không phải số lần khớp.
+
+    Vì sao cần, đo 21-09-2026 trên 200 keyframe (`scratchpad/so_cap_mcnemar.py`):
+    `has_relation` chỉ trả có/không, nên một caption lặp `holding` ba lần bằng
+    điểm một caption viết `holds / passes / points`. Hàng có/không gần như không
+    phân biệt được gì — Qwen 66,0% · Gemini+aic 62,5% · Gemini+sota_v2 71,5% —
+    trong khi hàng **≥3 gốc** giãn ra **4,3 lần**: 4,5% · 10,0% · 19,5%.
+
+    Và nó **không bão hoà được** như `mau`/`vi_tri` (cả hai chạm 100% ở Gemini):
+    muốn đạt 3 gốc khác nhau thì caption phải thật sự nói ba hành động khác nhau.
+
+    Riêng `hold` chiếm 24–34% số caption ở cả ba bộ — nên đọc một mình `has_relation`
+    gần như là đọc "caption có chữ *holding* không".
+    """
+    folded = _fold(caption)
+    n = sum(1 for word in RELATION_VERBS_VI if _contains_word(folded, word))
+    n += sum(1 for word in RELATION_IRREGULAR_EN if _contains_word(folded, word))
+    n += sum(1 for stem in RELATION_STEMS_EN if _contains_verb(folded, stem))
+    return n
+
+
 def has_banned_opener(caption: str) -> bool:
     folded = _fold(caption).lstrip("(\"' ")
     return any(folded.startswith(opener) for opener in BANNED_OPENERS)
@@ -308,6 +330,18 @@ def audit(pairs) -> dict:
         "vi_tri": sum(map(has_position, captions)) / total,
         "goc_may": sum(map(has_camera, captions)) / total,
         "quan_he": sum(map(has_relation, captions)) / total,
+        # Ba hàng dưới thay hàng có/không ở trên khi cần SO SÁNH hai bộ caption.
+        # `quan_he` một mình gần như không phân biệt được gì (xem
+        # `count_relation_stems`), còn `quan_he_3goc` giãn gấp 4 lần.
+        "quan_he_2goc": sum(1 for c in captions if count_relation_stems(c) >= 2) / total,
+        "quan_he_3goc": sum(1 for c in captions if count_relation_stems(c) >= 3) / total,
+        "quan_he_goc_tb": statistics.mean(map(count_relation_stems, captions)),
+        # Mật độ tách được "nhiều động từ vì tả nhiều hành động" khỏi "nhiều động
+        # từ vì viết dài". `sota_v2` có nhiều gốc hơn nhưng mật độ THẤP hơn
+        # (1,04 so với 1,27/100 token) — nó dài hơn chứ không đặc hơn.
+        "quan_he_mat_do": statistics.mean(
+            count_relation_stems(c) / max(1, len(_TOKEN.findall(c))) * 100 for c in captions
+        ),
         "mo_dau_cam": sum(map(has_banned_opener, captions)) / total,
         "tieng_viet": sum(map(looks_vietnamese, captions)) / total,
         "caption_token_trung_vi": statistics.median(
@@ -433,6 +467,14 @@ def format_audit(report: dict, label: str = "") -> str:
         have, want = report[key], QUERY_DEMAND[key]
         lines.append(f"  {name:<22}{have:>11.1%}{want:>11.1%}   {_verdict(have, want)}")
     lines += [
+        "",
+        "  --- quan hệ, đọc kỹ hơn: hàng có/không ở trên KHÔNG phân biệt được ---",
+        f"  ≥2 gốc động từ      {report.get('quan_he_2goc', 0):>11.1%}",
+        f"  ≥3 gốc động từ      {report.get('quan_he_3goc', 0):>11.1%}   "
+        f"(hàng phân biệt tốt nhất)",
+        f"  số gốc TB           {report.get('quan_he_goc_tb', 0):>11.2f}",
+        f"  gốc/100 token       {report.get('quan_he_mat_do', 0):>11.2f}   "
+        f"(thấp mà ≥3 gốc cao = chỉ dài hơn, không đặc hơn)",
         "",
         f"  tiếng Việt          {report['tieng_viet']:>11.1%}",
         f"  mở đầu bị cấm       {report['mo_dau_cam']:>11.1%}   (càng thấp càng tốt)",

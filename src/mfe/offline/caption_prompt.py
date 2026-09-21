@@ -292,9 +292,52 @@ Now do exactly the same for the frame you are given."""
 _QWEN25_PROMPT_SOTA_V2 = f"{_QWEN25_INSTRUCTION_SOTA_V2}\n\n{_QWEN25_FEWSHOT_SOTA_V2}"
 
 #: `ten bien the -> (prompt, max_tokens mac dinh)`.
+#: Prompt "SOTA V5" — Bảo tinh chỉnh trên Gemini 3.8 qua cổng Trammay, chép
+#: nguyên văn từ `notebooks/reference/Final_caption_frame.ipynb` (20-09-2026).
+#:
+#: Đo 20-09 trên 200 keyframe, cùng thước `caption_audit`, so với ba bản cũ:
+#:
+#:                     >=3 goc   so goc TB   goc/100 token   do dai
+#:   Qwen+aic             5,0%        0,97            1,28       72
+#:   Gemini+aic          10,0%        1,12            1,27       86
+#:   Gemini+sota_v2      19,5%        1,48            1,04      132
+#:   Gemini+V5           49,7%        2,56            1,32      185
+#:
+#: McNemar trên `>=3 gốc`, V5 so với cả ba: **p = 0,0000**. Và nó là bản duy nhất
+#: mà mật độ (gốc/100 token) cũng CAO NHẤT — `sota_v2` được nhiều động từ nhờ
+#: viết dài (mật độ tụt còn 1,04), V5 thì vừa dài vừa đặc.
+#:
+#: MỘT KHỐI, không tách `[TEXT]`. Đó là chủ ý của Bảo: chữ trên màn hình chỉ được
+#: chép khi nó **liên quan tới bối cảnh khung hình** — bảng nguyên liệu, công
+#: thức, giá tiền, bảng điểm — còn logo kênh và dòng chạy tin thì bỏ. Đo lại
+#: phần chữ đó: nó chỉ chiếm **trung vị 1,8% token** của caption, và bỏ hết đi
+#: thì `>=3 gốc` chỉ tụt 49,7% -> 46,4%. Tức phần mô tả thị giác tự nó đã mạnh.
+#:
+#: ⚠ `max_tokens` 1258 của bản gốc làm **8,5% lượt gọi timeout** (17/200
+#: `URLError`). Mặc định ở đây hạ xuống 768; đo lại tỉ lệ hỏng trước khi nâng.
+_V5_BAO = """You are an expert visual describer. Create an EXHAUSTIVELY DETAILED Dense Caption for this single frame from a Vietnamese television video.
+
+Return EXACTLY ONE block:
+[FINAL_CAPTION]
+
+RULES:
+1. EXHAUSTIVE DETAIL & RELATIONSHIPS: Write as many sentences as needed. Identify every visible object with precise quantities, exact colors, attire, and physical traits. Describe spatial and action relationships using strong verbs and prepositions (e.g., "A man in a blue shirt is handing a brown package to a woman standing behind a wooden counter"). Do not just list objects.
+
+2. CAMERA ANGLES: Mention the camera angle (aerial, low angle, POV from inside vehicle, close-up, etc.) ONLY if it is unusual or noteworthy. Do not mention standard eye-level shots.
+
+3. IDENTIFYING LOCATIONS/LANDMARKS: Name famous landmarks ONLY if you are 100% certain (e.g., Landmark 81, Bitexco Tower). Otherwise, describe what you see without guessing.
+
+4. ON-SCREEN TEXT HANDLING (CRITICAL):
+   - IGNORE ONLY these two categories: (a) TV channel logos/watermarks (e.g., "HTV9", "HTV", "VTV", "Online") and (b) scrolling news ticker bars running along the bottom edge of the screen that contain unrelated headlines.
+   - READ AND TRANSCRIBE EVERYTHING ELSE that appears as text or numbers on-screen. This includes but is not limited to: ingredient lists, recipe measurements, menu charts, instructional captions, price tags, scoreboards, subtitles describing the scene, street signs, vehicle labels, banners, documents, T-shirt prints, and any other informational text overlay that is relevant to the content of the frame. Copy this text verbatim.
+
+5. FORMAT: Do not start with "The image shows" or similar. Start directly with the subject. Write in ENGLISH."""  # noqa: E501
+
+#: `ten bien the -> (prompt, max_tokens mac dinh)`.
 PROMPT_VARIANTS: dict[str, tuple[str, int]] = {
     "bao": (_QWEN25_PROMPT_BAO, 256),
     "aic": (_QWEN25_PROMPT_AIC, 384),
     "sota": (_QWEN25_PROMPT_SOTA, 768),
     "sota_v2": (_QWEN25_PROMPT_SOTA_V2, 768),
+    "v5_bao": (_V5_BAO, 768),
 }
