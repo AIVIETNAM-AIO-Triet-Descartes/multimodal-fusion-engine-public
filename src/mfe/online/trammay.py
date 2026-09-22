@@ -34,6 +34,7 @@ import base64
 import json
 import logging
 import os
+import random
 import time
 import urllib.error
 import urllib.request
@@ -111,12 +112,13 @@ class TrammayClient:
             "User-Agent": USER_AGENT,
         }
 
-    def _post(self, payload: dict) -> dict:
+    def _post(self, payload: dict, *, endpoint: str = "/chat/completions") -> dict:
         body = json.dumps(payload).encode()
         cuoi: Exception | None = None
         for lan in range(self.max_retries):
+            retry_after: float | None = None
             req = urllib.request.Request(
-                f"{self.base_url}/chat/completions",
+                f"{self.base_url}{endpoint}",
                 data=body,
                 headers=self._headers(),
                 method="POST",
@@ -129,6 +131,10 @@ class TrammayClient:
                 cuoi = TrammayError(f"HTTP {e.code}: {chi_tiet}")
                 if e.code not in RETRY_CODES:
                     raise cuoi from e
+                try:
+                    retry_after = float((getattr(e, "headers", None) or {}).get("Retry-After", ""))
+                except (TypeError, ValueError):
+                    retry_after = None
                 logger.warning(
                     "trammay HTTP %s (lần %d/%d), thử lại: %s",
                     e.code, lan + 1, self.max_retries, chi_tiet,
@@ -139,14 +145,10 @@ class TrammayClient:
                     "trammay %s (lần %d/%d), thử lại", type(e).__name__, lan + 1, self.max_retries
                 )
             if lan + 1 < self.max_retries:
-                # Giãn cách 2·2^n (2s · 4s · 8s), KHÔNG phải 2^n (1s · 2s).
-                #
-                # Đo 21-09: ở 30 luồng, cổng trả `EOF occurred in violation of
-                # protocol` và `RemoteDisconnected` hàng loạt — đứt ở tầng TLS
-                # chứ không phải HTTP, tức bị chặn ở mức KẾT NỐI. Ở 16 luồng thì
-                # 800/800 lượt sạch. Lùi 1s là cả 30 luồng cùng đập lại một lúc
-                # vào đúng thứ vừa từ chối chúng.
-                time.sleep(2 * (2**lan))
+                # Tôn trọng Retry-After của gateway/provider; jitter tránh việc
+                # sáu worker cùng thức dậy và gửi lại đúng một thời điểm.
+                delay = max(2.0 * (2**lan), retry_after or 0.0)
+                time.sleep(min(delay, 120.0) + random.uniform(0.0, 1.0))
         raise TrammayError(f"thất bại sau {self.max_retries} lần: {cuoi}")
 
     def chat(
@@ -176,6 +178,67 @@ class TrammayClient:
             return d["choices"][0]["message"]["content"].strip()
         except (KeyError, IndexError, TypeError) as e:
             raise TrammayError(f"hình dạng trả về lạ: {json.dumps(d)[:200]}") from e
+
+    def chat_batch(
+        self,
+        items: list[dict],
+        *,
+        model: str | None = None,
+        max_tokens: int = 2048,
+        temperature: float = 0.0,
+    ) -> dict[str, str]:
+        """Caption nhiều ảnh trong một request.
+
+        ``items`` có dạng ``{"id": str, "prompt": str, "images": [Path]}``.
+        Gateway trả ``data`` gồm đúng các id đó; kiểm tra nghiêm ngặt để không
+        gắn nhầm caption sang frame khác khi model trả thiếu/trùng item.
+        """
+        if not items:
+            return {}
+
+        requests = []
+        expected: list[str] = []
+        seen: set[str] = set()
+        for position, item in enumerate(items):
+            if not isinstance(item, dict):
+                raise ValueError(f"batch item {position} must be an object")
+            item_id = str(item.get("id", "")).strip()
+            prompt = item.get("prompt")
+            if not item_id or item_id in seen or not isinstance(prompt, str) or not prompt.strip():
+                raise ValueError(f"batch item {position} has invalid id/prompt")
+            seen.add(item_id)
+            expected.append(item_id)
+            encoded_images = []
+            for image in item.get("images", []) or []:
+                raw = base64.b64encode(Path(image).read_bytes()).decode()
+                encoded_images.append(f"data:image/jpeg;base64,{raw}")
+            requests.append({"id": item_id, "prompt": prompt, "images": encoded_images})
+
+        payload = {
+            "model": model or self.model,
+            "requests": requests,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        data = self._post(payload, endpoint="/chat/completions/batch")
+        returned = data.get("data") if isinstance(data, dict) else None
+        if not isinstance(returned, list):
+            raise TrammayError(f"batch response hình dạng lạ: {json.dumps(data)[:300]}")
+
+        result: dict[str, str] = {}
+        for item in returned:
+            if not isinstance(item, dict) or not isinstance(item.get("id"), str):
+                raise TrammayError("batch response thiếu id")
+            item_id = item["id"]
+            content = item.get("content")
+            if item_id in result or not isinstance(content, str):
+                raise TrammayError("batch response có id trùng hoặc content không hợp lệ")
+            result[item_id] = content.strip()
+        if set(result) != set(expected):
+            missing = [item_id for item_id in expected if item_id not in result]
+            extra = [item_id for item_id in result if item_id not in expected]
+            raise TrammayError(f"batch response lệch id (thiếu={missing[:3]}, thừa={extra[:3]})")
+        return {item_id: result[item_id] for item_id in expected}
 
     def models(self) -> list[str]:
         req = urllib.request.Request(f"{self.base_url}/models", headers=self._headers())
