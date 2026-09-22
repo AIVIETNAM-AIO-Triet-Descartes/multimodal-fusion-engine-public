@@ -87,6 +87,13 @@ class TrammayClient:
     timeout: int = 180
     #: 4 chứ không 3, và giãn cách dài hơn — xem `_post`.
     max_retries: int = 4
+    #: Nền của giãn cách `backoff_base · 2^n`. Phải LỚN HƠN thời gian một lượt
+    #: gọi, nếu không thử lại sẽ rơi vào đúng lúc các suất đồng thời vẫn bận.
+    #:
+    #: 2,0 hợp cho `chat` một ảnh (~8s/lượt). **Đường batch phải đặt 30–60**:
+    #: đo 22-09, một batch 8 ảnh chạy 26–47s, nên 2s/4s/8s làm cả bốn lần thử
+    #: đều trượt — 8/18 batch chết ở 4 luồng dù đã thử đủ lượt.
+    backoff_base: float = 2.0
 
     @classmethod
     def from_env(cls, **kwargs) -> TrammayClient | None:
@@ -145,9 +152,23 @@ class TrammayClient:
                     "trammay %s (lần %d/%d), thử lại", type(e).__name__, lan + 1, self.max_retries
                 )
             if lan + 1 < self.max_retries:
-                # Tôn trọng Retry-After của gateway/provider; jitter tránh việc
-                # sáu worker cùng thức dậy và gửi lại đúng một thời điểm.
-                delay = max(2.0 * (2**lan), retry_after or 0.0)
+                # Nền là 2·2^n (2s · 4s · 8s), KHÔNG phải 2^n (1s · 2s).
+                #
+                # Đo 21-09: ở 30 luồng, cổng trả `EOF occurred in violation of
+                # protocol` và `RemoteDisconnected` hàng loạt — đứt ở tầng TLS
+                # chứ không phải HTTP, tức bị chặn ở mức KẾT NỐI. Ở 16 luồng thì
+                # 800/800 lượt sạch. Lùi 1s là cả 30 luồng cùng đập lại một lúc
+                # vào đúng thứ vừa từ chối chúng.
+                #
+                # Trên nền đó: tôn trọng `Retry-After` của cổng khi nó lớn hơn,
+                # và cộng jitter để sáu worker không cùng thức dậy một thời điểm.
+                #
+                # `backoff_base` phải khớp ĐỘ DÀI một lượt gọi của người dùng
+                # nó. Trần đồng thời của cổng đếm request ĐANG BAY, nên lùi
+                # ngắn hơn thời gian một request là quay lại đúng lúc chỗ vẫn
+                # chưa trống — đo 22-09: nền 2s với batch 26–47s làm 8/18 batch
+                # chết dù đã thử đủ 4 lần.
+                delay = max(self.backoff_base * (2**lan), retry_after or 0.0)
                 time.sleep(min(delay, 120.0) + random.uniform(0.0, 1.0))
         raise TrammayError(f"thất bại sau {self.max_retries} lần: {cuoi}")
 
@@ -179,19 +200,27 @@ class TrammayClient:
         except (KeyError, IndexError, TypeError) as e:
             raise TrammayError(f"hình dạng trả về lạ: {json.dumps(d)[:200]}") from e
 
-    def chat_batch(
+    def chat_batch_detail(
         self,
         items: list[dict],
         *,
         model: str | None = None,
         max_tokens: int = 2048,
         temperature: float = 0.0,
-    ) -> dict[str, str]:
-        """Caption nhiều ảnh trong một request.
+    ) -> dict[str, dict]:
+        """Như `chat_batch` nhưng giữ cả phần bao quanh caption.
 
-        ``items`` có dạng ``{"id": str, "prompt": str, "images": [Path]}``.
-        Gateway trả ``data`` gồm đúng các id đó; kiểm tra nghiêm ngặt để không
-        gắn nhầm caption sang frame khác khi model trả thiếu/trùng item.
+        Trả `{id: {"content": str, "finish_reason": str | None}}`.
+
+        Vì sao cần `finish_reason` chứ không chỉ `content`: một caption bị cắt
+        vì chạm trần `max_tokens` **vẫn là một chuỗi hợp lệ**. Nó đi thẳng vào
+        BM25, vẫn có màu, vẫn có vị trí, vẫn đếm được động từ — không phép kiểm
+        nội dung nào nhìn ra. `finish_reason == "length"` là tín hiệu DUY NHẤT
+        phân biệt "model tả xong" với "model bị ngắt lời", và batch làm nguy cơ
+        này nặng hơn hẳn vì một `max_tokens` phải chia cho nhiều ảnh.
+
+        Cùng lớp bẫy §5 với "báo đã chấm 12 trong khi nó chấm 1": hình dạng trả
+        về đúng, số lượng đúng, chỉ nội dung là thiếu.
         """
         if not items:
             return {}
@@ -225,7 +254,7 @@ class TrammayClient:
         if not isinstance(returned, list):
             raise TrammayError(f"batch response hình dạng lạ: {json.dumps(data)[:300]}")
 
-        result: dict[str, str] = {}
+        result: dict[str, dict] = {}
         for item in returned:
             if not isinstance(item, dict) or not isinstance(item.get("id"), str):
                 raise TrammayError("batch response thiếu id")
@@ -233,12 +262,44 @@ class TrammayClient:
             content = item.get("content")
             if item_id in result or not isinstance(content, str):
                 raise TrammayError("batch response có id trùng hoặc content không hợp lệ")
-            result[item_id] = content.strip()
+            ly_do = item.get("finish_reason")
+            result[item_id] = {
+                "content": content.strip(),
+                "finish_reason": ly_do if isinstance(ly_do, str) else None,
+            }
         if set(result) != set(expected):
             missing = [item_id for item_id in expected if item_id not in result]
             extra = [item_id for item_id in result if item_id not in expected]
             raise TrammayError(f"batch response lệch id (thiếu={missing[:3]}, thừa={extra[:3]})")
+
+        # Cắt giữa chừng = vứt CẢ batch, không nhận phần lành. Nhận một nửa là
+        # ghi vào kho một caption cụt mà sau này không cách nào tìm lại được nó.
+        cut = [k for k, v in result.items() if v["finish_reason"] == "length"]
+        if cut:
+            raise TrammayError(
+                f"{len(cut)}/{len(expected)} item chạm trần max_tokens "
+                f"(finish_reason='length'): {cut[:3]} — nới max_tokens rồi gửi lại"
+            )
         return {item_id: result[item_id] for item_id in expected}
+
+    def chat_batch(
+        self,
+        items: list[dict],
+        *,
+        model: str | None = None,
+        max_tokens: int = 2048,
+        temperature: float = 0.0,
+    ) -> dict[str, str]:
+        """Caption nhiều ảnh trong một request.
+
+        ``items`` có dạng ``{"id": str, "prompt": str, "images": [Path]}``.
+        Gateway trả ``data`` gồm đúng các id đó; kiểm tra nghiêm ngặt để không
+        gắn nhầm caption sang frame khác khi model trả thiếu/trùng item.
+        """
+        chi_tiet = self.chat_batch_detail(
+            items, model=model, max_tokens=max_tokens, temperature=temperature
+        )
+        return {k: v["content"] for k, v in chi_tiet.items()}
 
     def models(self) -> list[str]:
         req = urllib.request.Request(f"{self.base_url}/models", headers=self._headers())
