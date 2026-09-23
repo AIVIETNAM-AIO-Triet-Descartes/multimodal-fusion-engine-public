@@ -631,4 +631,4 @@ extras:
   map_keyframes: https://aic-data.ledo.io.vn/map-keyframes-aic25-b1.zip
 params:
   n4_siglip:
-    batch_size: 32
+    batch_size: 128
