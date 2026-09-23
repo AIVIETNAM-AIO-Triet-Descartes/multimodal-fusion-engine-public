@@ -432,8 +432,38 @@ if _LUAT_TICKER_MOI not in _V5_BAO_OCR:      # neo trôi thì vỡ ngay, đừng
 #: **không bắt được chuyện bịa** — nó chỉ đếm *có nhắc*, không đếm *nhắc có
 #: đúng*. Nên hàng rào phải nằm trong prompt, và phải soi tay khi đo.
 #:
-#: ⚠ CHƯA ĐO, và mẫu 140 khung cũ **không dùng để đo bản này được** — nó toàn
-#: ảnh truyền hình batch 1. Phải có mẫu camera giao thông thật.
+#: **ĐÃ ĐO 23-09** trên 80 khung camera giao thông THẬT (nhóm `N` batch 2), so
+#: cặp với `v5_bao_ocr`, k=4 @ 6 luồng + phụ lục `len180`. Thắng đúng ba hàng nó
+#: nhắm tới: chiều di chuyển **90,0%** so với 63,7% · đèn tín hiệu **45,0%** so
+#: với 23,8% · tả trạng thái dừng/xếp hàng **32,5%** so với 17,5%. Hàng chất
+#: lượng chung `≥3 gốc` thấp hơn (42,5% so với 52,5%) nhưng **McNemar p =
+#: 0,2682**, không có ý nghĩa. Tái lập: `scratchpad/do_prompt_batch2.py`.
+#:
+#: ⚠ Kết luận đó GẮN với k=4 + `len180`. Ở k=1 trần, cùng 80 ảnh, bản này thua
+#: áp đảo (33,8% so với 61,3%, **p = 0,0000**) vì nó viết ngắn — phụ lục ép độ
+#: dài mới là thứ chữa. Bỏ phụ lục là kết luận lật ngược.
+#:
+#: **5. Luật 7 đã phải vá sau lượt đo đầu** — và đây là cái bẫy đáng nhớ nhất
+#: của prompt này. Bản đầu ghi overlay "must be transcribed", nhưng model chỉ
+#: chép vào khối `[OCR]` rồi viết trống không *"timestamps are visible along the
+#: top edge"*: caption chép dấu thời gian **8,8%**, trong khi `v5_bao_ocr` đạt
+#: **70,0%**. Nghi phạm là luật 8 — cấm nhắc góc máy *vì mọi khung giống nhau*,
+#: và model suy rộng quy tắc đó sang overlay, vốn cũng giống nhau mọi khung.
+#: Hỏng im lặng: `[OCR]` vẫn đầy đủ nên không phép đếm nào kêu, chỉ có tên địa
+#: điểm (`Khanh Hoi - Vinh Hoi`) lặng lẽ biến mất khỏi `bge_m3` và
+#: `caption_qwen`, đúng kiểu thiên lệch mà §4 dựng luật trùng lặp để tránh.
+#:
+#: **6. Luật 6 vá lần hai (Lead yêu cầu): không bỏ sót đèn và biển báo.** Bản vá
+#: luật 7 kéo hàng `đèn tín hiệu` tụt 45,0% → 28,7% — thêm chữ vào một luật thì
+#: luật bên cạnh mất chú ý. Bản này liệt kê thành danh mục và đòi nêu **vị trí +
+#: đèn nào đang sáng** cho TỪNG trụ, kèm hàng rào: không đọc được thì nói không
+#: đọc được, tuyệt đối không đoán màu.
+#:
+#: ⚠ **Cố tình KHÔNG bắt viết câu phủ định** ("không có đèn tín hiệu nào"). Phần
+#: lớn khung camera giao thông không có đèn, nên một câu phủ định bắt buộc sẽ có
+#: mặt ở đa số tài liệu — và đó đúng là cơ chế đã biến `một` (91,0%) và `giữa`
+#: (89,4%) thành stopword ở arm `object`, idf 0,09. Chỉ mô tả thứ CÓ trong khung.
+#: Cái giá: không đếm được "bỏ sót" từ chính văn bản, phải soi tay.
 _V5_BAO_TRAFFIC = """You are an expert visual describer. Create an EXHAUSTIVELY DETAILED Dense Caption for this single frame from a fixed Vietnamese road-traffic surveillance camera.
 
 Return EXACTLY TWO blocks, in this order:
@@ -451,14 +481,19 @@ RULES:
 
 5. CONDITIONS: time of day (daylight, dusk, night with street lighting, headlights on), weather (dry, raining, wet road, standing water, fog), and road surface state. Say if the image is dark, low-contrast, motion-blurred, or partly obscured by rain on the lens.
 
-6. TRAFFIC CONTROL: state the colour currently shown by any traffic light, and describe road signs, lane arrows painted on the tarmac, barriers, cones, and overhead gantries.
+6. TRAFFIC CONTROL — EXHAUSTIVE, BUT NEVER GUESSED. Work through the whole frame and account for every one of these that is present. Missing one is a real loss; inventing one is worse.
+   - TRAFFIC LIGHTS: find every signal head in the frame, including small or distant ones, ones on the far side of the junction, ones facing away, and pedestrian signals. For each, say where it is (which corner, which side, overhead on a gantry, on a post) and which lamp is lit — red, amber, green, green arrow, flashing amber, or dark/off. If a signal head is there but you cannot tell which lamp is lit — too small, blown out, back of the housing, obscured — say so in those words. NEVER state a colour you cannot actually see: a caption that says "the light is green" about a light you guessed is worse than one that says the colour cannot be made out.
+   - ROAD SIGNS: every sign board — regulatory, warning, direction, street-name, speed-limit, no-entry, height or weight limit, and signs mounted on gantries. For each, give its position, its shape and colour, what it depicts, and its text transcribed verbatim under rule 7. If a sign is visible but its text or symbol cannot be read, say "sign not legible" and describe only its shape, colour and position.
+   - ALSO: lane arrows and lane lines painted on the tarmac, stop lines, barriers, bollards, cones, speed bumps, level-crossing gates, toll booths and overhead gantries.
+   - Do NOT write a sentence saying a light or a sign is absent. Only describe what is actually in the frame.
 
 7. ON-SCREEN TEXT (CRITICAL):
-   - Surveillance overlays — the burnt-in timestamp, date, camera ID or channel name, location label — ARE meaningful here and must be transcribed. Do NOT treat them as watermarks to ignore.
+   - Surveillance overlays — the burnt-in timestamp, date, camera ID or channel name, location label — ARE meaningful here and must be transcribed. Do NOT treat them as watermarks to ignore. The location label is often the ONLY thing naming where this camera stands, so it carries more retrieval value than anything else in the frame.
+   - Write that text out INSIDE the caption sentences, quoted verbatim — for example: the overlay reads "Khanh Hoi - Vinh Hoi" and "15.Jun 2026 11:00:00". Writing only that a timestamp or a camera label "is visible" is NOT acceptable: a reader who cannot see the frame learns nothing from it. Putting the text in the [OCR] block is required as well, but it does NOT excuse you from writing it in the caption.
    - Transcribe road signs, shop signs, banners, billboards, bus route boards, and any painted road text, verbatim and in the original language with full diacritics.
    - LICENCE PLATES: transcribe a plate ONLY if you can actually read the characters. If it is blurred, angled, too small or partly hidden, say "plate not legible" and write nothing else about it. NEVER guess or complete a plate — a plausible invented plate is worse than no plate.
 
-8. DO NOT mention the camera angle or shot type. This camera is fixed, so the angle is identical in every frame of the video and repeating it adds nothing that distinguishes this frame.
+8. DO NOT mention the camera angle or shot type. This camera is fixed, so the angle is identical in every frame of the video and repeating it adds nothing that distinguishes this frame. This rule covers the camera angle ONLY — it does NOT apply to the on-screen text of rule 7, which must be transcribed in full even though it repeats across frames.
 
 9. NEVER invent detail. If something is unclear, describe what is actually visible and say it is unclear. Do not name a landmark, street or district unless a sign in the frame states it.
 
