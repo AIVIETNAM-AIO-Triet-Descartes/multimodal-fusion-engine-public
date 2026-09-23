@@ -15,6 +15,7 @@ from mfe.contracts.ids import (
     parse_keyframe_id,
     parse_shot_id,
     pts_time_to_timestamp_ms,
+    video_group,
 )
 
 
@@ -163,4 +164,41 @@ class TestPtsTimeToTimestampMs:
     def test_rejects_negative(self):
         with pytest.raises(ContractError) as exc:
             pts_time_to_timestamp_ms(-1.0)
+        assert exc.value.code is ErrorCode.INVALID_ID
+
+
+class TestVideoGroup:
+    """BTC dùng HAI dấu nối; `split("_")` hỏng im lặng với một nửa batch 2.
+
+    Đọc từ thư mục trung tâm của zip gốc (23-09-2026):
+        Videos_M01.zip      -> videos/M01_V001.mp4     gạch DƯỚI
+        Video_N001-N010.zip -> videos/N001-V001.mov    gạch NGANG
+    """
+
+    @pytest.mark.parametrize(
+        ("video_id", "expected"),
+        [
+            ("L21_V001", "L21"),        # batch 1
+            ("M01_V001", "M01"),        # batch 2, tin tức — gạch dưới
+            ("M06_V021", "M06"),
+            ("N001-V001", "N001"),      # batch 2, giao thông — gạch ngang
+            ("N081-V001", "N081"),
+            ("S01-V008", "S01"),        # batch 2, đua xe đạp
+        ],
+    )
+    def test_tach_dung_ca_hai_dau_noi(self, video_id, expected):
+        assert video_group(video_id) == expected
+
+    def test_split_gach_duoi_HONG_voi_nhom_N(self):
+        """Phép tách cũ hỏng ở đâu — giữ lại để không ai quay về nó."""
+        assert "N001-V001".split("_")[0] == "N001-V001"      # trả NGUYÊN chuỗi
+        assert video_group("N001-V001") == "N001"
+
+    def test_split_gach_ngang_HONG_voi_nhom_M(self):
+        assert "M01_V001".split("-")[0] == "M01_V001"
+        assert video_group("M01_V001") == "M01"
+
+    def test_video_id_khong_hop_le_thi_nem(self):
+        with pytest.raises(ContractError) as exc:
+            video_group("co khoang trang")
         assert exc.value.code is ErrorCode.INVALID_ID

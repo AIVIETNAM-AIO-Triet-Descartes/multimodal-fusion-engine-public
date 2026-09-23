@@ -17,6 +17,7 @@ import argparse
 import subprocess
 from pathlib import Path
 
+from mfe.contracts.ids import video_group
 from mfe.core.cli import setup_console
 
 VIDEO_SUFFIXES = (".mp4", ".mkv", ".webm")
@@ -75,9 +76,11 @@ def main() -> None:
         encoding="utf-8",
     )
 
+    # `video_group`, KHONG phai `split("_")`: BTC dung ca gach duoi (`M01_V001`)
+    # lan gach ngang (`N001-V001`), doc tu chinh zip goc 23-09.
     groups: dict[str, int] = {}
     for video_id in videos:
-        groups[video_id.split("_")[0]] = groups.get(video_id.split("_")[0], 0) + 1
+        groups[video_group(video_id)] = groups.get(video_group(video_id), 0) + 1
 
     print(f"{len(videos)} video -> {out}")
     print(f"nhom: {', '.join(f'{g} {n}' for g, n in sorted(groups.items()))}")

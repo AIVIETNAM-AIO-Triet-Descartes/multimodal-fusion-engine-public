@@ -74,6 +74,8 @@ _KEYFRAME_RE = re.compile(
 )
 _SHOT_RE = re.compile(r"^(?P<video_id>[^\s#]+)#s(?P<shot>\d+)$")
 _VIDEO_ID_RE = re.compile(r"^[^\s#]+$")
+#: Dấu nối nhóm↔video. BTC dùng CẢ HAI — xem `video_group`.
+_NHOM_RE = re.compile(r"[-_](?=V\d+$)")
 
 
 def validate_video_id(video_id: str) -> str:
@@ -88,6 +90,35 @@ def validate_video_id(video_id: str) -> str:
             f"video_id must be non-empty and contain no whitespace or '#': {video_id!r}",
         )
     return video_id
+
+
+def video_group(video_id: str) -> str:
+    """Nhóm của một video: phần TRƯỚC dấu nối cuối cùng.
+
+    BTC dùng **hai dấu nối khác nhau** và điều đó không phải nhầm lẫn của ai —
+    đọc thẳng thư mục trung tâm của zip gốc (23-09-2026):
+
+        Videos_M01.zip      -> videos/M01_V001.mp4     gạch DƯỚI
+        Video_N001-N010.zip -> videos/N001-V001.mov    gạch NGANG
+
+    Nên `video_id.split("_")[0]` trả về **nguyên chuỗi** cho `N001-V001`, và
+    `split("-")[0]` thì hỏng ngược lại với `M01_V001`. Cả hai đều hỏng IM LẶNG:
+    không ném, chỉ gộp nhóm sai rồi chia việc sai.
+
+    ⚠ Và đừng "chuẩn hoá" dấu nối cho đồng bộ — `video_id` phải giữ **nguyên
+    văn như BTC** vì nó là khoá đối chiếu với đề thi.
+
+    >>> video_group("L21_V001")
+    'L21'
+    >>> video_group("M01_V001")
+    'M01'
+    >>> video_group("N001-V001")
+    'N001'
+    >>> video_group("S01-V008")
+    'S01'
+    """
+    validate_video_id(video_id)
+    return _NHOM_RE.split(video_id)[0]
 
 
 def build_keyframe_id(video_id: str, frame_id: int) -> str:

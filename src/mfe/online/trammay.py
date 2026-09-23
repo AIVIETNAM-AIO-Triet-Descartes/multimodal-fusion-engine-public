@@ -72,6 +72,38 @@ class TrammayError(RuntimeError):
     """Gọi thất bại sau khi đã thử lại hết lượt."""
 
 
+class QuotaError(TrammayError):
+    """Hết hạn mức — thử lại KHÔNG giúp gì, phải đợi cửa sổ reset.
+
+    Tách khỏi `TrammayError` vì hai loại `429` đòi hai cách xử ngược nhau:
+
+        429 "rate limit"      -> chờ vài giây là qua, THỬ LẠI đúng
+        429 "quota reached"   -> chờ 5 TIẾNG mới qua, thử lại là đốt thời gian
+
+    Đo 23-09, một worker batch 1 chạm quota 5 tiếng của `antigravity/
+    gemini-3.8-flash`: **1.419,9 giây cho MỘT video mà thu về 0 caption**
+    (`[51/51] L26_V470: 0/171 · hỏng 171 · PARTIAL`). 171 khung × 4 lần thử ×
+    giãn cách — gần 24 phút ném vào những lượt gọi không thể thành công. Nhân
+    với số video còn lại là mất cả phiên Kaggle.
+
+    Người gọi nên **dừng hẳn lượt chạy** khi gặp nó, chứ đừng đếm nó như một
+    khung hỏng bình thường rồi đi tiếp.
+    """
+
+
+#: Dấu hiệu trong thân lỗi cho biết đây là hạn mức cạn, không phải nghẽn nhất
+#: thời. Cổng và nhà cung cấp thượng nguồn diễn đạt khác nhau, nên dò theo chữ:
+#:
+#:   cổng     : "Daily token quota exceeded" · code "token_quota_exceeded"
+#:   thượng nguồn: "Individual quota reached. Please upgrade your subscription"
+_DAU_HIEU_QUOTA = ("quota", "upgrade your subscription", "insufficient_quota")
+
+
+def _la_can_quota(than: str) -> bool:
+    t = than.lower()
+    return any(d in t for d in _DAU_HIEU_QUOTA)
+
+
 @dataclass(frozen=True)
 class TrammayClient:
     """Client tối giản cho cổng. Không phụ thuộc SDK `openai`.
@@ -134,10 +166,13 @@ class TrammayClient:
                 with urllib.request.urlopen(req, timeout=self.timeout) as r:
                     return json.loads(r.read())
             except urllib.error.HTTPError as e:
-                chi_tiet = e.read().decode("utf-8", "replace")[:200]
+                than = e.read().decode("utf-8", "replace")
+                chi_tiet = than[:200]
                 cuoi = TrammayError(f"HTTP {e.code}: {chi_tiet}")
                 if e.code not in RETRY_CODES:
                     raise cuoi from e
+                if _la_can_quota(than):
+                    raise QuotaError(f"HTTP {e.code}: {chi_tiet}") from e
                 try:
                     retry_after = float((getattr(e, "headers", None) or {}).get("Retry-After", ""))
                 except (TypeError, ValueError):

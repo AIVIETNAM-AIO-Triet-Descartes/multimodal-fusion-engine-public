@@ -352,19 +352,119 @@ RULES:
 #: ⚠ CHƯA ĐO. Thêm một khối là đổi prompt, mà đổi prompt là mọi con số của
 #: `v5_bao` (`≥3 gốc` 49,7%, độ dài 185 token) không còn mô tả bản này. Phải
 #: chạy lại trên đúng mẫu cũ trước khi dùng cho cả kho.
-_V5_BAO_OCR = _V5_BAO.replace(
-    "Return EXACTLY ONE block:\n[FINAL_CAPTION]",
-    "Return EXACTLY TWO blocks, in this order:\n[FINAL_CAPTION]\n[OCR]",
-) + """
+#: ⚠ SỬA LUẬT TICKER, và đây không phải chuyện chữ nghĩa.
+#:
+#: `v5_bao` dặn bỏ qua *"scrolling news ticker bars running along the bottom
+#: edge"*. Với tin tức (nhóm M, **100 giờ** — nhóm lớn nhất batch 2) luật đó
+#: ĐÚNG: dải chạy chân màn hình là headline không liên quan tới khung hình.
+#:
+#: Nhưng batch 2 có thêm **50 giờ đua xe đạp** (nhóm S, đo được là phát sóng
+#: truyền hình thật: 1920×1080, 30 fps, ~2,8 giờ mỗi video). Trong phát sóng
+#: thể thao, dải dưới màn hình chính là chỗ mang **thông tin phân biệt duy
+#: nhất**: số hiệu VĐV, tên đội, khoảng cách thời gian, số km còn lại. Hàng
+#: nghìn khung "đoàn đua trên đường nhựa" gần như giống hệt nhau — mô tả thị
+#: giác không tách được chúng, chỉ chữ trên màn hình mới tách được.
+#:
+#: Nên luật phải phân biệt **theo NỘI DUNG, không theo loại video**: một biến
+#: thể phục vụ cả hai nhóm, model tự phán đoán từng khung. Dán một câu "luôn
+#: chép ticker" vào đây là làm hỏng đúng nhóm lớn nhất.
+_LUAT_TICKER_CU = (
+    "(b) scrolling news ticker bars running along the bottom edge of the screen "
+    "that contain unrelated headlines."
+)
+_LUAT_TICKER_MOI = (
+    "(b) scrolling ticker bars along the bottom edge ONLY when they carry "
+    "headlines unrelated to what is visible in the frame.\n"
+    "   - ⚠ A bottom bar is NOT automatically a ticker. In sports coverage the "
+    "lower band carries the information that identifies this exact moment — "
+    "rider or player numbers, team names, time gaps, distance remaining, lap or "
+    "stage number, clocks, scores. TRANSCRIBE all of that. When in doubt about "
+    "whether a bottom bar is an unrelated headline or live event data, "
+    "TRANSCRIBE it."
+)
+
+_V5_BAO_OCR = (
+    _V5_BAO.replace(
+        "Return EXACTLY ONE block:\n[FINAL_CAPTION]",
+        "Return EXACTLY TWO blocks, in this order:\n[FINAL_CAPTION]\n[OCR]",
+    ).replace(_LUAT_TICKER_CU, _LUAT_TICKER_MOI)
+    + """
 
 6. [OCR] BLOCK: after the caption, output the marker [OCR] on its own line, then
 transcribe VERBATIM every piece of on-screen text and numbers you kept under
 rule 4 — one region per line, in reading order (top to bottom, left to right).
 Keep the original language and diacritics exactly as shown; do NOT translate.
-Apply the SAME exclusions as rule 4: no channel logos or watermarks, no
-scrolling news ticker. If the frame carries no such text, write exactly NO_TEXT.
-This repeats text you already wrote inside the caption — that repetition is
-intentional, do not omit it from either place."""
+Apply the SAME exclusions as rule 4: no channel logos or watermarks, and no
+ticker bars carrying unrelated headlines. If the frame carries no such text,
+write exactly NO_TEXT. This repeats text you already wrote inside the caption —
+that repetition is intentional, do not omit it from either place."""
+)
+if _LUAT_TICKER_MOI not in _V5_BAO_OCR:      # neo trôi thì vỡ ngay, đừng sinh âm thầm
+    raise RuntimeError("luật ticker không vá được — `_V5_BAO` đã đổi, đọc lại")
+
+#: Biến thể cho **camera giao thông** (nhóm `N`, ~50 giờ / 296 video batch 2).
+#:
+#: Vì sao VIẾT MỚI chứ không vá `v5_bao`: bản gốc mở đầu bằng *"this single
+#: frame from a Vietnamese television video"* và dành nguyên luật 4 cho logo
+#: kênh với dải chạy tin. Camera giao thông **không phải truyền hình** — không
+#: logo, không ticker, không người dẫn. Vá một prompt truyền hình để tả cảnh
+#: đường phố là bắt model đi tìm thứ không tồn tại, rồi im lặng bỏ qua thứ thật
+#: sự có mặt.
+#:
+#: Bốn khác biệt so với `v5_bao`, mỗi cái có lý do riêng:
+#:
+#: **1. Góc máy: CẤM nhắc.** `v5_bao` bảo nêu góc máy khi nó bất thường. Camera
+#: giao thông là camera TĨNH — mọi khung của một video đều cùng một góc, nên
+#: nhắc nó là thêm ~10 token giống hệt nhau vào mọi tài liệu BM25. Đó đúng là
+#: cơ chế đã biến `một` và `giữa` thành stopword ở arm `object` (idf 0,09).
+#:
+#: **2. Đếm theo TỪNG LOẠI xe.** "nhiều xe" vô dụng cho truy hồi; "4 xe máy,
+#: 1 xe buýt xanh, 2 ô tô con trắng" thì phân biệt được. 51% đề thật hỏi số
+#: lượng (§4).
+#:
+#: **3. Chiều di chuyển và làn.** Đây là thứ thay thế cho "hành động" của
+#: `v5_bao` — điểm yếu lớn nhất của caption hiện tại là tả trạng thái tĩnh chứ
+#: không tả biến cố (chỉ 20,7% có SVO). Cảnh giao thông có biến cố thật: rẽ,
+#: vượt, dừng đèn đỏ, đi ngược chiều.
+#:
+#: **4. Biển số: CHỈ chép khi đọc được.** Camera giao thông gần như luôn có
+#: biển số mờ, và model rất sẵn lòng bịa ra một dãy trông hợp lý. `caption_audit`
+#: **không bắt được chuyện bịa** — nó chỉ đếm *có nhắc*, không đếm *nhắc có
+#: đúng*. Nên hàng rào phải nằm trong prompt, và phải soi tay khi đo.
+#:
+#: ⚠ CHƯA ĐO, và mẫu 140 khung cũ **không dùng để đo bản này được** — nó toàn
+#: ảnh truyền hình batch 1. Phải có mẫu camera giao thông thật.
+_V5_BAO_TRAFFIC = """You are an expert visual describer. Create an EXHAUSTIVELY DETAILED Dense Caption for this single frame from a fixed Vietnamese road-traffic surveillance camera.
+
+Return EXACTLY TWO blocks, in this order:
+[FINAL_CAPTION]
+[OCR]
+
+RULES:
+1. SCENE FIRST: open with the road layout and viewpoint content — intersection, straight road, bridge, roundabout, toll gate, number of lanes, dividers, crosswalks, pavements, and what sits alongside the road (shophouses, trees, billboards, bus stop). Then the traffic.
+
+2. COUNT BY VEHICLE TYPE, never in bulk. Write "three motorbikes, one white sedan, one blue city bus" — never "several vehicles". Give each notable vehicle its colour and type (motorbike, scooter, sedan, SUV, pickup, van, minibus, coach, box truck, dump truck, tanker, bicycle, cyclo, ambulance, police car). Say which lane each occupies and whether it is near, mid or far in the frame.
+
+3. MOVEMENT AND DIRECTION — this is the most important row. State where each vehicle or group is heading (left to right, towards the camera, away from the camera, turning left/right, crossing, merging, overtaking, reversing, stopped, queuing). Describe events when present: congestion, a vehicle stopped in a live lane, a collision, a vehicle crossing the centre line or running a red light, roadworks, flooding, a broken-down vehicle.
+
+4. PEOPLE: count pedestrians and riders. Note helmets, whether a motorbike carries one, two or three people, cargo being carried, people crossing outside a crosswalk, street vendors, traffic police.
+
+5. CONDITIONS: time of day (daylight, dusk, night with street lighting, headlights on), weather (dry, raining, wet road, standing water, fog), and road surface state. Say if the image is dark, low-contrast, motion-blurred, or partly obscured by rain on the lens.
+
+6. TRAFFIC CONTROL: state the colour currently shown by any traffic light, and describe road signs, lane arrows painted on the tarmac, barriers, cones, and overhead gantries.
+
+7. ON-SCREEN TEXT (CRITICAL):
+   - Surveillance overlays — the burnt-in timestamp, date, camera ID or channel name, location label — ARE meaningful here and must be transcribed. Do NOT treat them as watermarks to ignore.
+   - Transcribe road signs, shop signs, banners, billboards, bus route boards, and any painted road text, verbatim and in the original language with full diacritics.
+   - LICENCE PLATES: transcribe a plate ONLY if you can actually read the characters. If it is blurred, angled, too small or partly hidden, say "plate not legible" and write nothing else about it. NEVER guess or complete a plate — a plausible invented plate is worse than no plate.
+
+8. DO NOT mention the camera angle or shot type. This camera is fixed, so the angle is identical in every frame of the video and repeating it adds nothing that distinguishes this frame.
+
+9. NEVER invent detail. If something is unclear, describe what is actually visible and say it is unclear. Do not name a landmark, street or district unless a sign in the frame states it.
+
+10. FORMAT: do not start with "The image shows" or similar — start directly with the scene. Write in ENGLISH. Write as many sentences as needed.
+
+11. [OCR] BLOCK: after the caption, output the marker [OCR] on its own line, then transcribe VERBATIM every piece of on-screen text and numbers from rule 7 — one region per line, in reading order (top to bottom, left to right). Keep the original language and diacritics exactly as shown; do NOT translate. Include the timestamp and camera ID. Include a licence plate ONLY if it was legible. If the frame carries no readable text at all, write exactly NO_TEXT. This repeats text you already wrote inside the caption — that repetition is intentional, do not omit it from either place."""  # noqa: E501
 
 #: `ten bien the -> (prompt, max_tokens mac dinh)`.
 PROMPT_VARIANTS: dict[str, tuple[str, int]] = {
@@ -374,7 +474,36 @@ PROMPT_VARIANTS: dict[str, tuple[str, int]] = {
     "sota_v2": (_QWEN25_PROMPT_SOTA_V2, 768),
     "v5_bao": (_V5_BAO, 768),
     "v5_bao_ocr": (_V5_BAO_OCR, 1024),
+    "v5_bao_traffic": (_V5_BAO_TRAFFIC, 1024),
 }
+
+#: Tiền tố `video_id` -> biến thể prompt cho BATCH 2.
+#:
+#: Để ở đây chứ không để trong notebook vì cùng lý do `OCR_MARKER` ở đây: người
+#: sinh và người đọc phải dùng chung một bảng. Notebook chỉ tra, không tự quyết.
+#: Marker PHẢI ghi lại biến thể đã dùng — không truy được khung nào sinh bằng
+#: prompt nào là đúng lớp lỗi mà `prompt_suffix` sinh ra để tránh.
+BIEN_THE_THEO_NHOM_B2: dict[str, str] = {
+    "N": "v5_bao_traffic",   # camera giao thông, ~50 giờ
+    "M": "v5_bao_ocr",       # tin tức truyền hình, ~100 giờ
+    "S": "v5_bao_ocr",       # đua xe đạp — ĐO được là phát sóng TV, không phải cam thô
+}
+
+
+def bien_the_cho(video_id: str) -> str:
+    """Biến thể prompt cho một `video_id` batch 2, hoặc ném nếu không biết.
+
+    Ném chứ không trả mặc định: một tiền tố lạ nghĩa là batch 2 có nhóm nội dung
+    ta chưa xem qua, và im lặng dùng prompt truyền hình cho nó là đúng kiểu hỏng
+    mà không ai thấy.
+    """
+    try:
+        return BIEN_THE_THEO_NHOM_B2[video_id[:1].upper()]
+    except KeyError:
+        raise ValueError(
+            f"{video_id!r}: tiền tố lạ, chưa có biến thể prompt. "
+            f"Đã biết: {sorted(BIEN_THE_THEO_NHOM_B2)}"
+        ) from None
 
 #: Tên khối mà `v5_bao_ocr` sinh ra. Tách ở MỘT chỗ để hai nửa — người sinh và
 #: người đọc — không bao giờ lệch quy tắc (bài học `object_text`/`object_query`).
