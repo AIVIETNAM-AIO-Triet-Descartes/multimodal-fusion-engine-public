@@ -333,6 +333,39 @@ RULES:
 
 5. FORMAT: Do not start with "The image shows" or similar. Start directly with the subject. Write in ENGLISH."""  # noqa: E501
 
+#: Bản `v5_bao` có thêm khối `[OCR]` — cho **batch 2**, nơi không có OCR nào khác.
+#:
+#: Vì sao cần: batch 1 có `qwen_ocr.json` (từ Qwen2.5-VL) và `vietocr`, nên hai
+#: arm `ocr_qwen25` + `ocr_vietocr` có dữ liệu. Batch 2 **không có cả hai**. Nếu
+#: chỉ sinh caption một khối thì với mọi keyframe batch 2, hai arm đó trả về
+#: rỗng — không nổ, không cảnh báo, chỉ là khung batch 2 nhận ít phiếu hơn khung
+#: batch 1 trong hợp nhất. Đó là **thiên lệch xếp hạng giữa hai nửa kho**, đúng
+#: lớp lỗi §2 "sai một chỗ là hỏng im lặng".
+#:
+#: ⚠ Chữ trên màn hình được yêu cầu xuất HAI LẦN — vừa trong caption vừa trong
+#: khối `[OCR]`. Trùng lặp là CỐ Ý. Nếu rút hẳn OCR ra khỏi caption thì caption
+#: batch 2 khác cấu trúc caption batch 1 (bản sinh 22-09 có OCR nhúng), và hai
+#: nửa kho lại lệch nhau ở một chỗ khác. Trùng lặp tốn thêm ~2% token (đo: phần
+#: chữ chiếm trung vị 1,8% token caption), đổi lại hai nửa đồng dạng ở CẢ HAI
+#: trường.
+#:
+#: ⚠ CHƯA ĐO. Thêm một khối là đổi prompt, mà đổi prompt là mọi con số của
+#: `v5_bao` (`≥3 gốc` 49,7%, độ dài 185 token) không còn mô tả bản này. Phải
+#: chạy lại trên đúng mẫu cũ trước khi dùng cho cả kho.
+_V5_BAO_OCR = _V5_BAO.replace(
+    "Return EXACTLY ONE block:\n[FINAL_CAPTION]",
+    "Return EXACTLY TWO blocks, in this order:\n[FINAL_CAPTION]\n[OCR]",
+) + """
+
+6. [OCR] BLOCK: after the caption, output the marker [OCR] on its own line, then
+transcribe VERBATIM every piece of on-screen text and numbers you kept under
+rule 4 — one region per line, in reading order (top to bottom, left to right).
+Keep the original language and diacritics exactly as shown; do NOT translate.
+Apply the SAME exclusions as rule 4: no channel logos or watermarks, no
+scrolling news ticker. If the frame carries no such text, write exactly NO_TEXT.
+This repeats text you already wrote inside the caption — that repetition is
+intentional, do not omit it from either place."""
+
 #: `ten bien the -> (prompt, max_tokens mac dinh)`.
 PROMPT_VARIANTS: dict[str, tuple[str, int]] = {
     "bao": (_QWEN25_PROMPT_BAO, 256),
@@ -340,4 +373,29 @@ PROMPT_VARIANTS: dict[str, tuple[str, int]] = {
     "sota": (_QWEN25_PROMPT_SOTA, 768),
     "sota_v2": (_QWEN25_PROMPT_SOTA_V2, 768),
     "v5_bao": (_V5_BAO, 768),
+    "v5_bao_ocr": (_V5_BAO_OCR, 1024),
 }
+
+#: Tên khối mà `v5_bao_ocr` sinh ra. Tách ở MỘT chỗ để hai nửa — người sinh và
+#: người đọc — không bao giờ lệch quy tắc (bài học `object_text`/`object_query`).
+OCR_MARKER = "[OCR]"
+CAPTION_MARKER = "[FINAL_CAPTION]"
+NO_TEXT = "NO_TEXT"
+
+
+def tach_caption_ocr(raw: str) -> tuple[str, str]:
+    """Tách chuỗi `v5_bao_ocr` thành `(caption, ocr)`.
+
+    Khoan dung có chủ ý: model đôi khi bỏ `[FINAL_CAPTION]`, đôi khi thêm dấu
+    câu quanh `[OCR]`. Thiếu khối `[OCR]` thì trả `ocr = ""` chứ KHÔNG ném —
+    người gọi đếm số khung rỗng và tự quyết, vì một lượt sinh cả kho không được
+    chết vì một khung lạ. Nhưng `NO_TEXT` và "không có khối" là HAI chuyện khác
+    nhau, và chỗ này cố tình gộp chúng thành `""`: cả hai đều nghĩa là không có
+    gì để đưa vào chỉ mục.
+    """
+    phan = raw.split(OCR_MARKER, 1)
+    caption = phan[0].replace(CAPTION_MARKER, "").strip()
+    if len(phan) == 1:
+        return caption, ""
+    ocr = phan[1].strip()
+    return caption, "" if ocr.upper().startswith(NO_TEXT) else ocr
