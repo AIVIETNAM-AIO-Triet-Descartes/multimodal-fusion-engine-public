@@ -563,3 +563,62 @@ def tach_caption_ocr(raw: str) -> tuple[str, str]:
         return caption, ""
     ocr = phan[1].strip()
     return caption, "" if ocr.upper().startswith(NO_TEXT) else ocr
+
+
+#: Mảnh logo kênh/chương trình bị model chép vào khối `[OCR]` dù luật 4 đã loại
+#: trừ chúng. Đo 24-09 trên 80 khung bản tin batch 2: **20/44 khối có chữ dính
+#: mảnh `giây`** — model tách sai logo `60 giây` của HTV, bỏ `60`, giữ `giây`.
+#: Một khung tệ nhất có khối `[OCR]` chỉ gồm đúng một dòng `giây`.
+#:
+#: Vì sao phải lọc chứ không kệ: `giây` sẽ có mặt ở ~45% tài liệu OCR nửa batch
+#: 2, idf ~0,35 — tức thành **stopword**, đúng cơ chế đã giết arm `object`
+#: (`một` 91,0% tài liệu, idf 0,09).
+#:
+#: So khớp chỉ khi dòng **ĐÚNG BẰNG** mảnh này, không phải khi dòng *chứa* nó:
+#: `"Tiếp theo trên HTV7"` là nội dung thật và phải giữ, còn `"HTV7"` đứng một
+#: mình là logo.
+MANH_LOGO: frozenset[str] = frozenset({
+    "giây", "giay", "60 giây", "60 giay",
+    "htv", "htv7", "htv9", "vtv", "vtv1", "vtv3", "thvl", "thvl1", "vtc",
+    "trực tiếp", "truc tiep", "live", "logo",
+})
+
+
+def loc_khoi_ocr(ocr: str) -> str:
+    """Bỏ mảnh logo đứng một mình và dòng lặp trong khối `[OCR]`.
+
+    Chạy ở bước AGGREGATE, KHÔNG chạy lúc sinh: part lưu chuỗi thô nên lọc sai
+    thì lọc lại tốn 0 đồng, còn sinh lại cả kho batch 2 tốn ~750 triệu token.
+    Đó là lý do `gemini_raw.json` cũng được đẩy lên volume.
+
+    Hai luật, mỗi luật chữa một lỗi ĐO ĐƯỢC:
+
+    1. **Mảnh logo đứng một mình** — xem `MANH_LOGO`.
+    2. **Dòng lặp y hệt trong cùng khối** — đo 24-09: `NYBG` xuất hiện 4 lần
+       liền trong một khối, và 10–15% khung nhóm N có dòng trùng. Khử trùng
+       GIỮ THỨ TỰ: thứ tự đọc (trên xuống, trái sang phải) là thông tin, sắp
+       xếp lại hay dùng `set()` là vứt nó đi.
+
+    Trả `""` khi không còn gì — cùng quy ước với `tach_caption_ocr`: rỗng nghĩa
+    là không có gì để đưa vào chỉ mục.
+
+    >>> loc_khoi_ocr("GIÁ DỪA MIỀN TÂY\\ngiây\\nGIÁ DỪA MIỀN TÂY")
+    'GIÁ DỪA MIỀN TÂY'
+    >>> loc_khoi_ocr("giây")
+    ''
+    >>> loc_khoi_ocr("Tiếp theo trên HTV7")
+    'Tiếp theo trên HTV7'
+    """
+    giu: list[str] = []
+    da_thay: set[str] = set()
+    for dong in (ocr or "").splitlines():
+        d = dong.strip()
+        # Gọt CẢ dấu câu lẫn khoảng trắng: model hay trả `"giây."` hoặc `"- HTV7"`,
+        # mà gọt mỗi dấu câu thì `"- HTV7"` còn lại `" htv7"` và lọt lưới.
+        if not d or d.lower().strip(".,:;-–—|•*· \t") in MANH_LOGO:
+            continue
+        if d.lower() in da_thay:
+            continue
+        da_thay.add(d.lower())
+        giu.append(d)
+    return "\n".join(giu)

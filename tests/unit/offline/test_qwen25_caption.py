@@ -654,3 +654,62 @@ class TestPromptKhongDayModelTaoStopword:
         # Hai vi du dau phai lam guong: cau dau la hanh dong, khong phai liet ke.
         assert "Two presenters read from a red folder" in aic
         assert "Five people peel bamboo shoots together" in aic
+
+
+class TestLocKhoiOCR:
+    """Bộ lọc khối `[OCR]` — chạy ở AGGREGATE, không chạy lúc sinh.
+
+    Đo 24-09 trên 200 khung batch 2 đã sinh thật: nhóm M có **20/44 khối dính
+    mảnh `giây`** (model tách sai logo `60 giây` của HTV), và 5 khối sau khi lọc
+    thành RỖNG vì chúng vốn chỉ chứa mảnh logo. Nhóm S bỏ 53 dòng lặp, nhóm N
+    bỏ 13.
+    """
+
+    def test_manh_logo_dung_MOT_MINH_thi_bo(self):
+        from mfe.offline.caption_prompt import loc_khoi_ocr
+
+        assert loc_khoi_ocr("giây") == ""
+        assert loc_khoi_ocr("60 giây") == ""
+        assert loc_khoi_ocr("HTV7") == ""
+
+    def test_manh_logo_NAM_TRONG_cau_thi_GIU(self):
+        """`"Tiếp theo trên HTV7"` là nội dung thật; chỉ logo đứng một mình là rác.
+
+        So khớp theo dòng-bằng-nhau chứ không theo `in`: dùng `in` là xoá luôn
+        mọi câu có chứa tên kênh, tức xoá đúng phần tên chương trình mà đề KIS
+        hay hỏi tới.
+        """
+        from mfe.offline.caption_prompt import loc_khoi_ocr
+
+        assert loc_khoi_ocr("Tiếp theo trên HTV7") == "Tiếp theo trên HTV7"
+        assert loc_khoi_ocr("Bản tin 60 giây hôm nay") == "Bản tin 60 giây hôm nay"
+
+    def test_khu_trung_GIU_THU_TU(self):
+        """Thứ tự đọc (trên xuống, trái sang phải) là thông tin — đừng sắp lại.
+
+        `set()` hay `sorted()` sẽ trộn một biển hiệu bên trái với dòng chạy chân
+        màn hình, và BM25 khớp một cụm vắt qua hai vùng chẳng liên quan gì nhau.
+        """
+        from mfe.offline.caption_prompt import loc_khoi_ocr
+
+        assert loc_khoi_ocr("NYBG\nNYBG\nNYBG") == "NYBG"
+        assert loc_khoi_ocr("B\nA\nB\nC") == "B\nA\nC"
+
+    def test_giu_nguyen_dau_tieng_Viet(self):
+        from mfe.offline.caption_prompt import loc_khoi_ocr
+
+        goc = "GIÁ DỪA MIỀN TÂY BẤT NGỜ LAO DỐC\nGiá dừa khô: 80.000 đồng/chục"
+        assert loc_khoi_ocr(goc) == goc
+
+    def test_rong_va_None_an_toan(self):
+        from mfe.offline.caption_prompt import loc_khoi_ocr
+
+        assert loc_khoi_ocr("") == ""
+        assert loc_khoi_ocr("   \n  \n") == ""
+
+    def test_bo_dau_cau_thua_quanh_manh_logo(self):
+        """Model đôi khi trả `"giây."` hoặc `"- HTV7"`; vẫn là logo."""
+        from mfe.offline.caption_prompt import loc_khoi_ocr
+
+        assert loc_khoi_ocr("giây.") == ""
+        assert loc_khoi_ocr("- HTV7") == ""
