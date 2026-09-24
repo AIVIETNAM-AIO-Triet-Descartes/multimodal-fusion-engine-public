@@ -67,6 +67,35 @@ cửa sổ — phần lớn cửa sổ không có biến đổi, nên câu phủ
 ~90% tài liệu, idf ~0,1, tức **stopword**. Đúng cơ chế đã giết arm `object`
 (`một` 91,0% tài liệu). Cùng lượt đó nó cũng nhét mảnh logo `"60", "giây"` vào
 văn xuôi — nơi `loc_khoi_ocr` không với tới. Thêm 5c: hết cả hai.
+
+Phụ đề (24-09): nguồn THỨ HAI, và là nguồn duy nhất khác loại
+---------------------------------------------------------------
+Caption tả **thứ nhìn thấy**; phụ đề mang **thứ nghe được** — chủ đề, tên riêng,
+con số, và nguyên nhân của cảnh đang chiếu. Đây là chỗ §1 của thiết kế chỉ ra là
+thứ làm ReCap mạnh, và là nguồn duy nhất còn bỏ trống.
+
+Nhưng nó vào prompt kèm **ba hàng rào**, vì cả ba nguy cơ đều đo được:
+
+1. **Phụ đề là ASR, KHÔNG phải sự thật.** faster-whisper nghe sai tên riêng
+   tiếng Việt một cách có hệ thống — ngay đoạn đầu `L21_V001`: *"sông Cổ Long"*
+   (Cửu Long), *"sụt lũng"* (sụt lún). Chép nguyên tên riêng từ phụ đề vào bản
+   ghi là **đóng dấu sai chính tả thành dữ liệu**, và tệ hơn caption bịa vì nó
+   trông rất giống thật. Luật 8a: tên riêng chỉ lấy từ caption hoặc
+   `onscreen_text`, không lấy từ thoại.
+2. **Nghe ≠ thấy.** Bản tin đọc lời bình trên hình tư liệu: người dẫn nói về
+   hạn mặn trong khi màn hình chiếu cánh đồng. Model gộp hai thứ là sinh ra
+   khẳng định *"cánh đồng hạn mặn"* mà không khung nào chứng minh. Luật 8b bắt
+   tách: `event`/`entities` chỉ tả thứ thấy; thứ nghe đi vào `speech_topic`.
+3. **Không nhét thoại tiếng Việt vào chuỗi phẳng.** Đo 21-09: nối `vi + en`
+   THUA `en` (`en→vi_en`: 17 lên / **85 xuống**) — token tiếng Việt không khớp
+   gì trong kho tiếng Anh nhưng vẫn tham gia chuẩn hoá BM25. Và phụ đề **đã có
+   ba arm riêng** ở cấp keyframe (`subtitle_exact`, `subtitle_partial`,
+   `subtitle_bge_m3`); đổ lại vào đây là trả token cho một thứ đã được đánh chỉ
+   mục. Nên `speech_topic` viết **tiếng Anh**, là chủ đề chứ không phải bản
+   chép, và chuỗi phẳng vẫn chỉ gồm `prose` + `onscreen_text`.
+
+Video câm thì `subtitles` rỗng và khối `[speech]` biến mất khỏi prompt — nhóm N
+(camera giao thông) là video không có tiếng.
 """
 
 from __future__ import annotations
@@ -78,6 +107,8 @@ from __future__ import annotations
 PROMPT_BAN_GHI_SHOT = """You are building a SHOT-LEVEL INDEX for a Vietnamese video retrieval system.
 
 You are given consecutive time segments from ONE video, in order. For each segment you get the dense captions of the keyframes that fall inside it, already written by a vision model. You will NOT see the images. A segment may contain one camera take or several.
+
+Some segments also carry a [speech] block: the Vietnamese soundtrack of that segment, auto-transcribed. It tells you what is being SAID, which the captions cannot know. It is machine transcription and it is often wrong — see rule 8.
 
 Your job is to turn each segment into a compact record that captures what the keyframe captions CANNOT: what HAPPENS, what CHANGES, and how the segment connects to its neighbours.
 
@@ -92,6 +123,7 @@ Return a single JSON object, nothing else:
       "entities": ["<short noun phrases for the people/objects that matter, e.g. 'male news anchor', 'collapsed concrete embankment'>"],
       "state_change": "<'X: before -> after' when the captions show the same thing in two different states, else null>",
       "onscreen_text": ["<text visible on screen, copied VERBATIM in its original language with diacritics>"],
+      "speech_topic": "<ENGLISH. One short phrase saying what the [speech] block of THIS segment is ABOUT — the subject being discussed, not a translation of it. null when there is no speech, or when the speech is only greetings/filler>",
       "link_to_previous": "<how this segment follows the one before: 'continues', 'cuts to new location', 'returns to anchor', 'same subject closer', or null>",
       "prose": "<2-3 sentences of ordinary English prose saying the same thing as the fields above, written as one flowing description a person could read. Weave in the programme name, what the segment shows, the transition from the previous segment, and any state change. Quote on-screen text verbatim inside the prose, in its original language. Add NOTHING that is not already in the fields above.>"
     }
@@ -120,13 +152,28 @@ RULES:
 
 6. LENGTH. "event" is one sentence. "prose" is 2-3 sentences. "entities" is at most 5 short phrases. "memory" is at most 3 lines. This record sits NEXT TO the full keyframe captions in the index — repeating their detail wastes the budget that the verb needs.
 
-7. ENGLISH for everything you write yourself; original language only inside "onscreen_text"."""  # noqa: E501
+6b. "onscreen_text" IS AT MOST 5 ITEMS, AND THEY ARE THE IDENTIFYING ONES. A segment's captions may quote dozens of strings — every banner, every shop sign, every slogan on a wall, every label in the background. Do not copy them all. Keep only the text that would let someone recognise THIS segment: the headline or news banner, the name of the place or product being shown, a score, a price, a date, a caption naming a speaker. Drop decorative slogans, standing signage, and anything that merely says where you generally are. Every one of these strings is already stored with its own keyframe, so this field is a pointer, not an archive.
+
+6c. DROP GARBLED READINGS OF A WATERMARK. The captions were written one frame at a time, so a station logo or camera watermark is read slightly differently each time: you will see a cluster of short strings that are obviously the same mark mangled in different ways ("UTMC", "UT/\\-G", "UTM-G", "UT A&G"). Keep NONE of them — a mark that is burned into every frame of the video says nothing about any one segment, and the misreadings are not even text. This does NOT apply to a fixed overlay that carries real information, such as the name of the junction a traffic camera watches or a running clock: keep those, in their most complete and correct spelling.
+
+7. ENGLISH for everything you write yourself; original language only inside "onscreen_text".
+
+8. THE [speech] BLOCK IS WHAT IS HEARD, NOT WHAT IS SEEN, AND IT IS NOT RELIABLE.
+
+8a. NEVER take a proper noun from [speech]. The transcript is produced by a speech recogniser that mishears Vietnamese names constantly — place names, people's names, organisations and numbers in it are frequently wrong, and a wrong name written confidently is worse than no name. Names, numbers and quoted text may come ONLY from the captions or from "onscreen_text". If the speech says a name and nothing on screen confirms it, leave it out.
+
+8b. DO NOT MERGE WHAT IS HEARD INTO WHAT IS SEEN. In a news programme the narrator talks about one thing while the pictures show another. "event", "entities", "state_change" and "onscreen_text" describe ONLY what the captions describe. What the soundtrack is about goes in "speech_topic" and nowhere else. Never write that something is visible because the speech mentioned it.
+
+8c. "speech_topic" IS A TOPIC, NOT A TRANSLATION. Write a short English phrase — "drought in the Mekong Delta", "a new bus route opening" — not a rendering of the sentences. If the speech is only a greeting, a programme opening, or too garbled to be about anything, write null. In "prose" you may mention it only as reported speech ("the narration turns to ..."), so a reader can tell it apart from what the shot shows."""  # noqa: E501
 
 
 def dung_dau_vao(cum: list[dict], bo_nho_truoc: str | None = None) -> str:
     """Dựng phần dữ liệu của prompt cho MỘT cụm shot.
 
-    `cum` = `[{shot_id, duration_seconds, captions: [str]}]`.
+    `cum` = `[{segment_id, duration_seconds, captions: [str], subtitles: [str]}]`.
+    `subtitles` là tuỳ chọn: thiếu hoặc rỗng thì khối `[speech]` **không được
+    in ra** — in một nhãn rỗng là dạy model rằng im lặng có nghĩa, trong khi
+    video câm (camera giao thông nhóm N) chỉ đơn giản là không có tiếng.
 
     `bo_nho_truoc` là trường `memory` của cụm ngay trước trong CÙNG video — chỗ
     duy nhất còn giữ tính hồi quy. Cụm đầu tiên của video truyền `None`.
@@ -136,9 +183,23 @@ def dung_dau_vao(cum: list[dict], bo_nho_truoc: str | None = None) -> str:
         phan.append(
             f"CONTEXT FROM THE PRECEDING SEGMENTS OF THIS VIDEO:\n{bo_nho_truoc}\n")
     phan.append("SEGMENTS:")
+    # Một câu whisper vắt qua nhiều cửa sổ sẽ được `phu_de_cua` trả về ở TẤT CẢ
+    # các cửa sổ nó chạm — đúng về mặt thời gian, nhưng trong một prompt thì là
+    # chép lại nguyên văn. Đo trên `L26_V213`: một đoạn 700 ký tự xuất hiện ở 3
+    # cửa sổ liền nhau. Giữ lần ĐẦU và bỏ các lần sau trong cùng cụm: model đọc
+    # cả cụm theo thứ tự nên không mất gì, còn prompt thì không trả tiền ba lần.
+    da_thay: set[str] = set()
     for s in cum:
         phan.append(f"\n--- {s['segment_id']}  ({s['duration_seconds']:.1f}s, "
                     f"{len(s['captions'])} keyframe) ---")
         for i, c in enumerate(s["captions"], 1):
             phan.append(f"[keyframe {i}] {c}")
+        thoai = []
+        for t in (s.get("subtitles") or []):
+            t = (t or "").strip()
+            if t and t not in da_thay:
+                da_thay.add(t)
+                thoai.append(t)
+        if thoai:
+            phan.append("[speech] " + " ".join(thoai))
     return "\n".join(phan)
