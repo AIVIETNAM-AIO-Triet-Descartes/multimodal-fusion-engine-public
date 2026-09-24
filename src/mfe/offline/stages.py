@@ -2085,6 +2085,7 @@ def stage_n6_bge_m3(ctx: StageContext) -> dict:
             normalize_embeddings=True,
             batch_size=ctx.params.get("batch_size", 16),
             convert_to_numpy=True,
+            show_progress_bar=True,
         )
 
     return ctx.writer.write_vector_part(
@@ -2096,6 +2097,42 @@ def stage_n6_bge_m3(ctx: StageContext) -> dict:
         params={"normalize": True, "source": _BGE_M3_SOURCE},
         elapsed_s=timer.seconds,
     )
+
+def stage_n6_bge_m3_batch1(ctx: StageContext) -> dict:
+    """Caption -> BGE-M3 specifically for batch 1 reading from research path."""
+    from sentence_transformers import SentenceTransformer  # noqa: PLC0415
+
+    checkpoint = "BAAI/bge-m3"
+    local = ctx.workdir / f"gemini_captions_{ctx.video_id}.json"
+    
+    # Batch 1 Gemini captions are on the research volume at this specific path
+    remote_path = f"/research/caption-gemini-trammay-v1/parts/captions/{ctx.video_id}.json"
+    ctx.writer.transport.get(remote_path, local)
+    
+    captions = json.loads(local.read_text(encoding="utf-8"))
+    if not captions:
+        raise RuntimeError(f"{ctx.video_id}: chưa có caption ở {remote_path}")
+
+    keys = sorted(captions)
+    model = cached_model(f"bge-m3 {checkpoint}", lambda: SentenceTransformer(checkpoint))
+    with Stopwatch() as timer:
+        vectors = model.encode(
+            [captions[k] for k in keys],
+            normalize_embeddings=True,
+            batch_size=ctx.params.get("batch_size", 16),
+            convert_to_numpy=True,
+        )
+
+    return ctx.writer.write_vector_part(
+        "dense_vectors",
+        ctx.video_id,
+        keys,
+        np.asarray(vectors, dtype=np.float32),
+        model=checkpoint,
+        params={"normalize": True, "source": "gemini_captions"},
+        elapsed_s=timer.seconds,
+    )
+
 
 def stage_n7_bge_m3_subtitles(ctx: StageContext) -> dict:
     """Subtitles -> BGE-M3 (Dense Vector)."""
@@ -2111,10 +2148,12 @@ def stage_n7_bge_m3_subtitles(ctx: StageContext) -> dict:
         vectors = np.zeros((0, 1024), dtype=np.float32)
         elapsed = 0.0
     else:
+        from mfe.offline.shot_record_prompt import loc_ao_giac_thoai
         model = cached_model(f"bge-m3 {checkpoint}", lambda: SentenceTransformer(checkpoint))
         with Stopwatch() as timer:
+            texts = [loc_ao_giac_thoai(captions[k]) for k in keys]
             vectors = model.encode(
-                [captions[k] for k in keys],
+                texts,
                 normalize_embeddings=True,
                 batch_size=ctx.params.get("batch_size", 16),
                 convert_to_numpy=True,
@@ -2132,6 +2171,98 @@ def stage_n7_bge_m3_subtitles(ctx: StageContext) -> dict:
     )
 
 
+def stage_n8_bge_m3_window(ctx: StageContext) -> dict:
+    """Window Records -> BGE-M3 (Dense Vector)."""
+    from sentence_transformers import SentenceTransformer  # noqa: PLC0415
+
+    checkpoint = "BAAI/bge-m3"
+    local = ctx.workdir / f"window_records_{ctx.video_id}.json"
+    ctx.writer.transport.get(ctx.layout.part("window_records", ctx.video_id), local)
+    records = json.loads(local.read_text(encoding="utf-8"))
+
+    keys = sorted(records)
+    if not keys:
+        vectors = np.zeros((0, 1024), dtype=np.float32)
+        elapsed = 0.0
+    else:
+        model = cached_model(f"bge-m3 {checkpoint}", lambda: SentenceTransformer(checkpoint))
+        texts = []
+        for k in keys:
+            b = records[k]
+            phan = [b.get("prose") or b.get("event") or ""]
+            phan += list(b.get("onscreen_text") or [])
+            text = " . ".join(x for x in phan if x).strip()
+            texts.append(text)
+            
+        with Stopwatch() as timer:
+            vectors = model.encode(
+                texts,
+                normalize_embeddings=True,
+                batch_size=ctx.params.get("batch_size", 16),
+                convert_to_numpy=True,
+            )
+        elapsed = timer.seconds
+
+    return ctx.writer.write_vector_part(
+        "window_dense",
+        ctx.video_id,
+        keys,
+        np.asarray(vectors, dtype=np.float32),
+        model=checkpoint,
+        params={"normalize": True, "source": "window_records"},
+        elapsed_s=elapsed,
+    )
+
+def stage_n6_gemini_split_embed(ctx: StageContext) -> dict:
+    """Split gemini_raw into gemini_captions and gemini_ocr, then embed gemini_captions."""
+    from sentence_transformers import SentenceTransformer  # noqa: PLC0415
+    from mfe.offline.caption_prompt import loc_khoi_ocr, tach_caption_ocr
+
+    checkpoint = "BAAI/bge-m3"
+    
+    # 1. Read gemini_raw
+    local = ctx.workdir / f"gemini_raw_{ctx.video_id}.json"
+    ctx.writer.transport.get(ctx.layout.part("gemini_raw", ctx.video_id), local)
+    raw_captions = json.loads(local.read_text(encoding="utf-8"))
+
+    if not raw_captions:
+        raise RuntimeError(f"{ctx.video_id}: chưa có gemini_raw")
+
+    # 2. Split
+    captions = {}
+    ocrs = {}
+    for k, chuoi_tho in raw_captions.items():
+        cap, ocr = tach_caption_ocr(chuoi_tho)
+        ocr = loc_khoi_ocr(ocr)
+        captions[k] = cap
+        ocrs[k] = ocr
+        
+    # 3. Write parts
+    ctx.writer.write_text_part("gemini_captions", ctx.video_id, captions, model="gemini", params={}, facts={}, elapsed_s=0.0)
+    ctx.writer.write_text_part("gemini_ocr", ctx.video_id, ocrs, model="gemini", params={}, facts={}, elapsed_s=0.0)
+
+    # 4. Embed gemini_captions
+    keys = sorted(captions)
+    model = cached_model(f"bge-m3 {checkpoint}", lambda: SentenceTransformer(checkpoint))
+    with Stopwatch() as timer:
+        vectors = model.encode(
+            [captions[k] for k in keys],
+            normalize_embeddings=True,
+            batch_size=ctx.params.get("batch_size", 16),
+            convert_to_numpy=True,
+        )
+    elapsed = timer.seconds
+
+    return ctx.writer.write_vector_part(
+        "dense_vectors",
+        ctx.video_id,
+        keys,
+        np.asarray(vectors, dtype=np.float32),
+        model=checkpoint,
+        params={"normalize": True, "source": "gemini_captions"},
+        elapsed_s=elapsed,
+    )
+
 STAGES = {
     "n0_import_btc": stage_n0_import_btc,
     "n1_keyframes": stage_n1_keyframes,
@@ -2147,7 +2278,10 @@ STAGES = {
     "n6_caption_sota_qwen": stage_n6_caption_sota_qwen,
     "n6_ocr_qwen25": stage_n6_ocr_qwen25,
     "n6_bge_m3": stage_n6_bge_m3,
+    "n6_bge_m3_batch1": stage_n6_bge_m3_batch1,
+    "n6_gemini_split_embed": stage_n6_gemini_split_embed,
     "n7_bge_m3_subtitles": stage_n7_bge_m3_subtitles,
+    "n8_bge_m3_window": stage_n8_bge_m3_window,
 }
 
 

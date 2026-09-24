@@ -45,7 +45,7 @@ keyframe_set: btc
 calibration_video: L21_V001
 
 assign: zips
-zip_inventory: config/zips_keyframes_btc.yaml
+zip_inventory: config/zips_keyframes_btc_capb1.yaml
 
 stages:
   - n6_bge_m3
