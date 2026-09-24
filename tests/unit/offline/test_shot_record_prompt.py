@@ -90,3 +90,51 @@ class TestLuatChongBia:
     def test_prompt_gioi_han_onscreen_text(self):
         """Luật 6b: đo được 33 mục trong MỘT cửa sổ batch 2 trước khi siết."""
         assert '"onscreen_text" IS AT MOST 5 ITEMS' in PROMPT_BAN_GHI_SHOT
+
+
+class TestGiuSoDem:
+    """Luật 1b + xếp hạng 6b — sinh ra sau khi ĐO thấy số bị nén mất.
+
+    Quét 20 cửa sổ: nhóm M giữ **0/19** con số và bản ghi viết *"a dense pack of
+    motorbikes"* trong khi caption ghi *"approximately sixteen motorbikes"*. Mà
+    **51% đề thật hỏi số lượng** (§4). Sau khi vá: M 10/19, và `event` mang
+    *"Over ten representatives ... holding five light blue signs"*.
+    """
+
+    def test_luat_giu_so_dem(self):
+        assert "KEEP THE NUMBERS THE CAPTIONS GIVE YOU" in PROMPT_BAN_GHI_SHOT
+
+    def test_cam_tu_dem_lay(self):
+        """Giữ số KHÔNG được biến thành mời model tự đếm."""
+        assert "Do NOT count anything yourself" in PROMPT_BAN_GHI_SHOT
+
+    def test_giu_nguyen_tu_uoc_luong(self):
+        """`around sixteen` chứ không phải `sixteen`: bỏ hedge là biến ước thành chắc."""
+        assert "Keep the caption's own hedge" in PROMPT_BAN_GHI_SHOT
+
+    def test_chuoi_co_SO_duoc_uu_tien(self):
+        assert "text carrying a NUMBER that means something" in PROMPT_BAN_GHI_SHOT
+
+    def test_logo_chuong_trinh_KHONG_thuoc_hang_3(self):
+        """Lượt đo sau 6b để `MÓN NGON MỖI NGÀY` + `AJINOMOTO` lọt vào 5/5 cửa sổ."""
+        assert "never covers the programme's own title" in PROMPT_BAN_GHI_SHOT
+
+
+class TestProseKhongPhaiDanhSach:
+    """Luật 5d — `prose` từng thoái hoá thành bản kê `entities` ở **10/10** cửa sổ.
+
+    Câu kiểu *"Notable entities include the traffic signal post, a red compact
+    hatchback, ..."* chính là chuỗi nối mà `prose` sinh ra để thay thế, chỉ thêm
+    một stopword đằng trước. Sau khi vá: còn **1/20**.
+    """
+
+    def test_cam_cau_liet_ke(self):
+        assert "NOT A LIST WITH A SENTENCE WRAPPED AROUND IT" in PROMPT_BAN_GHI_SHOT
+
+    def test_liet_ke_cu_the_cac_mo_dau_bi_cam(self):
+        for cum in ("Notable entities include", "The scene features",
+                    "Prominent elements include", "Displayed signage includes"):
+            assert cum in PROMPT_BAN_GHI_SHOT, cum
+
+    def test_cam_noi_ve_chinh_cau_truc_ban_ghi(self):
+        assert '"a state change occurs"' in PROMPT_BAN_GHI_SHOT
