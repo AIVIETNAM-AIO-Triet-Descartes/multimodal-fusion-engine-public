@@ -41,6 +41,32 @@ tức đất của `T2`, ô thấp nhất. Nên bộ nhớ ở đây là **sổ 
 Chống bịa: luật 2 và luật 3 là hàng rào chính. Model **chỉ được** dùng thông
 tin có trong caption đưa vào; suy luận ngoài đó phải để trống. Đây là thứ đo
 được — mọi thực thể trong bản ghi phải truy ngược được về một caption nguồn.
+
+Trường `prose` — và vì sao vẫn giữ các trường rời (Lead chốt 24-09)
+--------------------------------------------------------------------
+Chuỗi phẳng đưa vào BM25/`bge_m3` là **`prose`**, không phải bản nối các trường
+rời. Lý do: `bge_m3` là bộ nhúng CÂU, mà `"… ground. . male news anchor . water
+geyser …"` không phải câu. Và văn xuôi **nuốt được quan hệ liên đoạn vào nội
+dung**: `link_to_previous: "same subject closer"` ở dạng nhãn là stopword vô
+dụng cho BM25, còn *"In a closer view of the scene, the man crouches beside the
+well pipe"* thì khớp được với đề thật.
+
+Nhưng **không bỏ các trường rời**, vì ba thứ sẽ mất:
+  - hàng rào chống bịa: `state_change: null` là một câu trả lời DỄ, còn văn xuôi
+    thì ép viết trôi chảy — mà trôi chảy chính là thứ đẻ ra tình tiết nối;
+  - mặt kiểm: `onscreen_text` phải ở dạng danh sách thì `loc_khoi_ocr` mới gỡ
+    được mảnh logo, và mới đếm được tỉ lệ chép đúng nguyên văn;
+  - quyền loại bỏ: nhét `link_to_previous` vào văn xuôi rồi thì không gỡ ra được.
+
+Và có lợi ích phụ: **văn xuôi lệch với trường rời là tín hiệu bịa ĐO ĐƯỢC** —
+văn xuôi kể một biến đổi mà `state_change` là `null` thì bắt được bằng máy.
+
+⚠ Luật 5c sinh ra sau khi ĐO, không phải từ suy luận. Bản đầu có `prose` nhưng
+thiếu 5c, và model viết `"No state changes occur across the segment."` ở **5/5**
+cửa sổ — phần lớn cửa sổ không có biến đổi, nên câu phủ định đó sẽ nằm trong
+~90% tài liệu, idf ~0,1, tức **stopword**. Đúng cơ chế đã giết arm `object`
+(`một` 91,0% tài liệu). Cùng lượt đó nó cũng nhét mảnh logo `"60", "giây"` vào
+văn xuôi — nơi `loc_khoi_ocr` không với tới. Thêm 5c: hết cả hai.
 """
 
 from __future__ import annotations
@@ -66,7 +92,8 @@ Return a single JSON object, nothing else:
       "entities": ["<short noun phrases for the people/objects that matter, e.g. 'male news anchor', 'collapsed concrete embankment'>"],
       "state_change": "<'X: before -> after' when the captions show the same thing in two different states, else null>",
       "onscreen_text": ["<text visible on screen, copied VERBATIM in its original language with diacritics>"],
-      "link_to_previous": "<how this segment follows the one before: 'continues', 'cuts to new location', 'returns to anchor', 'same subject closer', or null>"
+      "link_to_previous": "<how this segment follows the one before: 'continues', 'cuts to new location', 'returns to anchor', 'same subject closer', or null>",
+      "prose": "<2-3 sentences of ordinary English prose saying the same thing as the fields above, written as one flowing description a person could read. Weave in the programme name, what the segment shows, the transition from the previous segment, and any state change. Quote on-screen text verbatim inside the prose, in its original language. Add NOTHING that is not already in the fields above.>"
     }
   ],
   "counters": {"<name of a thing that recurs across these shots>": <how many distinct times it appears>},
@@ -87,7 +114,11 @@ RULES:
 
 5. ON-SCREEN TEXT. Copy it exactly as the caption quotes it, keeping Vietnamese diacritics. Do NOT translate it. Skip channel logos and watermarks.
 
-6. LENGTH. "event" is one sentence. "entities" is at most 5 short phrases. "memory" is at most 3 lines. This record sits NEXT TO the full keyframe captions in the index — repeating their detail wastes the budget that the verb needs.
+5b. THE "prose" FIELD IS A REWRITE, NOT A NEW CHANCE TO ADD THINGS. It must say exactly what the structured fields say, in ordinary sentences — nothing more. A reader comparing the two must find no fact in the prose that is missing from the fields. This field exists because a search index reads sentences better than a list of fragments, not because more detail is wanted.
+
+5c. NEVER WRITE A SENTENCE ABOUT SOMETHING THAT IS ABSENT. If "state_change" is null, say NOTHING about state changes — do not write "no state changes occur". If "link_to_previous" is null, say nothing about transitions. Most segments have no state change, so a sentence denying one would appear in almost every record in the index and become noise that matches every query equally. Describe only what IS there. And do not name the channel or programme logo in the prose ("60 giây", "HTV"): a logo is on screen in every single segment, so it carries no information about this one.
+
+6. LENGTH. "event" is one sentence. "prose" is 2-3 sentences. "entities" is at most 5 short phrases. "memory" is at most 3 lines. This record sits NEXT TO the full keyframe captions in the index — repeating their detail wastes the budget that the verb needs.
 
 7. ENGLISH for everything you write yourself; original language only inside "onscreen_text"."""  # noqa: E501
 
