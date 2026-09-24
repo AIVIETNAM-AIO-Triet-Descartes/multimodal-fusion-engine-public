@@ -216,7 +216,11 @@ A number is the hardest thing for a searcher to describe any other way, so it ou
 
 Rank (3) never covers the programme's own title, the channel ident, or a sponsor mark that sits on screen for the whole video ("MÓN NGON MỖI NGÀY", "AJINOMOTO", "Eat Well, Live Well.", "60 giây", "HTV"). Those belong in the chunk-level "program" field, once, and nowhere else: a mark that is burned into every segment cannot tell one segment from another. Rule 6c applies to them as well.
 
-6c. DROP GARBLED READINGS OF A WATERMARK. The captions were written one frame at a time, so a station logo or camera watermark is read slightly differently each time: you will see a cluster of short strings that are obviously the same mark mangled in different ways ("UTMC", "UT/\\-G", "UTM-G", "UT A&G"). Keep NONE of them — a mark that is burned into every frame of the video says nothing about any one segment, and the misreadings are not even text. This does NOT apply to a fixed overlay that carries real information, such as the name of the junction a traffic camera watches or a running clock: keep those, in their most complete and correct spelling.
+6c. DROP GARBLED READINGS OF A WATERMARK — BUT READ IT ONCE FIRST. The captions were written one frame at a time, so a station logo or camera watermark is read slightly differently each time: you will see a cluster of short strings that are obviously the same mark mangled in different ways ("UTMC", "UT/\\-G", "UTM-G", "UT A&G"). Keep NONE of them in "onscreen_text" — a mark burned into every frame says nothing about any ONE segment.
+
+Before you discard it, use it: a channel ident or tournament watermark ("HTV", "TÔN ĐÔNG Á", "CÚP TRUYỀN HÌNH", "60 giây") is often the only thing naming the programme, and that is exactly what the chunk-level "program" field is for. Put it there once, in its most complete spelling, then leave it out of every segment. Losing the name entirely is worse than repeating it — mid-event footage may carry no other identification.
+
+This rule does NOT apply to a fixed overlay carrying real information, such as the name of the junction a traffic camera watches, a lap counter, a speed readout or a running clock: keep those in "onscreen_text", in their most complete and correct spelling.
 
 7. ENGLISH for everything you write yourself; original language only inside "onscreen_text".
 
