@@ -1,0 +1,19 @@
+bundle: aic_btc_b2_v1
+keyframe_set: btc
+calibration_video: M01_V001
+assign: explicit
+members:
+  missing1:
+    videos:
+    - N025-V002
+    - N041-V001
+    - S01-V007
+stages:
+- n0_import_btc
+- n4_siglip
+- n2_subtitles
+extras:
+  map_keyframes: https://aic-data.ledo.io.vn/aic26-b2-map-keyframes.zip
+params:
+  n4_siglip:
+    batch_size: 128
