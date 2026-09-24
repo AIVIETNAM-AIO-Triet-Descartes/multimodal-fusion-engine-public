@@ -116,6 +116,13 @@ Return a single JSON object, nothing else:
 
 {
   "program": "<one short phrase naming the programme or topic of this run of segments, or null>",
+  "story": {
+    "what": "<the event or report these segments are covering, in one sentence, or null>",
+    "who": ["<people or organisations named by ANY source, each with their role, e.g. 'ông Đàm Xuân Hòa, the landowner'>"],
+    "where": "<the place, as specifically as a source gives it, e.g. 'xã Yạc Ly, huyện Triều Vô Rông, tỉnh Gia Lai', or null>",
+    "when": "<any date or time the sources give for the events, or null>",
+    "background": "<up to 2 sentences of cause, history or consequence that the pictures cannot show but a source states — why this is happening, what led to it, what was done about it. null if no source says>"
+  },
   "segments": [
     {
       "segment_id": "<copy verbatim from the input>",
@@ -125,11 +132,11 @@ Return a single JSON object, nothing else:
       "onscreen_text": ["<text visible on screen, copied VERBATIM in its original language with diacritics>"],
       "speech_topic": "<ENGLISH. One short phrase saying what the [speech] block of THIS segment is ABOUT — the subject being discussed, not a translation of it. null when there is no speech, or when the speech is only greetings/filler>",
       "link_to_previous": "<how this segment follows the one before: 'continues', 'cuts to new location', 'returns to anchor', 'same subject closer', or null>",
-      "prose": "<2-3 sentences of ordinary English prose saying the same thing as the fields above, written as one flowing description a person could read. Weave in the programme name, what the segment shows, the transition from the previous segment, and any state change. Quote on-screen text verbatim inside the prose, in its original language. Add NOTHING that is not already in the fields above.>"
+      "prose": "<3-5 sentences of ordinary English prose. Say what the segment SHOWS, the transition from the previous segment, any state change, and — when this segment belongs to the story — name the people and the place from \"story\" and give the one piece of background that makes this segment make sense. Quote on-screen text verbatim inside the prose, in its original language. Everything here must come from \"story\" or from this segment's own fields; add no fact of your own.>"
     }
   ],
   "counters": {"<name of a thing that recurs across these shots>": <how many distinct times it appears>},
-  "memory": "<at most 3 lines carrying what the NEXT batch of segments needs to know: the programme, the 2-3 most recent events, and any running count>"
+  "memory": "<at most 5 lines carrying what the NEXT batch of segments needs to know. Restate \"story\" in full — the event, the names with their roles, the place, the date, the background — because the next batch will not see this transcript and cannot recover them. Then the 2-3 most recent events and any running count. If the last segments have moved on to a new report, say so explicitly here so the next batch does not keep using a finished story.>"
 }
 
 RULES:
@@ -138,7 +145,7 @@ RULES:
 
 1b. KEEP THE NUMBERS THE CAPTIONS GIVE YOU. When a caption states how many of something there are — "approximately sixteen motorbikes", "over ten representatives", "five light blue signs", "three boats" — carry that quantity into "event" or "entities" instead of flattening it to "several" or "a group of". Keep the caption's own hedge: write "around sixteen motorbikes", not "sixteen motorbikes". Do NOT count anything yourself, and do not add a number the captions did not give. If two captions of the same segment give different counts for the same thing, use the larger one and keep it hedged, because the frames show different moments of one scene. Quantity is one of the most common things a search asks about, and it is the first thing lost when a record is compressed.
 
-2. USE ONLY WHAT THE CAPTIONS SAY. Every entity, number, name and piece of text in your output must be traceable to a caption you were given. If you are unsure whether two shots show the same person or place, say so in "link_to_previous" and do NOT assert identity. NEVER add a fact from world knowledge — not a place name, not a person's name, not an event name.
+2. USE ONLY WHAT YOU WERE GIVEN. Every entity, number, name and piece of text in your output must be traceable to a caption, to a [speech] block, or to the context handed to you from the preceding segments. If you are unsure whether two shots show the same person or place, say so in "link_to_previous" and do NOT assert identity. NEVER add a fact from your own knowledge — not a place name, not a person's name, not an event name, and never a detail that "must" be true of a scene like this. The test is simple: for every fact in the record you must be able to point at the line you took it from.
 
 3. NULL IS A VALID ANSWER. "state_change": null, "onscreen_text": [], "program": null are all correct when the captions do not support anything better. An invented state change is far worse than a missing one.
 
@@ -148,13 +155,13 @@ RULES:
 
 5. ON-SCREEN TEXT. Copy it exactly as the caption quotes it, keeping Vietnamese diacritics. Do NOT translate it. Skip channel logos and watermarks.
 
-5b. THE "prose" FIELD IS A REWRITE, NOT A NEW CHANCE TO ADD THINGS. It must say exactly what the structured fields say, in ordinary sentences — nothing more. A reader comparing the two must find no fact in the prose that is missing from the fields. This field exists because a search index reads sentences better than a list of fragments, not because more detail is wanted.
+5b. "prose" DRAWS ON EXACTLY TWO PLACES: this segment's own fields, and "story". Nothing else may enter it. A reader comparing them must find no fact in the prose that is missing from both. This field is what a search actually reads, so it is the one place where what is SEEN in this segment and what is KNOWN about the report come together in sentences — but coming together is not licence to add. If you cannot point at the field or the story line a sentence came from, delete the sentence.
 
 5d. "prose" IS A DESCRIPTION, NOT A LIST WITH A SENTENCE WRAPPED AROUND IT. Never write a sentence whose job is to enumerate a field. These openings are all forbidden: "Notable entities include ...", "The scene features ...", "Prominent elements include ...", "The shot captures ...", "Visible markings include ...", "Displayed signage includes ...", "Notable visible text includes ...", "Among the ... are ...". Never refer to the record's own structure either — do not write "a state change occurs", "the transition is marked by", "this segment shows". Write about the people and things DOING and BEING something: "a dark blue SUV waits at the stop line while a courier with a green delivery box edges forward beside it", not "notable entities include a dark blue SUV and a courier with a green delivery box". Quote on-screen text inside a sentence that says where it is or what it announces, not as a trailing inventory. This field exists because a search index reads sentences better than a list of fragments — a list with "include" in front of it is still a list.
 
 5c. NEVER WRITE A SENTENCE ABOUT SOMETHING THAT IS ABSENT. If "state_change" is null, say NOTHING about state changes — do not write "no state changes occur". If "link_to_previous" is null, say nothing about transitions. Most segments have no state change, so a sentence denying one would appear in almost every record in the index and become noise that matches every query equally. Describe only what IS there. And do not name the channel or programme logo in the prose ("60 giây", "HTV"): a logo is on screen in every single segment, so it carries no information about this one.
 
-6. LENGTH. "event" is one sentence. "prose" is 2-3 sentences. "entities" is at most 5 short phrases. "memory" is at most 3 lines. This record sits NEXT TO the full keyframe captions in the index — repeating their detail wastes the budget that the verb needs.
+6. LENGTH. "event" is one sentence. "prose" is 3-5 sentences. "entities" is at most 5 short phrases. "memory" is at most 5 lines. Spend the length on what the keyframe captions do NOT have — the verb, the change, the link between segments, and who and where this is. Do not spend it re-describing how people are dressed or what colour things are: this record sits NEXT TO the full keyframe captions in the index, and every clause that repeats them is a clause not spent on what only you can say.
 
 6b. "onscreen_text" IS AT MOST 5 ITEMS, AND THEY ARE THE IDENTIFYING ONES. A segment's captions may quote dozens of strings — every banner, every shop sign, every slogan on a wall, every label in the background. Do not copy them all. Keep only the text that would let someone recognise THIS segment. Drop decorative slogans, standing signage, and anything that merely says where you generally are. Every one of these strings is already stored with its own keyframe, so this field is a pointer, not an archive.
 
@@ -174,11 +181,18 @@ Rank (3) never covers the programme's own title, the channel ident, or a sponsor
 
 8. THE [speech] BLOCK IS WHAT IS HEARD, NOT WHAT IS SEEN, AND IT IS NOT RELIABLE.
 
-8a. NEVER take a proper noun from [speech]. The transcript is produced by a speech recogniser that mishears Vietnamese names constantly — place names, people's names, organisations and numbers in it are frequently wrong, and a wrong name written confidently is worse than no name. Names, numbers and quoted text may come ONLY from the captions or from "onscreen_text". If the speech says a name and nothing on screen confirms it, leave it out.
+8a. NAMES, PLACES AND DATES FROM [speech] ARE WANTED — COPY THEM EXACTLY AS HEARD. The soundtrack is usually the ONLY source that says who someone is, where this is happening and when. Take them. But the transcript comes from a speech recogniser that mishears Vietnamese proper nouns often, so three things bind you:
+  - Spell it EXACTLY as the transcript spells it. Never "fix" a name toward one you recognise, never expand an abbreviation, never supply a province you think it belongs to. A misspelt name simply fails to match a search; a name you corrected from your own knowledge is an invented fact.
+  - When on-screen text and speech give the same name differently, use the ON-SCREEN spelling — it was read from the picture, not heard.
+  - Attach a name to a person or place ONLY where a source attaches it. If the narration names a man and the captions show a man, you may say the segment shows him ONLY if the narration ties them; otherwise name the person in "story.who" and leave the segment's "entities" describing what is visible.
 
-8b. DO NOT MERGE WHAT IS HEARD INTO WHAT IS SEEN. In a news programme the narrator talks about one thing while the pictures show another. "event", "entities", "state_change" and "onscreen_text" describe ONLY what the captions describe. What the soundtrack is about goes in "speech_topic" and nowhere else. Never write that something is visible because the speech mentioned it.
+8b. DO NOT MERGE WHAT IS HEARD INTO WHAT IS SEEN. "event", "entities", "state_change" and "onscreen_text" describe ONLY what the captions describe. Never write that something is visible because the speech mentioned it — if the narration says a hospital and the captions show a field, the record shows a field.
 
-8c. "speech_topic" IS A TOPIC, NOT A TRANSLATION. Write a short English phrase — "drought in the Mekong Delta", "a new bus route opening" — not a rendering of the sentences. If the speech is only a greeting, a programme opening, or too garbled to be about anything, write null. In "prose" you may mention it only as reported speech ("the narration turns to ..."), so a reader can tell it apart from what the shot shows."""  # noqa: E501
+8d. A NEWS PROGRAMME CHANGES STORY WITHOUT WARNING, AND "story" MUST NOT OUTLIVE ITS ITEM. The segments you are given may span the end of one report and the start of another; the memory handed to you may describe a report that has already finished. Before you attach "story" to a segment, check that this segment's captions still show that report. When the pictures move to a different subject, the old story stops there: do not carry a name, a place or a cause across the cut. If the segments cover two reports, fill "story" for the one that covers most of them and say nothing about it in the segments belonging to the other.
+
+8c. "speech_topic" IS A TOPIC, NOT A TRANSLATION. Write a short English phrase — "drought in the Mekong Delta", "a new bus route opening" — not a rendering of the sentences. If the speech is only a greeting, a programme opening, or too garbled to be about anything, write null.
+
+Do NOT spend a sentence of "prose" announcing that topic. A sentence like "The narration turns to gas and water eruption after an earthquake" repeats a field that is already stored beside it and says nothing a search can use. Put the substance in instead — who, where, what happened — and mark it as reported where a reader could otherwise mistake it for something visible: "According to the report, the well had been drilled to 170 meters without finding water". Attribution belongs inside the sentence that carries the fact, not in a sentence of its own."""  # noqa: E501
 
 
 def dung_dau_vao(cum: list[dict], bo_nho_truoc: str | None = None) -> str:

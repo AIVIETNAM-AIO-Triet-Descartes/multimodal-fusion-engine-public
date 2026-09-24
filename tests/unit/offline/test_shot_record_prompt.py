@@ -71,11 +71,58 @@ class TestKhuTrungTrongCum:
         assert cau in b
 
 
+class TestBoiCanhCauChuyen:
+    """`story` + luật 8a bản NỚI (24-09, Lead yêu cầu).
+
+    Bản 8a đầu cấm lấy MỌI danh từ riêng từ thoại, vì whisper nghe sai tên tiếng
+    Việt. Đo lại trên `L21_V001` thì luật đó **cấm đúng nguồn duy nhất có thông
+    tin**: chữ trên màn hình chỉ có dòng tít, còn tên người (`ông Đàm Xuân Hòa`),
+    nơi chốn (`tỉnh Gia Lai`), mốc (`ngày 28 tháng 7`) và nguyên nhân (khoan 170
+    mét, động đất) đều **chỉ có trong lời thoại**.
+
+    Lập luận cũ của tôi mượn idf của logo, và nó sai chỗ: logo nằm trên mọi khung
+    của cả kênh, còn tên câu chuyện nằm trên ~5 cửa sổ của MỘT video — lặp ở 5
+    cửa sổ chính là thứ làm chúng tìm được. Cái giá của tên nghe nhầm là **trượt**
+    (`Yạc Ly`, `Triều Vô Rông`), không phải kéo nhầm khung khác lên.
+
+    Ba ràng buộc thay cho lệnh cấm: chép ĐÚNG như nghe (cấm tự sửa về tên mình
+    biết), ưu tiên chính tả trên màn hình, và chỉ gắn tên vào người/nơi khi nguồn
+    gắn. Cộng luật 8d: câu chuyện KHÔNG được sống quá mục tin của nó.
+    """
+
+    def test_co_truong_story(self):
+        for khoa in ('"what"', '"who"', '"where"', '"when"', '"background"'):
+            assert khoa in PROMPT_BAN_GHI_SHOT, khoa
+
+    def test_cho_phep_lay_ten_tu_thoai(self):
+        assert "NAMES, PLACES AND DATES FROM [speech] ARE WANTED" in PROMPT_BAN_GHI_SHOT
+
+    def test_cam_TU_SUA_ten_nghe_duoc(self):
+        """Chép sai thì chỉ trượt; tự sửa về tên mình biết là BỊA."""
+        assert "Spell it EXACTLY as the transcript spells it" in PROMPT_BAN_GHI_SHOT
+        assert 'Never "fix" a name toward one you recognise' in PROMPT_BAN_GHI_SHOT
+
+    def test_uu_tien_chinh_ta_tren_man_hinh(self):
+        assert "use the ON-SCREEN spelling" in PROMPT_BAN_GHI_SHOT
+
+    def test_cau_chuyen_khong_song_qua_muc_tin(self):
+        """Bản tin đổi chuyện giữa chừng: `L21_V001` nhảy sang Bệnh viện TƯ Huế."""
+        assert '"story" MUST NOT OUTLIVE ITS ITEM' in PROMPT_BAN_GHI_SHOT
+
+    def test_memory_phai_chuyen_tiep_story(self):
+        assert 'Restate "story" in full' in PROMPT_BAN_GHI_SHOT
+
+    def test_prose_chi_duoc_lay_tu_hai_cho(self):
+        assert '"prose" DRAWS ON EXACTLY TWO PLACES' in PROMPT_BAN_GHI_SHOT
+
+    def test_khong_dat_mot_cau_chi_de_khai_chu_de(self):
+        """`"The narration turns to ..."` ở 5/5 cửa sổ chỉ lặp lại `speech_topic`."""
+        assert 'Do NOT spend a sentence of "prose" announcing that topic' \
+            in PROMPT_BAN_GHI_SHOT
+
+
 class TestLuatChongBia:
     """Luật 8 là hàng rào duy nhất giữa ASR sai và bản ghi — đừng gỡ lặng lẽ."""
-
-    def test_prompt_cam_lay_ten_rieng_tu_thoai(self):
-        assert "NEVER take a proper noun from [speech]" in PROMPT_BAN_GHI_SHOT
 
     def test_prompt_tach_nghe_khoi_thay(self):
         assert "DO NOT MERGE WHAT IS HEARD INTO WHAT IS SEEN" in PROMPT_BAN_GHI_SHOT
