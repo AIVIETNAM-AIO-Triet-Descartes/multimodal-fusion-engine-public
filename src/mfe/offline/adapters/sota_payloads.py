@@ -68,6 +68,11 @@ SOURCE_FILES: dict[str, str] = {
     # Hai nua cua MOT lan sinh Qwen2.5-VL (`n6_caption_qwen` / `n6_ocr_qwen25`).
     "caption_qwen": "qwen_captions.json",
     "ocr_qwen25": "qwen_ocr.json",
+    
+    # Bundle BTC batch 1 and 2
+    "window_bm25": "window_text.json",
+    "caption_gemini": "gemini_captions.json",
+    "ocr_gemini": "gemini_ocr.json",
 }
 
 #: The subset SOTA_AIC's own export ships. **Not the same set as `SOURCE_FILES`,
