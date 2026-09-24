@@ -36,11 +36,11 @@ members:
     - M01_V029
     - M02_V001
     - M02_V002
-  trong2:
-    videos:
     - M02_V003
     - M02_V004
     - M02_V005
+  trong2:
+    videos:
     - M02_V006
     - M02_V007
     - M02_V008
@@ -69,14 +69,14 @@ members:
     - M02_V031
     - M03_V001
     - M03_V002
-  trong3:
-    videos:
     - M03_V003
     - M03_V004
     - M03_V005
     - M03_V006
     - M03_V007
     - M03_V008
+  trong3:
+    videos:
     - M03_V009
     - M03_V010
     - M03_V011
@@ -102,8 +102,6 @@ members:
     - M03_V031
     - M04_V001
     - M04_V002
-  trong4:
-    videos:
     - M04_V003
     - M04_V004
     - M04_V005
@@ -113,6 +111,8 @@ members:
     - M04_V009
     - M04_V010
     - M04_V011
+  trong4:
+    videos:
     - M04_V012
     - M04_V013
     - M04_V014
@@ -135,8 +135,6 @@ members:
     - M05_V003
     - M05_V004
     - M05_V005
-  trong5:
-    videos:
     - M05_V006
     - M05_V007
     - M05_V008
@@ -149,6 +147,8 @@ members:
     - M05_V015
     - M05_V016
     - M05_V017
+  trong5:
+    videos:
     - M05_V018
     - M05_V019
     - M05_V020
@@ -168,8 +168,6 @@ members:
     - M06_V003
     - M06_V004
     - M06_V005
-  trong6:
-    videos:
     - M06_V006
     - M06_V007
     - M06_V008
@@ -185,6 +183,8 @@ members:
     - M06_V018
     - M06_V019
     - M06_V020
+  trong6:
+    videos:
     - M06_V021
     - M06_V022
     - M06_V023
@@ -201,8 +201,6 @@ members:
     - M07_V004
     - M07_V005
     - M07_V006
-  quang1:
-    videos:
     - M07_V007
     - M07_V008
     - M07_V009
@@ -221,6 +219,8 @@ members:
     - M07_V022
     - M07_V023
     - M07_V024
+  quang1:
+    videos:
     - M07_V025
     - M07_V026
     - M07_V027
@@ -234,8 +234,6 @@ members:
     - M08_V003
     - M08_V004
     - M08_V005
-  quang2:
-    videos:
     - M08_V006
     - M08_V007
     - M08_V008
@@ -257,6 +255,8 @@ members:
     - M08_V024
     - M08_V025
     - M08_V026
+  quang2:
+    videos:
     - M08_V027
     - M08_V028
     - M08_V029
@@ -267,8 +267,6 @@ members:
     - M09_V004
     - M09_V005
     - M09_V006
-  quang3:
-    videos:
     - M09_V007
     - M09_V008
     - M09_V009
@@ -293,6 +291,8 @@ members:
     - M09_V028
     - M09_V029
     - M09_V030
+  quang3:
+    videos:
     - M09_V031
     - M10_V001
     - M10_V002
@@ -300,8 +300,6 @@ members:
     - M10_V004
     - M10_V005
     - M10_V006
-  quang4:
-    videos:
     - M10_V007
     - M10_V008
     - M10_V009
@@ -329,12 +327,12 @@ members:
     - M10_V031
     - N001-V001
     - N001-V002
+  quang4:
+    videos:
     - N001-V003
     - N002-V001
     - N002-V002
     - N002-V003
-  quang5:
-    videos:
     - N003-V001
     - N003-V002
     - N003-V003
@@ -365,9 +363,9 @@ members:
     - N012-V001
     - N012-V002
     - N012-V003
-    - N013-V001
-  quang6:
+  quang5:
     videos:
+    - N013-V001
     - N013-V002
     - N013-V003
     - N014-V001
@@ -398,11 +396,11 @@ members:
     - N021-V003
     - N022-V001
     - N022-V002
-  triet1:
-    videos:
     - N022-V003
     - N023-V001
     - N023-V002
+  quang6:
+    videos:
     - N023-V003
     - N024-V001
     - N024-V002
@@ -430,8 +428,6 @@ members:
     - N032-V001
     - N032-V002
     - N032-V003
-  triet2:
-    videos:
     - N033-V001
     - N033-V002
     - N033-V003
@@ -439,6 +435,8 @@ members:
     - N034-V002
     - N034-V003
     - N035-V001
+  triet1:
+    videos:
     - N035-V002
     - N035-V003
     - N036-V001
@@ -462,8 +460,6 @@ members:
     - N042-V002
     - N043-V001
     - N043-V002
-  triet3:
-    videos:
     - N043-V003
     - N043-V004
     - N043-V005
@@ -474,6 +470,8 @@ members:
     - N045-V001
     - N045-V002
     - N045-V003
+  triet2:
+    videos:
     - N046-V001
     - N046-V002
     - N047-V001
@@ -494,8 +492,6 @@ members:
     - N052-V001
     - N052-V002
     - N052-V003
-  triet4:
-    videos:
     - N053-V001
     - N053-V002
     - N053-V003
@@ -509,6 +505,8 @@ members:
     - N056-V002
     - N056-V003
     - N057-V001
+  triet3:
+    videos:
     - N057-V002
     - N057-V003
     - N058-V001
@@ -526,8 +524,6 @@ members:
     - N062-V003
     - N063-V001
     - N063-V002
-  triet5:
-    videos:
     - N064-V001
     - N064-V002
     - N065-V001
@@ -544,6 +540,8 @@ members:
     - N069-V001
     - N069-V002
     - N069-V003
+  triet4:
+    videos:
     - N070-V001
     - N070-V002
     - N070-V003
@@ -558,8 +556,6 @@ members:
     - N073-V003
     - N074-V001
     - N074-V002
-  triet6:
-    videos:
     - N074-V003
     - N075-V001
     - N075-V002
@@ -579,6 +575,8 @@ members:
     - N080-V001
     - N080-V002
     - N080-V003
+  triet5:
+    videos:
     - N081-V001
     - N081-V002
     - N081-V003
@@ -590,8 +588,6 @@ members:
     - N083-V003
     - N084-V001
     - N084-V002
-  bao1:
-    videos:
     - N084-V003
     - N085-V001
     - N085-V002
@@ -614,6 +610,8 @@ members:
     - N091-V001
     - N091-V002
     - N091-V003
+  triet6:
+    videos:
     - N092-V001
     - N092-V002
     - N092-V003
@@ -622,8 +620,6 @@ members:
     - N093-V003
     - N094-V001
     - N094-V002
-  bao2:
-    videos:
     - N094-V003
     - N095-V001
     - N095-V002
@@ -649,9 +645,13 @@ members:
     - S01-V004
     - S01-V005
     - S01-V006
+  bao1:
+    videos:
     - S01-V008
     - S01-V009
     - S01-V010
+  bao2:
+    videos:
     - S01-V011
     - S01-V012
 stages:
