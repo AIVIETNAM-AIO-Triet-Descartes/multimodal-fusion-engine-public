@@ -13,7 +13,11 @@ Ba thứ được khoá ở đây đều là quyết định đã đo, không ph
 
 from __future__ import annotations
 
-from mfe.offline.shot_record_prompt import PROMPT_BAN_GHI_SHOT, dung_dau_vao
+from mfe.offline.shot_record_prompt import (
+    PROMPT_BAN_GHI_SHOT,
+    dung_dau_vao,
+    loc_ao_giac_thoai,
+)
 
 
 def _doan(sid: str, caps: list[str], subs: list[str] | None = None) -> dict:
@@ -69,6 +73,60 @@ class TestKhuTrungTrongCum:
         b = dung_dau_vao([_doan("V#w0002", ["b"], [cau])])
         assert cau in a
         assert cau in b
+
+
+class TestLocAoGiacThoai:
+    """Whisper BỊA văn mẫu YouTube khi audio chỉ có nhạc — đo 24-09 trên nhóm S.
+
+    `"Hãy subscribe cho kênh Ghiền Mì Gõ..."` có ở **8/11 video** nhóm S, tới
+    **×220** trong `S01-V009` (25,7% số dòng của video đó); `S01-V001` dính 32%
+    khi cộng cả bốn mẫu. Không riêng S: `M01_V003` cũng có ×23.
+
+    ⚠ Test quan trọng nhất ở đây là `test_GIU_ten_tay_dua_du_lap_nhieu`: lọc
+    theo SỐ LẦN LẶP là cách làm sai, và chính số đo bác nó — ngưỡng "bỏ dòng
+    lặp ≥10 lần" sẽ ăn luôn `Thành phố Hồ Chí Minh` (×51), `Christoph Janssen`
+    (×15), `Hà Kiều Tấn Đại` (×14), `Của tỉnh Gia Lai` (×10). Bình luận thể
+    thao lặp tên liên tục là bình thường, và tên chính là thứ đáng giá nhất.
+    """
+
+    def test_bo_cau_subscribe(self):
+        ra = loc_ao_giac_thoai([
+            "Hãy subscribe cho kênh La La School Để không bỏ lỡ những video hấp dẫn",
+            "Các tay đua đang vào cua",
+        ])
+        assert ra == ["Các tay đua đang vào cua"]
+
+    def test_bo_moi_bien_the_do_duoc(self):
+        """Bốn mẫu đếm được trên volume, cộng hai biến thể hay gặp."""
+        for cau in (
+            "Hãy subscribe cho kênh Ghiền Mì Gõ Để không bỏ lỡ những video hấp dẫn",
+            "Cảm ơn các bạn đã theo dõi và hẹn gặp lại.",
+            "Cảm ơn các bạn đã theo dõi.",
+            "Đăng ký kênh để xem thêm",
+            "Cảm ơn quý vị đã lắng nghe",
+            "Hẹn gặp lại trong video sau.",
+        ):
+            assert loc_ao_giac_thoai([cau]) == [], cau
+
+    def test_GIU_ten_tay_dua_du_lap_nhieu(self):
+        """Đây là lý do KHÔNG lọc theo độ lặp."""
+        doan = ["Thành phố Hồ Chí Minh"] * 51 + ["Christoph Janssen"] * 15
+        assert loc_ao_giac_thoai(doan) == doan
+
+    def test_giu_nguyen_thu_tu(self):
+        doan = ["một", "Hãy subscribe cho kênh X", "hai", "ba"]
+        assert loc_ao_giac_thoai(doan) == ["một", "hai", "ba"]
+
+    def test_khong_cham_cau_binh_luan_co_chu_cam_on(self):
+        """`cảm ơn` trong câu bình luận thật KHÔNG được coi là ảo giác."""
+        cau = "Anh ấy vẫy tay cảm ơn khán giả hai bên đường"
+        assert loc_ao_giac_thoai([cau]) == [cau]
+
+    def test_rong_thi_bo_con_chuoi_trang_thi_giu(self):
+        """Chuỗi rỗng rơi; khoảng trắng KHÔNG phải việc của hàm này —
+        `dung_dau_vao` mới là chỗ `.strip()` rồi bỏ."""
+        assert loc_ao_giac_thoai([]) == []
+        assert loc_ao_giac_thoai(["", "  "]) == ["  "]
 
 
 class TestBoiCanhCauChuyen:

@@ -100,6 +100,47 @@ Video câm thì `subtitles` rỗng và khối `[speech]` biến mất khỏi pro
 
 from __future__ import annotations
 
+import re
+
+#: Boilerplate mà faster-whisper BỊA RA khi audio chỉ có nhạc hoặc tiếng ồn —
+#: nó tuôn văn mẫu YouTube tiếng Việt từ dữ liệu huấn luyện.
+#:
+#: Đo 24-09 trên 11 video nhóm S (32.693 dòng): `"Hãy subscribe cho kênh Ghiền
+#: Mì Gõ..."` có ở **8/11 video**, tới **×220** trong `S01-V009` (25,7% toàn bộ
+#: dòng của video đó) và ×97 + ×84 trong `S01-V001` (32% khi cộng cả bốn mẫu).
+#: Không riêng nhóm S: `M01_V003` cũng dính ×23.
+#:
+#: ⚠ **Lọc theo SỐ LẦN LẶP là sai, và số đo nói thẳng điều đó.** Ngưỡng "bỏ
+#: dòng lặp ≥10 lần" sẽ ăn luôn `Thành phố Hồ Chí Minh` (×51), `Christoph
+#: Janssen` (×15), `Hà Kiều Tấn Đại` (×14), `Lê Hải Đăng` (×14), `Của tỉnh Gia
+#: Lai` (×10) — tức **tên tay đua và tên đội**, thứ giá trị nhất để truy hồi
+#: một chặng đua. Bình luận thể thao lặp tên liên tục là chuyện bình thường.
+#: Thứ phân biệt được là **mẫu câu**, không phải độ lặp.
+_AO_GIAC_THOAI = re.compile(
+    r"subscribe\s+cho\s+kênh"
+    r"|đăng\s*ký\s+kênh"
+    r"|không\s+bỏ\s+lỡ\s+những\s+video"
+    r"|cảm\s+ơn\s+(các\s+bạn|quý\s+vị)\s+đã\s+(theo\s+dõi|xem|lắng\s+nghe)"
+    # Neo cuối câu và cho tối đa ~25 ký tự đuôi ("… trong video sau."): bình
+    # luận thật vẫn nói "hẹn gặp lại các bạn ở chặng đua ngày mai" giữa câu.
+    r"|hẹn\s+gặp\s+lại[^.!?]{0,25}[.!?]?\s*$",
+    re.I,
+)
+
+
+def loc_ao_giac_thoai(doan: list[str]) -> list[str]:
+    """Bỏ các dòng phụ đề là ảo giác của Whisper. Giữ NGUYÊN thứ tự còn lại.
+
+    Chạy ở chỗ gom cửa sổ chứ không sửa file gốc trên volume: `subtitles_segments`
+    là dữ liệu thô của `n2_subtitles`, và ba arm phụ đề cấp keyframe cũng đọc nó.
+    Sửa tại chỗ là đổi dữ liệu dưới chân người khác.
+
+    Vì sao phải bỏ: một câu quảng cáo kênh YouTube không nói gì về cửa sổ nào,
+    nhưng nó sẽ chiếm `speech_topic` và có thể trôi vào `story` — đúng cơ chế
+    `loc_khoi_ocr` sinh ra để chặn ở phía chữ màn hình.
+    """
+    return [t for t in doan if t and not _AO_GIAC_THOAI.search(t)]
+
 #: Tiếng ANH, cùng lý do đã chốt 25-08 cho caption: bản ghi shot sẽ đi vào
 #: `bge_m3` (đa ngữ) và một arm BM25 mới; tiếng Anh phục vụ cả hai, tiếng Việt
 #: chỉ phục vụ một. Chữ trên màn hình thì GIỮ NGUYÊN tiếng Việt — cùng ngoại lệ
