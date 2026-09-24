@@ -207,8 +207,11 @@ def read_keyframes(map_csv: Path, keyframes_dir: Path) -> list[Keyframe]:
                 f"{map_csv.name} n={n}: frame_idx={frame_idx} nhung "
                 f"floor({pts_time}*{fps})={derived}. Sai fps hoac sai file."
             )
+        kf_path = keyframes_dir / f"{n:03d}.jpg"
+        if not kf_path.is_file():
+            kf_path = keyframes_dir / f"{n:04d}.jpg"
         out.append(
-            Keyframe(n, pts_time, fps, frame_idx, keyframes_dir / f"{n:03d}.jpg")
+            Keyframe(n, pts_time, fps, frame_idx, kf_path)
         )
     if [kf.n for kf in out] != list(range(1, len(out) + 1)):
         raise ValueError(f"{map_csv.name}: cot n phai chay 1..N lien tuc, khong ho")
