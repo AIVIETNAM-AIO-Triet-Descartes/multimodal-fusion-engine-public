@@ -51,39 +51,39 @@ from __future__ import annotations
 #: như nửa `[TEXT]` của caption.
 PROMPT_BAN_GHI_SHOT = """You are building a SHOT-LEVEL INDEX for a Vietnamese video retrieval system.
 
-You are given consecutive shots from ONE video. For each shot you get the dense captions of the keyframes inside it, already written by a vision model. You will NOT see the images.
+You are given consecutive time segments from ONE video, in order. For each segment you get the dense captions of the keyframes that fall inside it, already written by a vision model. You will NOT see the images. A segment may contain one camera take or several.
 
-Your job is to turn each shot into a compact record that captures what the keyframe captions CANNOT: what HAPPENS, what CHANGES, and how the shot connects to its neighbours.
+Your job is to turn each segment into a compact record that captures what the keyframe captions CANNOT: what HAPPENS, what CHANGES, and how the segment connects to its neighbours.
 
 Return a single JSON object, nothing else:
 
 {
-  "program": "<one short phrase naming the programme or topic of this run of shots, or null>",
-  "shots": [
+  "program": "<one short phrase naming the programme or topic of this run of segments, or null>",
+  "segments": [
     {
-      "shot_id": "<copy verbatim from the input>",
-      "event": "<ONE sentence in the present tense, starting with a subject and an ACTION VERB, saying what happens in this shot>",
+      "segment_id": "<copy verbatim from the input>",
+      "event": "<ONE sentence in the present tense, starting with a subject, saying what happens across this segment. Prefer an action verb; when the captions show no movement, use a verb of state or of framing (stands, shows, holds on) rather than inventing motion>",
       "entities": ["<short noun phrases for the people/objects that matter, e.g. 'male news anchor', 'collapsed concrete embankment'>"],
       "state_change": "<'X: before -> after' when the captions show the same thing in two different states, else null>",
       "onscreen_text": ["<text visible on screen, copied VERBATIM in its original language with diacritics>"],
-      "link_to_previous": "<how this shot follows the one before: 'continues', 'cuts to new location', 'returns to anchor', 'same subject closer', or null>"
+      "link_to_previous": "<how this segment follows the one before: 'continues', 'cuts to new location', 'returns to anchor', 'same subject closer', or null>"
     }
   ],
   "counters": {"<name of a thing that recurs across these shots>": <how many distinct times it appears>},
-  "memory": "<at most 3 lines carrying what the NEXT batch of shots needs to know: the programme, the 2-3 most recent events, and any running count>"
+  "memory": "<at most 3 lines carrying what the NEXT batch of segments needs to know: the programme, the 2-3 most recent events, and any running count>"
 }
 
 RULES:
 
-1. EVENT IS THE POINT. The captions describe static frames; your job is the verb. Write "A male anchor introduces the segment from the studio", not "A male anchor stands in a studio". If a shot genuinely has no action, describe the change of view instead ("The camera holds on the damaged embankment"). Never write a sentence without a verb.
+1. EVENT IS THE POINT. The captions describe static frames; your job is the verb. Write "A male anchor introduces the segment from the studio", not "A male anchor stands in a studio". If a segment genuinely has no action, describe the change of view instead ("The camera holds on the damaged embankment"). Never write a sentence without a verb.
 
 2. USE ONLY WHAT THE CAPTIONS SAY. Every entity, number, name and piece of text in your output must be traceable to a caption you were given. If you are unsure whether two shots show the same person or place, say so in "link_to_previous" and do NOT assert identity. NEVER add a fact from world knowledge — not a place name, not a person's name, not an event name.
 
 3. NULL IS A VALID ANSWER. "state_change": null, "onscreen_text": [], "program": null are all correct when the captions do not support anything better. An invented state change is far worse than a missing one.
 
-3b. A SHOT IS ONE CAMERA TAKE, A FEW SECONDS LONG. Its duration is given to you. Two keyframes inside one shot are usually two VIEWS of the same moment — the camera panned or zoomed — not two moments in time. Before writing "state_change", ask whether the change could physically happen in that many seconds. Pouring a glass in 3 seconds: yes. Repairing a collapsed embankment, cooking a dish, a crowd assembling: no. If the two captions describe different PARTS of one place, that is not a state change; leave it null and put the second view in "entities" instead. Writing a change that never happened is the worst error you can make here, because it is indistinguishable from a real one later.
+3b. CHECK THE CLOCK BEFORE CLAIMING A CHANGE. Each segment's duration in seconds is given to you. Before writing "state_change", ask whether the change could physically happen in that many seconds. Pouring a glass in 3 seconds: yes. Repairing a collapsed embankment, cooking a whole dish, a crowd assembling: no. Two keyframes taken 2 seconds apart are usually two VIEWS of one moment — the camera panned or zoomed — while two keyframes 10 seconds apart may well be two moments. If the captions describe different PARTS of one place rather than one thing in two conditions, that is not a state change; leave it null and put the second view in "entities" instead. Writing a change that never happened is the worst error you can make here, because later it is indistinguishable from a real one.
 
-4. COUNTERS. If something appears in several of these shots — a number shown on screen, an ingredient added, a person entering — count the DISTINCT occurrences across this batch. Leave "counters" as {} if nothing recurs.
+4. COUNTERS. If something appears in several of these segments — a number shown on screen, an ingredient added, a person entering — count the DISTINCT occurrences across these segments. Leave "counters" as {} if nothing recurs.
 
 5. ON-SCREEN TEXT. Copy it exactly as the caption quotes it, keeping Vietnamese diacritics. Do NOT translate it. Skip channel logos and watermarks.
 
@@ -102,10 +102,11 @@ def dung_dau_vao(cum: list[dict], bo_nho_truoc: str | None = None) -> str:
     """
     phan = []
     if bo_nho_truoc:
-        phan.append(f"CONTEXT FROM THE PRECEDING SHOTS OF THIS VIDEO:\n{bo_nho_truoc}\n")
-    phan.append("SHOTS:")
+        phan.append(
+            f"CONTEXT FROM THE PRECEDING SEGMENTS OF THIS VIDEO:\n{bo_nho_truoc}\n")
+    phan.append("SEGMENTS:")
     for s in cum:
-        phan.append(f"\n--- {s['shot_id']}  ({s['duration_seconds']:.1f}s, "
+        phan.append(f"\n--- {s['segment_id']}  ({s['duration_seconds']:.1f}s, "
                     f"{len(s['captions'])} keyframe) ---")
         for i, c in enumerate(s["captions"], 1):
             phan.append(f"[keyframe {i}] {c}")
