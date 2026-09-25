@@ -3,8 +3,9 @@
 One arm per embedding model, because Milvus holds one dimension per collection
 and because the models answer different questions:
 
-    bge_m3   BAAI/bge-m3 over Bảo's English dense captions. **Cross-lingual** —
-             a Vietnamese query matches an English caption without any
+    bge_m3   BAAI/bge-m3 over the latest English dense captions.
+             **Cross-lingual** — a Vietnamese query matches an English caption
+             without any
              translation step, which is why this arm carries `query_language`
              "any" and why it was worth doing before SigLIP.
     subtitle_bge_m3
@@ -44,9 +45,9 @@ DENSE_ARM_SPECS: dict[str, tuple[str, int, str, str, str]] = {
         "any",
         "Ngữ nghĩa caption qua BGE-M3 — đa ngữ, không cần dịch truy vấn",
     ),
-    # Cùng model, KHÁC nguồn: `bge_m3` nhúng caption Qwen (thứ NHÌN thấy trong
-    # khung), còn arm này nhúng **phụ đề** (thứ NGHE thấy). Nên nó không phải
-    # bản sao — hai arm trả lời hai câu hỏi khác nhau, và câu QA của BTC hay hỏi
+    # Cùng model, KHÁC nguồn: `bge_m3` nhúng caption Gemini mới nhất (thứ NHÌN
+    # thấy trong khung), còn arm này nhúng **phụ đề** (thứ NGHE thấy). Nên nó
+    # không phải bản sao — hai arm trả lời hai câu hỏi khác nhau, và câu QA của BTC hay hỏi
     # về lời người dẫn chương trình nói hơn là về vật trong khung.
     #
     # Nó cũng KHÁC `subtitle_partial`/`subtitle_exact` trên cùng `subtitles.json`:

@@ -658,10 +658,36 @@ class Cascade:
         ném lỗi.
         """
         previous = dict(self._overrides)
+        arm_weights = values.pop("weights", None)
+        arm_enabled = values.pop("enabled", None)
+        arm_state = {
+            arm.name: (arm.weight, arm.enabled)
+            for arm in self.arms
+        }
+        known_arms = set(arm_state)
+        if arm_weights is not None:
+            unknown = set(arm_weights) - known_arms
+            if unknown:
+                raise KeyError(f"unknown arm override(s): {sorted(unknown)}")
+            arm_weights = {name: float(weight) for name, weight in arm_weights.items()}
+        if arm_enabled is not None:
+            unknown = set(arm_enabled) - known_arms
+            if unknown:
+                raise KeyError(f"unknown arm override(s): {sorted(unknown)}")
+            arm_enabled = {name: bool(enabled) for name, enabled in arm_enabled.items()}
+        if arm_weights is not None:
+            for name, weight in arm_weights.items():
+                self.arms.set_weight(name, float(weight))
+        if arm_enabled is not None:
+            for name, enabled in arm_enabled.items():
+                self.arms.set_enabled(name, bool(enabled))
         self._overrides.update({k: v for k, v in values.items() if v is not None})
         try:
             yield self
         finally:
+            for name, (weight, enabled) in arm_state.items():
+                self.arms.set_weight(name, weight)
+                self.arms.set_enabled(name, enabled)
             self._overrides = previous
 
     def _build_arms(self, config: Any) -> ArmRegistry:

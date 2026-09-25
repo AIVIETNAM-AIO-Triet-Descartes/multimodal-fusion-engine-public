@@ -115,7 +115,7 @@ class TestGhepVaoTruyVan:
 
 class TestProviderSanSang:
     def test_khong_khoa_nao_thi_noi_ro_thieu_khoa(self, monkeypatch):
-        for key in ("OPENROUTER_API_KEY", "NVIDIA_API_KEY", "GEMINI_API_KEY"):
+        for key in ("TRAMMAY_API_KEY", "OPENROUTER_API_KEY", "NVIDIA_API_KEY", "GEMINI_API_KEY"):
             monkeypatch.delenv(key, raising=False)
         ok, reason = QuestClient().available()
         assert not ok

@@ -45,6 +45,8 @@ import os
 import re
 from dataclasses import dataclass
 
+from mfe.online.trammay import TrammayClient
+
 logger = logging.getLogger(__name__)
 
 #: Model Gemini dùng cho mọi lượt QUEST. **Không** phải `gemini-2.5-flash` — xem
@@ -207,9 +209,15 @@ User Query: {query}"""
 
 
 class QuestClient:
-    """Xử lý gọi API chung cho NVIDIA NIM, OpenRouter và Gemini."""
+    """Client QUEST.
+
+    Khi có ``TRAMMAY_API_KEY`` thì toàn bộ QUEST đi qua model Gemini của
+    ``llm-gateway.invalid``. Các provider cũ chỉ còn là đường tương thích cho máy chưa
+    được cấu hình Trammay; chúng không được gọi khi Trammay đã sẵn sàng.
+    """
     
     def __init__(self):
+        self.trammay_client = TrammayClient.from_env()
         self.nvidia_key = os.environ.get("NVIDIA_API_KEY")
         self.openrouter_key = os.environ.get("OPENROUTER_API_KEY")
         self.gemini_key = os.environ.get("GEMINI_API_KEY")
@@ -243,7 +251,15 @@ class QuestClient:
             pass
 
     def generate(self, prompt: str, max_tokens: int = 500) -> str:
-        """Gửi prompt tới LLM. Thử OpenRouter, NIM, rồi fallback sang Gemini."""
+        """Gửi prompt tới Gemini qua Trammay khi gateway đã được cấu hình."""
+        if self.trammay_client is not None:
+            return self.trammay_client.chat(
+                prompt,
+                model=self.trammay_client.model,
+                max_tokens=max_tokens,
+                temperature=0.0,
+            ).strip()
+
         # Thử OpenRouter / NVIDIA NIM (Llama 3.1 / 3.3)
         clients = []
         if self.openrouter_client:
@@ -290,10 +306,12 @@ class QuestClient:
         pipeline bật quest mà thiếu khoá sẽ chạy tới đúng truy vấn đầu tiên rồi
         mới đổ, sau khi đã nạp xong cả kho.
         """
+        if self.trammay_client is not None:
+            return True, None
         if self.openrouter_client or self.nvidia_client or self.gemini_client:
             return True, None
         if not (self.openrouter_key or self.nvidia_key or self.gemini_key):
-            return False, "khong co OPENROUTER_API_KEY / NVIDIA_API_KEY / GEMINI_API_KEY"
+            return False, "khong co TRAMMAY_API_KEY / OPENROUTER_API_KEY / NVIDIA_API_KEY / GEMINI_API_KEY"
         return False, "co khoa nhung thieu SDK (pip install openai / google-genai)"
 
 
@@ -450,10 +468,10 @@ def expanded_queries(
     return out_vi, out_en
 
 
-def quest_decompose(question: str) -> dict[str, str]:
+def quest_decompose(question: str, client: QuestClient | None = None) -> dict[str, str]:
     """Phân rã câu hỏi VQA thành search_hint, ocr_keywords, logic_question."""
     prompt = QUEST_VQA_PROMPT.replace("{question}", question)
-    client = QuestClient()
+    client = client or QuestClient()
     
     try:
         text = client.generate(prompt, max_tokens=500)

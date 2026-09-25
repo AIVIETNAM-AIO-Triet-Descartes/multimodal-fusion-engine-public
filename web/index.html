@@ -99,6 +99,25 @@
     .query-extra .hint { margin: -3px 0 0; color: var(--muted); font-size: 12px; }
     .check-label { display: flex; align-items: center; gap: 8px; }
     .check-label input { width: auto; }
+    .config-panel { margin-top: 18px; }
+    .arms-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 9px; }
+    .arm-row { display: grid; gap: 7px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 11px; background: rgba(12, 20, 38, .72); }
+    .arm-row.unavailable { opacity: .72; }
+    .arm-head, .arm-weight { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
+    .arm-head label { display: flex; align-items: center; gap: 8px; color: var(--text); font-weight: 700; }
+    .arm-head input[type=checkbox] { width: auto; }
+    .arm-weight label { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; }
+    .arm-weight input[type=number] { width: 76px; padding: 6px 7px; }
+    .arm-description { color: var(--muted); font-size: 11px; line-height: 1.35; }
+    .quest-box { display: grid; gap: 10px; padding: 11px 12px; border: 1px solid rgba(110, 168, 254, .35); border-radius: 11px; background: rgba(22, 40, 74, .46); }
+    .quest-title { color: var(--accent); font-size: 12px; font-weight: 800; }
+    .quest-grid { display: grid; gap: 10px; }
+    .quest-status { min-height: 19px; color: var(--muted); font-size: 12px; }
+    .quest-status.error { color: var(--danger); }
+    .quest-status.ok { color: var(--accent-2); }
+    .quest-output { display: grid; gap: 10px; }
+    .quest-output textarea { min-height: 68px; }
+    .quest-output input { min-height: 42px; }
     .run-meta { display: flex; flex-wrap: wrap; gap: 9px; color: var(--muted); font-size: 12px; }
     .run-meta strong { color: var(--text); }
     .state-line { min-height: 24px; margin: 12px 0; color: var(--muted); }
@@ -119,6 +138,9 @@
     .rank { color: var(--accent); font-weight: 800; }
     .result-caption { margin-top: 7px; font-size: 13px; line-height: 1.4; }
     .result-ocr { margin-top: 7px; color: #f6d365; font-size: 12px; }
+    .result-actions { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 10px; }
+    .video-button { border: 1px solid var(--accent); border-radius: 8px; padding: 6px 9px; color: var(--text); background: rgba(110, 168, 254, .12); font-size: 12px; font-weight: 700; }
+    .video-button:hover { background: rgba(110, 168, 254, .25); }
     .trake-events { display: grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); gap: 8px; margin-top: 10px; }
     .trake-event { overflow: hidden; border: 1px solid var(--line); border-radius: 9px; background: #0c1426; }
     .trake-event img, .trake-event .image-empty { width: 100%; height: 92px; object-fit: cover; }
@@ -127,6 +149,10 @@
     .result-empty { padding: 34px 12px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 12px; }
     .footer-note { margin-top: 17px; color: var(--muted); font-size: 12px; }
     .toast { position: fixed; right: 18px; bottom: 18px; z-index: 10; max-width: min(450px, calc(100% - 36px)); padding: 12px 15px; border: 1px solid var(--line); border-radius: 10px; background: #111b30; box-shadow: var(--shadow); }
+    .modal { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 18px; background: rgba(3, 7, 17, .82); }
+    .modal-card { width: min(960px, 100%); padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); box-shadow: var(--shadow); }
+    .modal-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 11px; }
+    #videoPlayer { width: 100%; max-height: 76vh; background: #02050b; border-radius: 10px; }
     @media (max-width: 900px) {
       .intro { display: block; }
       .intro-tools { justify-items: start; margin-top: 16px; }
@@ -189,6 +215,18 @@
           </div>
         </div>
 
+        <section class="panel config-panel">
+          <div class="panel-heading">
+            <div>
+              <div class="eyebrow">Per query override</div>
+              <h2 style="margin-top:5px">⚙️ Cấu hình các nhánh (Arms)</h2>
+            </div>
+            <span id="armConfigStatus" class="muted small">Đang đọc cấu hình…</span>
+          </div>
+          <div id="armsGrid" class="arms-grid"><div class="result-empty">Engine đang nạp cấu hình arm.</div></div>
+          <p class="hint" style="margin:12px 0 0">Các thay đổi được gửi cùng từng truy vấn và chỉ áp dụng cho lượt đó. Trọng số nằm trong 0–4; arm không khả dụng vẫn được hiển thị kèm lý do.</p>
+        </section>
+
         <div class="lanes">
           <section id="sharedPanel" class="panel lane-card active">
             <div class="panel-heading">
@@ -206,6 +244,27 @@
                   <option value="QA">QA · hỏi đáp</option>
                   <option value="TRAKE">TRAKE · chuỗi sự kiện</option>
                 </select>
+              </div>
+              <div class="quest-box">
+                <div class="button-row"><button id="sharedQuestButton" class="ghost" type="button">✨ Phân tích truy vấn (QUEST)</button><span id="sharedQuestStatus" class="quest-status"></span></div>
+                <div id="sharedQuestOutput" class="quest-output hidden">
+                  <div id="sharedQuestKis" class="quest-grid hidden">
+                    <div class="quest-title">QUEST KIS · bản dịch và mở rộng (có thể sửa trước khi tìm)</div>
+                    <label>Bản tiếng Anh<textarea id="sharedQuestEn"></textarea></label>
+                    <label>QUEST expand · bổ sung tiếng Việt<textarea id="sharedQuestExpandVi"></textarea></label>
+                    <label>QUEST expand · bổ sung tiếng Anh<textarea id="sharedQuestExpandEn"></textarea></label>
+                  </div>
+                  <div id="sharedQuestQa" class="quest-grid hidden">
+                    <div class="quest-title">QUEST QA · phân rã câu hỏi (có thể sửa trước khi tìm)</div>
+                    <label>Search Hint (English)<textarea id="sharedQuestSearchHint"></textarea></label>
+                    <label>OCR Keywords<input id="sharedQuestOcrKeywords"></label>
+                    <label>Logic Question<textarea id="sharedQuestLogicQuestion"></textarea></label>
+                  </div>
+                  <div id="sharedQuestTrake" class="quest-grid hidden">
+                    <div class="quest-title">QUEST TRAKE · các mệnh đề theo thứ tự thời gian (có thể sửa / sắp xếp lại)</div>
+                    <label>Các mệnh đề, mỗi dòng một sự kiện<textarea id="sharedQuestClauses"></textarea></label>
+                  </div>
+                </div>
               </div>
               <label id="sharedQueryLabel">Mô tả truy vấn<textarea id="sharedQuery" placeholder="Ví dụ: Một đàn sư tử đang nghỉ ngơi trên các bục gỗ..." ></textarea></label>
               <div id="sharedQaFields" class="query-extra hidden">
@@ -250,6 +309,27 @@
                   <option value="TRAKE">TRAKE · chuỗi sự kiện</option>
                 </select>
               </div>
+              <div class="quest-box">
+                <div class="button-row"><button id="privateQuestButton" class="ghost" type="button">✨ Phân tích truy vấn (QUEST)</button><span id="privateQuestStatus" class="quest-status"></span></div>
+                <div id="privateQuestOutput" class="quest-output hidden">
+                  <div id="privateQuestKis" class="quest-grid hidden">
+                    <div class="quest-title">QUEST KIS · bản dịch và mở rộng (có thể sửa trước khi tìm)</div>
+                    <label>Bản tiếng Anh<textarea id="privateQuestEn"></textarea></label>
+                    <label>QUEST expand · bổ sung tiếng Việt<textarea id="privateQuestExpandVi"></textarea></label>
+                    <label>QUEST expand · bổ sung tiếng Anh<textarea id="privateQuestExpandEn"></textarea></label>
+                  </div>
+                  <div id="privateQuestQa" class="quest-grid hidden">
+                    <div class="quest-title">QUEST QA · phân rã câu hỏi (có thể sửa trước khi tìm)</div>
+                    <label>Search Hint (English)<textarea id="privateQuestSearchHint"></textarea></label>
+                    <label>OCR Keywords<input id="privateQuestOcrKeywords"></label>
+                    <label>Logic Question<textarea id="privateQuestLogicQuestion"></textarea></label>
+                  </div>
+                  <div id="privateQuestTrake" class="quest-grid hidden">
+                    <div class="quest-title">QUEST TRAKE · các mệnh đề theo thứ tự thời gian (có thể sửa / sắp xếp lại)</div>
+                    <label>Các mệnh đề, mỗi dòng một sự kiện<textarea id="privateQuestClauses"></textarea></label>
+                  </div>
+                </div>
+              </div>
               <label id="privateQueryLabel">Mô tả truy vấn<textarea id="privateQuery" placeholder="Truy vấn riêng của bạn..." ></textarea></label>
               <div id="privateQaFields" class="query-extra hidden">
                 <label>Đáp án QA (tuỳ chọn, nhập tay)<input id="privateAnswer" placeholder="Ví dụ: áo màu xanh lá"></label>
@@ -285,6 +365,13 @@
       </main>
     </div>
   </section>
+  <div id="videoModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="videoModalTitle">
+    <div class="modal-card">
+      <div class="modal-heading"><h2 id="videoModalTitle">Video kết quả</h2><button id="closeVideoButton" class="ghost" type="button">Đóng</button></div>
+      <video id="videoPlayer" controls playsinline preload="metadata"></video>
+      <div id="videoModalInfo" class="muted small" style="margin-top:8px"></div>
+    </div>
+  </div>
   <div id="toast" class="toast hidden"></div>
 
   <script>
@@ -297,6 +384,8 @@
     let toastTimer = null;
     let selectedScope = 'shared';
     const states = { shared: null, private: null };
+    const questStates = { shared: null, private: null };
+    let armRows = [];
 
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>'"]/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
@@ -328,6 +417,7 @@
       $('userPill').textContent = `${me.username} · ${me.role}`;
       connectSocket();
       syncState();
+      loadConfig();
     }
     function statusText(state) {
       if (!state) return 'Chưa có lượt chạy.';
@@ -339,6 +429,126 @@
         .map((line) => line.replace(/^\s*(?:E|C(?:ả|a)nh)\s*\d+\s*[:.\-]?\s*/i, '').trim())
         .filter(Boolean);
     }
+    function armKey(name) {
+      return String(name).replace(/[^A-Za-z0-9_-]/g, '_');
+    }
+    function renderArms(arms) {
+      armRows = Array.isArray(arms) ? arms : [];
+      if (!armRows.length) {
+        $('armsGrid').innerHTML = '<div class="result-empty">Chưa đọc được cấu hình arm.</div>';
+        return;
+      }
+      $('armsGrid').innerHTML = armRows.map((arm) => {
+        const key = armKey(arm.name);
+        const unavailable = !arm.available;
+        const reason = unavailable ? ` · ${arm.unavailable_reason || arm.status || 'không khả dụng'}` : '';
+        return `<div class="arm-row ${unavailable ? 'unavailable' : ''}">
+          <div class="arm-head"><label><input id="armEnabled_${key}" type="checkbox" ${arm.enabled ? 'checked' : ''} ${unavailable ? 'disabled' : ''}> ${escapeHtml(arm.name)}</label><span class="muted small">${escapeHtml(arm.query_language || 'any')}</span></div>
+          <div class="arm-weight"><label>Trọng số <input id="armWeight_${key}" type="number" min="0" max="4" step="0.05" value="${escapeHtml(arm.weight)}"></label><span class="muted small">${arm.enabled && arm.available ? 'đang bật' : (unavailable ? 'không khả dụng' : 'đang tắt')}</span></div>
+          <div class="arm-description">${escapeHtml((arm.description || '') + reason)}</div>
+        </div>`;
+      }).join('');
+    }
+    function readArmConfig() {
+      const weights = {};
+      const enabled = {};
+      armRows.forEach((arm) => {
+        const key = armKey(arm.name);
+        const weight = Number($(`armWeight_${key}`)?.value ?? arm.weight);
+        weights[arm.name] = Number.isFinite(weight) ? Math.max(0, Math.min(4, weight)) : Number(arm.weight || 1);
+        const control = $(`armEnabled_${key}`);
+        enabled[arm.name] = control ? Boolean(control.checked) : Boolean(arm.enabled);
+      });
+      return {arm_weights: weights, arm_enabled: enabled};
+    }
+    async function loadConfig() {
+      try {
+        const data = await api('/api/config');
+        renderArms(data.arms);
+        $('armConfigStatus').textContent = `${(data.arms || []).length} arm · QUEST: ${data.quest?.provider || '—'} · video: ${data.video?.configured ? 'Azure sẵn sàng' : 'chưa cấu hình'}`;
+      } catch (error) {
+        $('armConfigStatus').textContent = error.message;
+      }
+    }
+    function updateQuestMode(scope) {
+      const type = $(`${scope}Type`).value;
+      const state = questStates[scope];
+      const output = $(`${scope}QuestOutput`);
+      const hasState = state && state.query_type === type;
+      output.classList.toggle('hidden', !hasState);
+      [`${scope}QuestKis`, `${scope}QuestQa`, `${scope}QuestTrake`].forEach((id) => $(id).classList.add('hidden'));
+      if (hasState) $( `${scope}Quest${type[0] + type.slice(1).toLowerCase()}` ).classList.remove('hidden');
+    }
+    function renderQuest(scope, data) {
+      questStates[scope] = data;
+      const type = data.query_type;
+      $(`${scope}QuestStatus`).textContent = `${data.provider || 'QUEST'}${data.fallback ? ' · giữ giá trị dự phòng, hãy kiểm tra/sửa trước khi tìm' : ' · có thể sửa rồi bấm tìm kiếm'}`;
+      $(`${scope}QuestStatus`).className = `quest-status ${data.fallback ? 'error' : 'ok'}`;
+      if (type === 'KIS') {
+        $(`${scope}QuestEn`).value = data.text_en || '';
+        $(`${scope}QuestExpandVi`).value = data.expanded_vi || '';
+        $(`${scope}QuestExpandEn`).value = data.expanded_en || '';
+      } else if (type === 'QA') {
+        $(`${scope}QuestSearchHint`).value = data.search_hint || '';
+        $(`${scope}QuestOcrKeywords`).value = data.ocr_keywords || '';
+        $(`${scope}QuestLogicQuestion`).value = data.logic_question || '';
+      } else {
+        $(`${scope}QuestClauses`).value = (data.clauses || []).join('\n');
+        if (!(data.clauses || []).length) $(`${scope}QuestStatus`).textContent += ' · không tách được, bạn có thể tự nhập/sắp xếp mệnh đề.';
+      }
+      updateQuestMode(scope);
+    }
+    async function analyzeQuest(scope) {
+      const type = $(`${scope}Type`).value;
+      const query = $(`${scope}Query`).value.trim();
+      const events = type === 'TRAKE' ? splitEventLines($(`${scope}Events`).value) : [];
+      const notice = $(`${scope}QuestStatus`);
+      if (type === 'TRAKE' ? !events.length && !query : !query) {
+        notice.textContent = type === 'TRAKE' ? 'Hãy nhập sự kiện TRAKE trước khi phân tích.' : 'Hãy nhập truy vấn trước khi phân tích.';
+        notice.className = 'quest-status error';
+        return;
+      }
+      const button = $(`${scope}QuestButton`);
+      button.disabled = true;
+      notice.textContent = 'QUEST Trammay đang phân tích…';
+      notice.className = 'quest-status';
+      try {
+        const data = await api('/api/quest', {method:'POST', headers:{'X-CSRF-Token': csrf}, body: JSON.stringify({query, query_type: type, events})});
+        renderQuest(scope, data);
+        showToast(`QUEST ${type} đã sinh xong các trường chỉnh sửa.`);
+      } catch (error) {
+        notice.textContent = error.message;
+        notice.className = 'quest-status error';
+      } finally { button.disabled = false; }
+    }
+    function buildRunPayload(scope) {
+      const type = $(`${scope}Type`).value;
+      let query = $(`${scope}Query`).value.trim();
+      let queryEn = $(`${scope}QueryEn`).value.trim();
+      let ocrKeywords = '';
+      let events = type === 'TRAKE' ? splitEventLines($(`${scope}Events`).value) : [];
+      const eventsEn = type === 'TRAKE' ? splitEventLines($(`${scope}EventsEn`).value) : [];
+      const quest = questStates[scope];
+      if (quest && quest.query_type === type) {
+        if (type === 'KIS') {
+          const extraVi = $(`${scope}QuestExpandVi`).value.trim();
+          const questEn = $(`${scope}QuestEn`).value.trim();
+          const extraEn = $(`${scope}QuestExpandEn`).value.trim();
+          query = `${query} ${extraVi}`.trim();
+          queryEn = `${questEn} ${extraEn}`.trim() || queryEn;
+        } else if (type === 'QA') {
+          const hint = $(`${scope}QuestSearchHint`).value.trim();
+          const logic = $(`${scope}QuestLogicQuestion`).value.trim();
+          query = logic || query;
+          queryEn = hint || queryEn;
+          ocrKeywords = $(`${scope}QuestOcrKeywords`).value.trim();
+        } else {
+          const clauses = splitEventLines($(`${scope}QuestClauses`).value);
+          if (clauses.length) { events = clauses; query = clauses.join(' '); }
+        }
+      }
+      return {query, query_en: queryEn, ocr_keywords: ocrKeywords, events, events_en: eventsEn};
+    }
     function updateFormType(scope) {
       const type = $(`${scope}Type`).value;
       $(`${scope}QaFields`).classList.toggle('hidden', type !== 'QA');
@@ -346,6 +556,7 @@
       const label = $(`${scope}QueryLabel`);
       label.childNodes[0].nodeValue = type === 'TRAKE' ? 'Mô tả chung (tuỳ chọn)' : (type === 'QA' ? 'Câu hỏi / mô tả QA' : 'Mô tả truy vấn');
       $(`${scope}Query`).placeholder = type === 'TRAKE' ? 'Có thể để trống; nhập từng sự kiện ở ô bên dưới.' : (type === 'QA' ? 'Ví dụ: Người trong cảnh mặc áo màu gì?' : 'Mô tả cảnh cần tìm...');
+      updateQuestMode(scope);
     }
     function renderEmptyResults(scope, state) {
       const title = scope === 'shared' ? 'Kết quả luồng chung' : 'Kết quả luồng riêng của bạn';
@@ -390,6 +601,36 @@
         else renderEmptyResults(scope, state);
       }
     }
+    function videoButton(item, label = '▶ Xem video') {
+      if (!item.video_url) return '';
+      return `<button class="video-button" type="button" data-video-open="1" data-video-url="${escapeHtml(item.video_url)}" data-video-time="${escapeHtml(Number(item.timestamp_ms || 0) / 1000)}" data-video-label="${escapeHtml(item.video_id || '')} · frame ${escapeHtml(item.frame_idx || '')}">${label}</button>`;
+    }
+    function bindVideoButtons() {
+      document.querySelectorAll('[data-video-open="1"]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const player = $('videoPlayer');
+          const url = button.dataset.videoUrl;
+          if (!url) return;
+          $('videoModalTitle').textContent = `Video · ${button.dataset.videoLabel || ''}`;
+          $('videoModalInfo').textContent = `Tua tới ${button.dataset.videoTime || 0}s; frame được lấy từ relational map.`;
+          $('videoModal').classList.remove('hidden');
+          player.src = url;
+          player.load();
+          const seek = () => {
+            const time = Number(button.dataset.videoTime || 0);
+            if (Number.isFinite(time) && time >= 0 && Number.isFinite(player.duration)) player.currentTime = Math.min(time, player.duration);
+          };
+          player.addEventListener('loadedmetadata', seek, {once: true});
+        });
+      });
+    }
+    function closeVideo() {
+      const player = $('videoPlayer');
+      player.pause();
+      player.removeAttribute('src');
+      player.load();
+      $('videoModal').classList.add('hidden');
+    }
     function renderResults(scope, state) {
       const title = scope === 'shared' ? 'Kết quả luồng chung' : 'Kết quả luồng riêng của bạn';
       $('resultsTitle').textContent = title;
@@ -405,8 +646,9 @@
         const image = item.image_url ? `<img loading="lazy" src="${escapeHtml(item.image_url)}" alt="${escapeHtml(item.video_id)} frame ${escapeHtml(item.frame_idx)}">` : '<div class="image-empty">Ảnh chưa có trong cache</div>';
         const caption = item.caption ? escapeHtml(item.caption) : '<span class="muted">Không có caption</span>';
         const ocr = item.ocr ? `<div class="result-ocr">OCR: ${escapeHtml(item.ocr)}</div>` : '';
-        return `<article class="result-card">${image}<div class="result-body"><div class="result-top"><span class="rank">#${escapeHtml(item.rank)}</span><span>${escapeHtml(item.batch || '')} · ${escapeHtml(item.video_id)} · ${escapeHtml(item.timestamp_ms)} ms</span></div><div class="result-caption">${caption}</div>${ocr}<div class="muted small" style="margin-top:8px">score ${escapeHtml(item.score)} · frame ${escapeHtml(item.frame_idx)}</div></div></article>`;
+        return `<article class="result-card">${image}<div class="result-body"><div class="result-top"><span class="rank">#${escapeHtml(item.rank)}</span><span>${escapeHtml(item.batch || '')} · ${escapeHtml(item.video_id)} · ${escapeHtml(item.timestamp_ms)} ms</span></div><div class="result-caption">${caption}</div>${ocr}<div class="muted small" style="margin-top:8px">score ${escapeHtml(item.score)} · frame ${escapeHtml(item.frame_idx)}</div><div class="result-actions">${videoButton(item)}</div></div></article>`;
       }).join('');
+      bindVideoButtons();
     }
     function renderTrakeResults(scope, state) {
       const results = state.results || [];
@@ -415,10 +657,11 @@
       $('resultsGrid').innerHTML = results.map((item) => {
         const events = (item.events || []).map((event) => {
           const image = event.image_url ? `<img loading="lazy" src="${escapeHtml(event.image_url)}" alt="event ${escapeHtml(event.event_index)}">` : '<div class="image-empty">Ảnh chưa có</div>';
-          return `<div class="trake-event">${image}<div class="trake-event-label">E${escapeHtml(event.event_index)} · frame ${escapeHtml(event.frame_idx)}<br>${escapeHtml(event.timestamp_ms)} ms</div></div>`;
+          return `<div class="trake-event">${image}<div class="trake-event-label">E${escapeHtml(event.event_index)} · frame ${escapeHtml(event.frame_idx)}<br>${escapeHtml(event.timestamp_ms)} ms<div class="result-actions">${videoButton(event, '▶ Mở video')}</div></div></div>`;
         }).join('');
         return `<article class="result-card"><div class="result-body"><div class="result-top"><span class="rank">#${escapeHtml(item.rank)} · ${escapeHtml(item.video_id)}</span><span>score ${escapeHtml(item.score)}</span></div><div class="muted small" style="margin-top:6px">support ${escapeHtml(item.support)} · frames ${escapeHtml((item.frame_ids || []).join(', '))}</div><div class="trake-events">${events || '<div class="result-empty">Thiếu frame</div>'}</div></div></article>`;
       }).join('');
+      bindVideoButtons();
     }
     function renderHealth(health) {
       const map = {ready:['ok', 'Engine sẵn sàng'], warming:['warn', 'Engine đang nạp model'], error:['bad', 'Engine lỗi']};
@@ -467,13 +710,21 @@
       const topK = Math.max(1, Math.min(100, Number($(`${scope}TopK`).value || 50)));
       const notice = $(`${scope}Notice`);
       notice.textContent = '';
-      if (queryType === 'TRAKE' && !events.length) { notice.textContent = 'Hãy nhập ít nhất một sự kiện TRAKE, mỗi dòng một sự kiện.'; return; }
+      const questClauses = questStates[scope] && questStates[scope].query_type === 'TRAKE' ? splitEventLines($(`${scope}QuestClauses`).value) : [];
+      if (queryType === 'TRAKE' && !events.length && !questClauses.length && !query) { notice.textContent = 'Hãy nhập ít nhất một sự kiện TRAKE, mỗi dòng một sự kiện.'; return; }
       if (queryType !== 'TRAKE' && !query) { notice.textContent = 'Hãy nhập mô tả truy vấn.'; return; }
       if (queryType === 'TRAKE' && eventsEn.length && eventsEn.length !== events.length) { notice.textContent = 'Số dòng tiếng Anh phải bằng số sự kiện.'; return; }
       const button = event.submitter;
       button.disabled = true;
       try {
-        await api(`/api/${scope}/run`, {method:'POST', headers:{'X-CSRF-Token': csrf}, body: JSON.stringify({query, query_type: queryType, query_en: queryEn, events, events_en: eventsEn, answer, auto_answer: autoAnswer, top_k: topK})});
+        const prepared = buildRunPayload(scope);
+        const armConfig = readArmConfig();
+        const finalQuery = prepared.query;
+        const finalEvents = prepared.events;
+        if (queryType === 'TRAKE' && !finalEvents.length) { notice.textContent = 'Hãy nhập ít nhất một sự kiện TRAKE.'; return; }
+        if (queryType !== 'TRAKE' && !finalQuery) { notice.textContent = 'Hãy nhập mô tả truy vấn.'; return; }
+        if (queryType === 'TRAKE' && prepared.events_en.length && prepared.events_en.length !== finalEvents.length) { notice.textContent = 'Số dòng tiếng Anh phải bằng số sự kiện.'; return; }
+        await api(`/api/${scope}/run`, {method:'POST', headers:{'X-CSRF-Token': csrf}, body: JSON.stringify({query:finalQuery, query_type: queryType, query_en: prepared.query_en, ocr_keywords: prepared.ocr_keywords, events:finalEvents, events_en:prepared.events_en, answer, auto_answer:autoAnswer, top_k: topK, ...armConfig})});
         showToast(`${queryType} · ${scope === 'shared' ? 'đã xếp luồng chung; mọi user sẽ thấy tiến trình.' : 'đã chạy luồng riêng của bạn.'}`);
       } catch (error) { notice.textContent = error.message; }
       finally { button.disabled = false; }
@@ -491,8 +742,12 @@
     });
     $('sharedForm').addEventListener('submit', (event) => submitRun('shared', event));
     $('privateForm').addEventListener('submit', (event) => submitRun('private', event));
+    $('sharedQuestButton').addEventListener('click', () => analyzeQuest('shared'));
+    $('privateQuestButton').addEventListener('click', () => analyzeQuest('private'));
     $('sharedType').addEventListener('change', () => updateFormType('shared'));
     $('privateType').addEventListener('change', () => updateFormType('private'));
+    $('closeVideoButton').addEventListener('click', closeVideo);
+    $('videoModal').addEventListener('click', (event) => { if (event.target === $('videoModal')) closeVideo(); });
     document.querySelectorAll('.switch-button').forEach((button) => {
       button.addEventListener('click', () => setActiveMode(button.dataset.scope));
     });

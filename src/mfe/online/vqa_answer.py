@@ -25,23 +25,25 @@ module ngay khi import nên không test nào với tới được — cùng lý 
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
-import os
 import re
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 
 from mfe.contracts.tools import Candidate
+from mfe.online.trammay import TrammayClient
+from mfe.online.trammay import available as trammay_available
 
 logger = logging.getLogger(__name__)
 
-#: Model dùng để đọc đáp án. Cùng biến môi trường với tầng rerank `vlm`, vì nếu
-#: hai chỗ dùng hai model khác nhau thì `MFE_GEMINI_VLM_MODEL` chỉ chữa được một
-#: nửa, và nửa còn lại vẫn đâm vào trần 20 request/ngày của `gemini-3.6-flash`.
-GEMINI_MODEL = os.getenv("MFE_GEMINI_VLM_MODEL", "gemini-3.6-flash")
+#: QA đi qua gateway OpenAI-compatible của Trammay, không gọi Google Gemini
+#: trực tiếp. Model thực tế lấy từ `MFE_TRAMMAY_MODEL` hoặc default của
+#: `TrammayClient`; như vậy khóa và quota đều dùng chung với các tầng online.
 
 #: Nhìn bao nhiêu khung đầu. Đáp án gần như luôn nằm ở vài khung đầu nếu truy hồi
 #: đúng; nhìn sâu hơn chỉ tăng tiền và tăng cơ hội model đọc nhầm khung của một
@@ -108,9 +110,8 @@ def available() -> tuple[bool, str | None]:
     Hỏi trước khi gọi: một lớp bọc chỉ ném ở lượt gọi đầu sẽ khiến giao diện vẽ
     xong nút, người bấm, rồi mới báo thiếu khoá.
     """
-    if os.getenv("GEMINI_API_KEY"):
-        return True, None
-    return False, "chua co GEMINI_API_KEY trong .env"
+    ok, reason = trammay_available()
+    return (True, None) if ok else (False, reason)
 
 
 def encode_image(path: Path, *, max_side: int = MAX_SIDE) -> object:
@@ -134,7 +135,7 @@ def read_answer(
     """Đọc đáp án từ `depth` khung đầu. Không bao giờ ném — trả `Answer` kèm lý do.
 
     `ask(prompt, paths) -> str` tiêm được để test không cần mạng. Mặc định đi
-    Gemini.
+    Gemini qua gateway Trammay.
 
     Không ném là có chủ ý: hàm này chạy trong vòng lặp vẽ giao diện, và một lượt
     gọi API hỏng không được phép làm trắng cả trang mà người vận hành đang xếp dở
@@ -156,7 +157,7 @@ def read_answer(
         count=len(usable),
         ids=json.dumps([kid for kid, _ in usable], ensure_ascii=False),
     )
-    caller = ask or _ask_gemini
+    caller = ask or _ask_trammay
     try:
         raw = caller(prompt, [p for _, p in usable])
     except Exception as err:  # noqa: BLE001 - mot luot goi hong khong duoc lam trang trang
@@ -207,11 +208,20 @@ def parse_answer(text: str) -> dict | None:
     return parsed if isinstance(parsed, dict) else None
 
 
-def _ask_gemini(prompt: str, paths: list[Path]) -> str:
-    from google import genai  # noqa: PLC0415
-
-    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-    contents: list[object] = [encode_image(p) for p in paths]
-    contents.append(prompt)
-    response = client.models.generate_content(model=GEMINI_MODEL, contents=contents)
-    return (response.text or "").strip()
+def _ask_trammay(prompt: str, paths: list[Path]) -> str:
+    client = TrammayClient.from_env()
+    if client is None:
+        raise RuntimeError("thieu TRAMMAY_API_KEY trong .env")
+    encoded = []
+    for path in paths:
+        image = encode_image(path)
+        buffer = BytesIO()
+        image.save(buffer, format="JPEG", quality=JPEG_QUALITY)
+        encoded.append(base64.b64encode(buffer.getvalue()).decode("ascii"))
+    return client.chat(
+        prompt,
+        images_b64=encoded,
+        model=client.model,
+        max_tokens=512,
+        temperature=0.0,
+    )

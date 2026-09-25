@@ -212,6 +212,7 @@ def main() -> None:
                     flush=True,
                 )
 
+    batch1_dense_rows = len(ids)
     duplicate = seen.intersection(b2_ids)
     if duplicate:
         raise ValueError(f"B1/B2 caption key trùng: {sorted(duplicate)[:5]}")
@@ -232,6 +233,7 @@ def main() -> None:
         "source": "latest Gemini caption parts",
         "batch1_parts": len(b1_parts),
         "batch1_rows": sum(len(keys) for _, keys, _ in b1_parts),
+        "batch1_dense_rows": batch1_dense_rows,
         "batch1_dense_source": (
             str(args.batch1_dense_parts)
             if args.batch1_dense_parts
@@ -241,6 +243,7 @@ def main() -> None:
         ),
         "batch2_parts": 614,
         "batch2_rows": len(b2_ids),
+        "batch2_dense_rows": len(b2_ids),
         "rows": len(ids),
         "dim": int(matrix.shape[1]),
         "created_at_unix": time.time(),

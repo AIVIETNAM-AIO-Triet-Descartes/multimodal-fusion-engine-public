@@ -23,6 +23,7 @@ import hashlib
 import hmac
 import json
 import logging
+import math
 import os
 import re
 import secrets
@@ -41,7 +42,7 @@ from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
-from starlette.responses import FileResponse, JSONResponse, PlainTextResponse
+from starlette.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from starlette.routing import Route, WebSocketRoute
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
@@ -72,6 +73,14 @@ from mfe.online import dante  # noqa: E402
 from mfe.online.dense_arms import preload_query_encoders  # noqa: E402
 from mfe.online.flat_arms import build_flat_cascade, load_flat_bundle  # noqa: E402
 from mfe.online.keyframe_images import KeyframeImages  # noqa: E402
+from mfe.online.quest import (  # noqa: E402
+    QuestClient,
+    QuestKIS,
+    quest_clauses,
+    quest_decompose,
+    quest_expand,
+)
+from mfe.online.video_source import resolve_video  # noqa: E402
 from mfe.online.vqa_answer import read_answer  # noqa: E402
 
 for _key, _value in load_dotenv(REPO_ROOT / ".env").items():
@@ -233,31 +242,39 @@ class Lane:
         answer: str = "",
         auto_answer: bool = False,
         penalty: float = dante.PENALTY,
+        ocr_keywords: str | None = None,
+        arm_weights: dict[str, float] | None = None,
+        arm_enabled: dict[str, bool] | None = None,
     ) -> dict[str, Any]:
         cascade = self._ensure_cascade()
         started = time.perf_counter()
 
         def search_one(text: str, text_en: str | None, search_run_id: str):
-            # QueryTranslator owns a small mutable usage/cache object. Keep that
-            # object shared, but guard the complete search only when an English
-            # arm actually needs translation.
-            needs_translation = (
-                not text_en and cascade.translator is not None and cascade.arms.needs_english()
-            )
-            if needs_translation:
-                with self.manager.translation_lock:
-                    return cascade.search(
-                        query_text=text,
-                        top_k=top_k,
-                        run_id=search_run_id,
-                        query_text_en=text_en,
-                    )
-            return cascade.search(
-                query_text=text,
-                top_k=top_k,
-                run_id=search_run_id,
-                query_text_en=text_en,
-            )
+            with cascade.overriding(weights=arm_weights, enabled=arm_enabled):
+                # QueryTranslator owns a small mutable usage/cache object. Keep
+                # that object shared, but guard the complete search only when
+                # an English arm actually needs translation.
+                needs_translation = (
+                    not text_en
+                    and cascade.translator is not None
+                    and cascade.arms.needs_english()
+                )
+                if needs_translation:
+                    with self.manager.translation_lock:
+                        return cascade.search(
+                            query_text=text,
+                            top_k=top_k,
+                            run_id=search_run_id,
+                            query_text_en=text_en,
+                            ocr_keywords=ocr_keywords,
+                        )
+                return cascade.search(
+                    query_text=text,
+                    top_k=top_k,
+                    run_id=search_run_id,
+                    query_text_en=text_en,
+                    ocr_keywords=ocr_keywords,
+                )
 
         def candidates_of(raw: Any) -> list[Any]:
             return raw[0] if isinstance(raw, tuple) else raw
@@ -368,6 +385,9 @@ class EngineManager:
             "query": None,
             "query_type": "KIS",
             "events": [],
+            "ocr_keywords": None,
+            "arm_weights": {},
+            "arm_enabled": {},
             "answer": None,
             "started_at": None,
             "finished_at": None,
@@ -482,8 +502,14 @@ class EngineManager:
             return None
         image = self.images.cached(keyframe_id)
         image_url = None
-        if image is not None and _VIDEO_RE.fullmatch(row.video_id):
-            image_url = f"/media/{quote(row.video_id, safe='')}/{row.frame_idx}"
+        resolved_video_id = row.video_id or video_id
+        if image is not None and _VIDEO_RE.fullmatch(resolved_video_id):
+            image_url = f"/media/{quote(resolved_video_id, safe='')}/{row.frame_idx}"
+        video_url = None
+        if os.getenv("MFE_VIDEO_BASE_URL", "").strip() and _VIDEO_RE.fullmatch(resolved_video_id):
+            # The actual SAS URL stays server-side in `.env`; the browser follows
+            # this authenticated redirect when the operator opens a result.
+            video_url = f"/video/{quote(resolved_video_id, safe='')}"
 
         caption = ""
         for source in ("caption_gemini", "caption_qwen", "caption"):
@@ -498,8 +524,8 @@ class EngineManager:
         return {
             "rank": rank,
             "keyframe_id": keyframe_id,
-            "video_id": row.video_id or video_id,
-            "batch": "batch2" if (row.video_id or video_id) in self.batch2_video_ids else "batch1",
+            "video_id": resolved_video_id,
+            "batch": "batch2" if resolved_video_id in self.batch2_video_ids else "batch1",
             "frame_idx": row.frame_idx,
             "keyframe_index": row.keyframe_index,
             "timestamp_ms": row.timestamp_ms,
@@ -508,6 +534,7 @@ class EngineManager:
             "caption": caption,
             "ocr": ocr,
             "image_url": image_url,
+            "video_url": video_url,
         }
 
     def candidate_payload(self, candidates: list[Any]) -> list[dict[str, Any]]:
@@ -561,9 +588,29 @@ class EngineManager:
             "active_arms": [arm.name for arm in self.base_cascade.arms.active()]
             if self.base_cascade is not None
             else [],
+            "video_source_configured": bool(os.getenv("MFE_VIDEO_BASE_URL", "").strip()),
             "error": self.init_error,
             "uptime_s": round(max(0.0, time.time() - self.init_started), 1),
         }
+
+    def arm_config(self) -> list[dict[str, Any]]:
+        """Return the operator-facing arm switches without exposing secrets."""
+        if self.base_cascade is None:
+            return []
+        return [
+            {
+                "name": arm.name,
+                "available": arm.available,
+                "enabled": arm.enabled,
+                "active": arm.active,
+                "weight": arm.weight,
+                "status": arm.status(),
+                "description": arm.description,
+                "query_language": arm.query_language,
+                "unavailable_reason": arm.unavailable_reason,
+            }
+            for arm in self.base_cascade.arms
+        ]
 
     def close(self) -> None:
         if self.init_task and not self.init_task.done():
@@ -649,6 +696,9 @@ async def _execute_job(
     answer: str,
     auto_answer: bool,
     penalty: float,
+    ocr_keywords: str | None,
+    arm_weights: dict[str, float],
+    arm_enabled: dict[str, bool],
 ) -> None:
     state = manager.shared_state if scope == "shared" else manager.private_states[owner or ""]
     state["status"] = "queued"
@@ -674,6 +724,9 @@ async def _execute_job(
                 answer,
                 auto_answer,
                 penalty,
+                ocr_keywords,
+                arm_weights,
+                arm_enabled,
             )
         state["status"] = "done"
         state["results"] = result["results"]
@@ -707,6 +760,9 @@ async def _schedule_job(
     answer: str,
     auto_answer: bool,
     penalty: float,
+    ocr_keywords: str | None,
+    arm_weights: dict[str, float],
+    arm_enabled: dict[str, bool],
 ) -> JSONResponse:
     if not manager.ready:
         return JSONResponse(
@@ -736,6 +792,9 @@ async def _schedule_job(
             "query": query,
             "query_type": query_type,
             "events": events,
+            "ocr_keywords": ocr_keywords,
+            "arm_weights": arm_weights,
+            "arm_enabled": arm_enabled,
             "answer": None,
             "started_at": None,
             "finished_at": None,
@@ -761,6 +820,9 @@ async def _schedule_job(
             answer,
             auto_answer,
             penalty,
+            ocr_keywords,
+            arm_weights,
+            arm_enabled,
         )
     )
     await broadcast_state(manager, scope, owner)
@@ -777,6 +839,123 @@ async def favicon(request: Request) -> PlainTextResponse:
 
 async def health(request: Request) -> JSONResponse:
     return JSONResponse(request.app.state.manager.health())
+
+
+async def config(request: Request) -> JSONResponse:
+    username = _session_user(request)
+    if username is None:
+        return JSONResponse({"ok": False, "error": "can dang nhap"}, status_code=401)
+    manager: EngineManager = request.app.state.manager
+    return JSONResponse(
+        {
+            "ok": True,
+            "arms": manager.arm_config(),
+            "quest": {
+                "provider": "llm-gateway.invalid / Gemini"
+                if os.getenv("TRAMMAY_API_KEY")
+                else "chua cau hinh Trammay",
+                "model": os.getenv("MFE_TRAMMAY_MODEL", "ag/gemini-3.8-flash"),
+            },
+            "video": {
+                "configured": bool(os.getenv("MFE_VIDEO_BASE_URL", "").strip()),
+                "proxy": "/video/{video_id}",
+            },
+        }
+    )
+
+
+def _payload_lines(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return [line.strip() for line in str(value or "").splitlines() if line.strip()]
+
+
+def _quest_analysis_sync(
+    query_type: str, query: str, events: list[str]
+) -> dict[str, Any]:
+    client = QuestClient()
+    available, reason = client.available()
+    if not available:
+        raise RuntimeError(reason or "QUEST Trammay chua san sang")
+    provider = "llm-gateway.invalid / Gemini" if client.trammay_client is not None else "legacy"
+
+    if query_type == "KIS":
+        kis = QuestKIS()
+        kis.client = client
+        text_en = kis.translate(query).strip()
+        terms = quest_expand(query, client=client)
+        expanded_vi = " ".join(term.vi for term in terms if term.vi).strip()
+        expanded_en = " ".join(term.en for term in terms if term.en).strip()
+        return {
+            "ok": True,
+            "query_type": query_type,
+            "provider": provider,
+            "query": query,
+            "text_en": text_en,
+            "expanded_vi": expanded_vi,
+            "expanded_en": expanded_en,
+            "expanded_query_vi": f"{query} {expanded_vi}".strip(),
+            "expanded_query_en": f"{text_en} {expanded_en}".strip(),
+            "terms": [
+                {"vi": term.vi, "en": term.en, "why": term.why}
+                for term in terms
+            ],
+        }
+
+    if query_type == "QA":
+        parts = quest_decompose(query, client=client)
+        fallback = (
+            str(parts.get("search_hint", "")).strip() == query
+            and str(parts.get("logic_question", "")).strip() == query
+        )
+        return {
+            "ok": True,
+            "query_type": query_type,
+            "provider": provider,
+            "search_hint": str(parts.get("search_hint", "")).strip(),
+            "ocr_keywords": str(parts.get("ocr_keywords", "")).strip(),
+            "logic_question": str(parts.get("logic_question", "")).strip(),
+            "fallback": fallback,
+        }
+
+    source = query.strip() or "\n".join(events)
+    clauses = quest_clauses(source, client=client) if source else []
+    return {
+        "ok": True,
+        "query_type": query_type,
+        "provider": provider,
+        "source": source,
+        "clauses": clauses,
+        "fallback": not bool(clauses),
+    }
+
+
+async def quest(request: Request) -> JSONResponse:
+    username = _session_user(request)
+    if username is None:
+        return JSONResponse({"ok": False, "error": "can dang nhap"}, status_code=401)
+    if not _csrf_ok(request):
+        return JSONResponse({"ok": False, "error": "csrf token khong dung"}, status_code=403)
+    payload = await _json_body(request)
+    query_type = str(payload.get("query_type", "KIS")).strip().upper() if payload else "KIS"
+    if query_type not in {"KIS", "QA", "TRAKE"}:
+        return JSONResponse({"ok": False, "error": "query_type khong hop le"}, status_code=400)
+    query = str(payload.get("query", "")).strip() if payload else ""
+    events = _payload_lines(payload.get("events", [])) if payload else []
+    source = query or "\n".join(events)
+    if not source:
+        return JSONResponse({"ok": False, "error": "query khong duoc rong"}, status_code=400)
+    if len(source) > 8000 or any(len(item) > 4000 for item in events):
+        return JSONResponse({"ok": False, "error": "query qua dai"}, status_code=400)
+    try:
+        result = await asyncio.to_thread(_quest_analysis_sync, query_type, query, events)
+    except Exception as exc:  # noqa: BLE001 - report gateway errors to the operator
+        logger.warning("QUEST failed for %s: %s: %s", username, type(exc).__name__, exc)
+        return JSONResponse(
+            {"ok": False, "error": f"QUEST Trammay loi: {type(exc).__name__}: {exc}"},
+            status_code=502,
+        )
+    return JSONResponse(result)
 
 
 async def me(request: Request) -> JSONResponse:
@@ -863,6 +1042,39 @@ async def run_private(request: Request) -> JSONResponse:
     return await _run_request(request, "private", username)
 
 
+def _parse_arm_config(
+    manager: EngineManager, payload: dict[str, Any] | None
+) -> tuple[dict[str, float], dict[str, bool]]:
+    """Validate per-job arm settings before a lane mutates its Cascade."""
+    known = {arm.name for arm in (manager.base_cascade.arms if manager.base_cascade else [])}
+    weights_raw = payload.get("arm_weights", {}) if payload else {}
+    enabled_raw = payload.get("arm_enabled", {}) if payload else {}
+    if not isinstance(weights_raw, dict) or not isinstance(enabled_raw, dict):
+        raise TypeError("arm_weights va arm_enabled phai la object")
+    unknown = (set(weights_raw) | set(enabled_raw)) - known
+    if unknown:
+        raise ValueError(f"arm khong ton tai: {', '.join(sorted(map(str, unknown)))}")
+
+    weights: dict[str, float] = {}
+    for name, raw in weights_raw.items():
+        if isinstance(raw, bool):
+            raise TypeError(f"trong so arm {name} khong hop le")
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            raise TypeError(f"trong so arm {name} khong hop le") from None
+        if not math.isfinite(value) or value < 0.0 or value > 4.0:
+            raise TypeError(f"trong so arm {name} phai nam trong [0, 4]")
+        weights[str(name)] = value
+
+    enabled: dict[str, bool] = {}
+    for name, raw in enabled_raw.items():
+        if not isinstance(raw, bool):
+            raise TypeError(f"enabled cua arm {name} phai la boolean")
+        enabled[str(name)] = raw
+    return weights, enabled
+
+
 async def _run_request(request: Request, scope: str, username: str) -> JSONResponse:
     payload = await _json_body(request)
     query_type = str(payload.get("query_type", "KIS")).strip().upper() if payload else "KIS"
@@ -886,6 +1098,11 @@ async def _run_request(request: Request, scope: str, username: str) -> JSONRespo
     )
     answer = str(payload.get("answer", "")).strip() if payload else ""
     auto_answer = bool(payload.get("auto_answer", False)) if payload else False
+    ocr_keywords = str(payload.get("ocr_keywords", "")).strip() if payload else ""
+    try:
+        arm_weights, arm_enabled = _parse_arm_config(request.app.state.manager, payload)
+    except (TypeError, ValueError) as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     try:
         top_k = int(payload.get("top_k", 50)) if payload else 50
     except (TypeError, ValueError):
@@ -903,6 +1120,7 @@ async def _run_request(request: Request, scope: str, username: str) -> JSONRespo
     if (
         len(query) > 4000
         or len(query_en) > 4000
+        or len(ocr_keywords) > 4000
         or any(len(item) > 4000 for item in events + events_en)
     ):
         return JSONResponse({"ok": False, "error": "query qua dai"}, status_code=400)
@@ -922,6 +1140,9 @@ async def _run_request(request: Request, scope: str, username: str) -> JSONRespo
         answer,
         auto_answer if query_type == "QA" else False,
         dante.PENALTY,
+        ocr_keywords or None,
+        arm_weights,
+        arm_enabled,
     )
 
 
@@ -945,6 +1166,28 @@ async def media(request: Request) -> FileResponse | JSONResponse:
         path,
         media_type="image/jpeg",
         headers={"Cache-Control": "public, max-age=86400, immutable"},
+    )
+
+
+async def video(request: Request) -> RedirectResponse | JSONResponse:
+    """Authenticate a result click, then redirect the browser to Azure Blob."""
+    if _session_user(request) is None:
+        return JSONResponse({"error": "can dang nhap"}, status_code=401)
+    video_id = request.path_params["video_id"]
+    if not _VIDEO_RE.fullmatch(video_id):
+        return JSONResponse({"error": "invalid video path"}, status_code=404)
+    source = resolve_video(video_id)
+    if source is None:
+        return JSONResponse({"error": "video source not configured"}, status_code=404)
+    if not source.is_url:
+        return JSONResponse(
+            {"error": "video source is local; configure MFE_VIDEO_BASE_URL for browser playback"},
+            status_code=503,
+        )
+    return RedirectResponse(
+        source.location,
+        status_code=307,
+        headers={"Cache-Control": "private, no-store"},
     )
 
 
@@ -987,6 +1230,8 @@ routes = [
     Route("/", homepage),
     Route("/favicon.ico", favicon),
     Route("/api/health", health),
+    Route("/api/config", config),
+    Route("/api/quest", quest, methods=["POST"]),
     Route("/api/me", me),
     Route("/api/login", login, methods=["POST"]),
     Route("/api/logout", logout, methods=["POST"]),
@@ -994,6 +1239,7 @@ routes = [
     Route("/api/shared/run", run_shared, methods=["POST"]),
     Route("/api/private/run", run_private, methods=["POST"]),
     Route("/media/{video_id}/{frame_idx:int}", media),
+    Route("/video/{video_id}", video),
     WebSocketRoute("/ws", websocket_endpoint),
 ]
 
