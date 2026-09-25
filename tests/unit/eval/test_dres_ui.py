@@ -37,8 +37,13 @@ def test_render_and_download_bytes(kind):
         return original_download(*args, **kwargs)
 
     st.cache_resource.clear()
+    class EmptyRegistry(list):
+        def active(self):
+            return []
+
+    fake_registry = EmptyRegistry()
     with patch('mfe.online.flat_arms.load_flat_bundle', return_value=None), \
-         patch('mfe.online.flat_arms.build_flat_cascade', return_value=NS(arms=[])), \
+         patch('mfe.online.flat_arms.build_flat_cascade', return_value=NS(arms=fake_registry)), \
          patch('mfe.mapping.relational.RelationalMap', return_value=db), \
          patch('mfe.online.keyframe_images.KeyframeImages') as images, \
          patch('mfe.online.video_source.resolve_video', return_value=None), \

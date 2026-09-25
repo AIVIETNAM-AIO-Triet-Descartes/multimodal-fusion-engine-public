@@ -418,7 +418,11 @@ class EngineManager:
         # the old default cache can silently serve a B1-only index after the
         # B1+B2 flat files have changed.
         flat_cache = RUNTIME_ROOT / "flat-cache"
-        bundle = load_flat_bundle(str(FLAT_ROOT), cache_dir=flat_cache)
+        bundle = load_flat_bundle(
+            str(FLAT_ROOT),
+            cache_dir=flat_cache,
+            map_keyframes=config.paths.map_keyframes,
+        )
         cascade = build_flat_cascade(config, str(FLAT_ROOT), flat_bundle=bundle)
         active = [arm.name for arm in cascade.arms.active()]
         logger.info("preload query encoders: %s", active)

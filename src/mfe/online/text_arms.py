@@ -73,6 +73,9 @@ TEXT_ARM_SPECS: dict[str, tuple[str, bool, str]] = {
     "caption_qwen": ("caption_qwen", False, "en"),
     "caption_gemini": ("caption_gemini", False, "en"),
     "ocr_gemini": ("ocr_gemini", False, "vi"),
+    # Window prose is generated in English.  It is expanded back to real
+    # keyframe ids by the flat backend before fusion.
+    "window_bm25": ("window_bm25", False, "en"),
 }
 
 _DESCRIPTIONS = {
@@ -90,6 +93,7 @@ _DESCRIPTIONS = {
     "caption_gemini": "Mô tả ảnh Gemini mới nhất (TIẾNG ANH — cần bản dịch truy vấn)",
     "ocr_gemini": "OCR Gemini mới nhất trên batch 2",
     "ocr_qwen25": "Chữ trên màn hình do Qwen2.5-VL chép, cùng lượt sinh với caption",
+    "window_bm25": "Bản ghi cửa sổ 15 giây (TIẾNG ANH — cần bản dịch truy vấn)",
 }
 
 

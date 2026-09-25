@@ -51,6 +51,31 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--batch1-window-text", type=Path,
+        default=Path(
+            "/data/multimodal-fusion-engine/modal/keyframe-augmentation-research/"
+            "research/window-records-v1/data/vectors/window_text.json"
+        ),
+    )
+    parser.add_argument(
+        "--batch1-window-root", type=Path,
+        default=Path(
+            "/data/multimodal-fusion-engine/modal/keyframe-augmentation-research"
+        ),
+        help="Volume/root chứa parts window_dense của batch 1",
+    )
+    parser.add_argument(
+        "--batch2-window-text", type=Path,
+        default=Path(
+            "/data/multimodal-fusion-engine/modal/keyframes-batch-2-v2/"
+            "bundle/aic_btc_b2_v1/data/vectors/window_text.json"
+        ),
+    )
+    parser.add_argument(
+        "--batch2-window-dense-extra", type=Path, default=None,
+        help="Part window_dense B2 sinh bù ngoài Modal (nếu có)",
+    )
+    parser.add_argument(
         "--output-root", type=Path,
         default=Path("/data/multimodal-fusion-engine/runtime/btc_b12/flat"),
     )
@@ -78,6 +103,33 @@ def read_json_parts(directory: Path) -> tuple[dict[str, str], int]:
     if duplicates:
         raise ValueError(f"JSON part trùng key ở {directory}: {duplicates[:5]}")
     return merged, len(files)
+
+
+def merge_json_files(*paths: Path) -> tuple[dict[str, str], int]:
+    """Merge already-flat JSON maps and reject duplicate window ids."""
+    merged: dict[str, str] = {}
+    for path in paths:
+        payload = read_json_file(path)
+        for key, value in payload.items():
+            if not isinstance(key, str) or not isinstance(value, str):
+                raise ValueError(f"{path}: key/value không hợp lệ")
+            if key in merged:
+                raise ValueError(f"JSON phẳng trùng key {key} giữa các nguồn")
+            if value.strip():
+                merged[key] = value.strip()
+    return merged, len(paths)
+
+
+def read_json_file(path: Path) -> dict[str, str]:
+    if not path.is_file():
+        raise FileNotFoundError(f"Không có JSON phẳng: {path}")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"{path}: phải là object")
+    if any(not isinstance(key, str) or not isinstance(value, str)
+           for key, value in payload.items()):
+        raise ValueError(f"{path}: key/value không hợp lệ")
+    return payload
 
 
 def split_b2_raw(directory: Path) -> tuple[dict[str, str], dict[str, str], int]:
@@ -197,6 +249,45 @@ def main() -> None:
         expected_files=(b1_subdense_files, b2_subdense_files),
     )
 
+    b1_window_text = read_json_file(args.batch1_window_text)
+    b2_window_text = read_json_file(args.batch2_window_text)
+    window_text, _window_text_sources = merge_json_files(
+        args.batch1_window_text, args.batch2_window_text
+    )
+    b1_window_dir = args.batch1_window_root / "bundle" / "aic_btc_b1_v1" / "parts" / "window_dense"
+    b2_window_dir = b2 / "parts" / "window_dense"
+    b1_window_files = len(list(b1_window_dir.glob("*.npz")))
+    b2_window_files = len(list(b2_window_dir.glob("*.npz")))
+    window_dense_dirs = [b1_window_dir, b2_window_dir]
+    window_dense_file_counts = [b1_window_files, b2_window_files]
+    extra_window_files = 0
+    if args.batch2_window_dense_extra is not None:
+        extra_window_files = len(list(args.batch2_window_dense_extra.glob("*.npz")))
+        window_dense_dirs.append(args.batch2_window_dense_extra)
+        window_dense_file_counts.append(extra_window_files)
+    window_ids, window_dense, window_duplicates = merge_vector_parts(
+        *window_dense_dirs,
+        expected_files=tuple(window_dense_file_counts),
+    )
+    if window_duplicates:
+        raise RuntimeError(
+            f"window_dense bị trùng {window_duplicates} window_id; không gộp âm thầm"
+        )
+    if window_dense.ndim != 2 or window_dense.shape[1] != 1024:
+        raise RuntimeError(
+            f"window_dense phải có 1024 chiều, nhận {window_dense.shape}"
+        )
+    text_ids = set(window_text)
+    dense_ids = set(window_ids)
+    if text_ids != dense_ids:
+        missing_dense = sorted(text_ids - dense_ids)
+        extra_dense = sorted(dense_ids - text_ids)
+        raise RuntimeError(
+            "window_text/window_dense lệch khóa: "
+            f"thiếu dense {len(missing_dense)}, dư dense {len(extra_dense)}; "
+            f"mẫu thiếu {missing_dense[:3]}, mẫu dư {extra_dense[:3]}"
+        )
+
     vector_dir = args.output_root / "data" / "vectors"
     vector_dir.mkdir(parents=True, exist_ok=True)
     write_json(vector_dir / "gemini_captions.json", gemini_captions)
@@ -204,6 +295,8 @@ def main() -> None:
     write_json(vector_dir / "subtitles.json", subtitles)
     write_npz(vector_dir / "siglip_vectors.npz", siglip_ids, siglip)
     write_npz(vector_dir / "subtitles_dense.npz", subdense_ids, subdense)
+    write_json(vector_dir / "window_text.json", window_text)
+    write_npz(vector_dir / "window_dense.npz", window_ids, window_dense)
 
     # Keep the already validated B1 Qwen files available as a rollback arm. The
     # B12 config disables caption_qwen, so these files cannot silently replace
@@ -224,6 +317,9 @@ def main() -> None:
             "subtitle_rows": len(b1_subtitles),
             "siglip_parts": b1_siglip_files,
             "subtitles_dense_parts": b1_subdense_files,
+            "window_text_sources": 1,
+            "window_text_rows": len(b1_window_text),
+            "window_dense_parts": b1_window_files,
         },
         "batch2": {
             "gemini_raw_parts": b2_gemini_files,
@@ -233,6 +329,9 @@ def main() -> None:
             "subtitle_rows": len(b2_subtitles),
             "siglip_parts": b2_siglip_files,
             "subtitles_dense_parts": b2_subdense_files,
+            "window_text_rows": len(b2_window_text),
+            "window_dense_parts": b2_window_files,
+            "window_dense_generated_parts": extra_window_files,
         },
         "artifacts": {
             "gemini_captions": len(gemini_captions),
@@ -247,6 +346,12 @@ def main() -> None:
                 "rows": len(subdense_ids),
                 "dim": int(subdense.shape[1]),
                 "duplicates_dropped": subdense_duplicates,
+            },
+            "window_text": len(window_text),
+            "window_dense": {
+                "rows": len(window_ids),
+                "dim": int(window_dense.shape[1]),
+                "duplicates_dropped": window_duplicates,
             },
             "dense_vectors": "generated by embed_latest_caption_parts.py",
         },

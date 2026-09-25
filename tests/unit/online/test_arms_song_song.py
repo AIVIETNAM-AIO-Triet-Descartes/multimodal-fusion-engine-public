@@ -178,4 +178,5 @@ class TestArmsDisabledTrongConfig:
         config = load_config("config/btc_b1.yaml")
         assert set(config.retrieval.arms_disabled) == {
             "ocr", "ocr_paddle", "clap", "object", "ocr_vietocr",
+            "window_bm25", "window_bge_m3",
         }

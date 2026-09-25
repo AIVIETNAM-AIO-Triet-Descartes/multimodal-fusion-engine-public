@@ -83,6 +83,13 @@ DENSE_ARM_SPECS: dict[str, tuple[str, int, str, str, str]] = {
         "en",
         "Âm thanh qua CLAP — tháp text tiếng Anh, chỉ hợp truy vấn về tiếng động",
     ),
+    "window_bge_m3": (
+        "aic_window_bge_m3_v1",
+        1024,
+        "BAAI/bge-m3",
+        "any",
+        "Ngữ nghĩa bản ghi cửa sổ 15 giây qua BGE-M3",
+    ),
 }
 
 

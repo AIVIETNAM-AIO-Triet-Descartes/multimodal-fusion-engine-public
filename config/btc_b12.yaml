@@ -44,6 +44,10 @@ retrieval:
     siglip: 2.0
     bge_m3: 1.0
     subtitle_bge_m3: 1.0
+    # Hai arm cửa sổ mới đã có dữ liệu, nhưng CHƯA từng leo dốc. 1.0 là giá
+    # trị tạm theo kế hoạch ingest; phải đo lại toàn bộ bảng sau khi có đề B2.
+    window_bm25: 1.0
+    window_bge_m3: 1.0
     caption_gemini: 1.0
     ocr_gemini: 1.0
     ocr_qwen25: 1.0
@@ -60,6 +64,10 @@ retrieval:
     - ocr_vietocr
     - object
     - clap
+    # Đã ingest đầy đủ artifact window, nhưng trọng số 1.0 chưa tune và phép
+    # đo trên dev làm Final giảm; giữ dữ liệu + UI override, tắt mặc định.
+    - window_bm25
+    - window_bge_m3
   rerank_budget_ms: 20000
   rerank_depth: 100
   temporal_window_frames: 640

@@ -43,6 +43,7 @@ nên không có bước tra ordinal nào ở đây — đúng lý do bản gộp
 
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
 import logging
@@ -77,6 +78,10 @@ SOURCE_FILE = {
     "caption_gemini": "gemini_captions.json",
     "ocr_qwen25": "qwen_ocr.json",
     "ocr_gemini": "gemini_ocr.json",
+    # The source contains one English prose record per 15-second window.  The
+    # online arm is named `window_bm25`; keeping that name here is required by
+    # sota_payloads.SOURCE_FILES and prevents a silent registry split.
+    "window_bm25": "window_text.json",
 }
 
 #: Tên arm dense -> tên file phẳng.
@@ -91,7 +96,12 @@ DENSE_FILE = {
     "bge_m3": "dense_vectors.npz",
     "subtitle_bge_m3": "subtitles_dense.npz",
     "clap": "audio_features.npz",
+    "window_bge_m3": "window_dense.npz",
 }
+
+_WINDOW_SECONDS = 15.0
+_WINDOW_TEXT_ARM = "window_bm25"
+_WINDOW_DENSE_ARM = "window_bge_m3"
 
 
 class FlatBundle:
@@ -104,12 +114,24 @@ class FlatBundle:
         self.vectors: dict[str, np.ndarray] = {}
         self.vector_keys: dict[str, list[str]] = {}
         self.missing: dict[str, str] = {}
+        #: `window_id -> [keyframe_id]`, built from the real map-keyframes FPS.
+        #: Window artifacts only know their own window id; every online
+        #: candidate must be converted back to a keyframe id before fusion.
+        self.window_keyframes: dict[str, list[str]] = {}
+        self.window_mapping_error: str | None = None
         #: `source` -> văn bản đã chuẩn hoá, CÙNG THỨ TỰ với `text_keys[source]`.
         #: Chỉ dựng cho nguồn có arm khớp cụm. Xem `chuan_hoa()`.
         self._chuan_hoa: dict[str, list[str]] = {}
 
     @classmethod
-    def load(cls, root: str | Path, *, sources=None, models=None) -> FlatBundle:
+    def load(
+        cls,
+        root: str | Path,
+        *,
+        sources=None,
+        models=None,
+        map_keyframes: str | Path | None = None,
+    ) -> FlatBundle:
         """Nạp `{root}/data/vectors/` — hoặc chính `{root}` nếu file nằm thẳng đó.
 
         Thiếu một file **không phải lỗi**: `paddle_ocr` chưa chạy xong thì arm đó
@@ -168,7 +190,144 @@ class FlatBundle:
             logger.info(
                 "%s: %s (%.1fs)", model, matrix.shape, time.perf_counter() - started
             )
+        if map_keyframes is not None:
+            self.build_window_keyframes(map_keyframes)
         return self
+
+    def build_window_keyframes(
+        self,
+        map_keyframes: str | Path,
+        *,
+        cache_dir: str | Path | None = None,
+    ) -> dict[str, list[str]]:
+        """Build `window_id -> keyframe_id` from the authoritative map CSVs.
+
+        A window id is not a keyframe id.  The source records intentionally do
+        not carry the frames that belong to them, so this bridge must use the
+        exact `frame_idx / fps` rule from the ingest contract.  `pts_time` and a
+        guessed 25 FPS would assign VFR frames to neighbouring windows.
+
+        The result is cached next to the flat derived caches.  The cache key
+        includes the vector ids and the map file sizes/mtimes, so adding a
+        batch or replacing a map cannot reuse an old mapping silently.
+        """
+        vector_keys: list[str] = []
+        for model in ("siglip", "bge_m3", "subtitle_bge_m3"):
+            keys = self.vector_keys.get(model)
+            if keys:
+                vector_keys = list(dict.fromkeys(keys))
+                break
+        if not vector_keys:
+            self.window_mapping_error = "khong co keyframe vector de dung bang cua so"
+            self.window_keyframes = {}
+            return self.window_keyframes
+
+        maps = Path(map_keyframes)
+        if not maps.is_dir():
+            self.window_mapping_error = f"khong co thu muc map-keyframes: {maps}"
+            self.window_keyframes = {}
+            return self.window_keyframes
+
+        videos = sorted({key.split("#", 1)[0] for key in vector_keys})
+        map_stats: list[str] = []
+        missing_maps: list[str] = []
+        for video in videos:
+            path = maps / f"{video}.csv"
+            if not path.is_file():
+                missing_maps.append(video)
+                continue
+            stat = path.stat()
+            map_stats.append(f"{video}:{stat.st_size}:{stat.st_mtime_ns}")
+        if missing_maps:
+            self.window_mapping_error = (
+                f"thieu {len(missing_maps)} map-keyframes ({missing_maps[:3]})"
+            )
+            self.window_keyframes = {}
+            return self.window_keyframes
+
+        key_hash = hashlib.sha256()
+        for key in vector_keys:
+            key_hash.update(key.encode("utf-8"))
+            key_hash.update(b"\n")
+        fingerprint_input = key_hash.hexdigest() + "\n" + "\n".join(map_stats)
+        fingerprint = hashlib.sha256(fingerprint_input.encode("utf-8")).hexdigest()[:20]
+        cache_path = (
+            Path(cache_dir) / f"window-keyframes-{fingerprint}.json"
+            if cache_dir is not None
+            else None
+        )
+        if cache_path is not None and cache_path.is_file():
+            try:
+                payload = json.loads(cache_path.read_text(encoding="utf-8"))
+                mapping = {
+                    str(window): [str(key) for key in keys]
+                    for window, keys in payload.items()
+                }
+                if all("#w" not in key for keys in mapping.values() for key in keys):
+                    self.window_keyframes = mapping
+                    self.window_mapping_error = None
+                    logger.info(
+                        "window map: %d windows / %d keyframes (cache)",
+                        len(mapping), sum(map(len, mapping.values())),
+                    )
+                    return mapping
+            except (OSError, TypeError, ValueError) as err:
+                logger.warning("window map cache invalid (%s); rebuilding", err)
+
+        fps_by_video: dict[str, float] = {}
+        for video in videos:
+            path = maps / f"{video}.csv"
+            try:
+                with path.open(newline="", encoding="utf-8") as handle:
+                    reader = csv.DictReader(handle)
+                    values = {
+                        float(row["fps"])
+                        for row in reader
+                        if row.get("fps", "").strip()
+                    }
+            except (OSError, KeyError, TypeError, ValueError) as err:
+                self.window_mapping_error = f"doc fps loi o {video}.csv: {err}"
+                self.window_keyframes = {}
+                return self.window_keyframes
+            if len(values) != 1 or next(iter(values)) <= 0:
+                self.window_mapping_error = (
+                    f"fps khong duy nhat/khong hop le o {video}.csv: {sorted(values)}"
+                )
+                self.window_keyframes = {}
+                return self.window_keyframes
+            fps_by_video[video] = next(iter(values))
+
+        mapping: dict[str, list[str]] = {}
+        for keyframe_id in vector_keys:
+            try:
+                video, frame_text = keyframe_id.split("#", 1)
+                frame_idx = int(frame_text)
+                fps = fps_by_video[video]
+            except (KeyError, ValueError) as err:
+                self.window_mapping_error = f"keyframe id khong hop le {keyframe_id}: {err}"
+                self.window_keyframes = {}
+                return self.window_keyframes
+            window_index = int((frame_idx / fps) // _WINDOW_SECONDS)
+            window_id = f"{video}#w{window_index:04d}"
+            mapping.setdefault(window_id, []).append(keyframe_id)
+
+        for keys in mapping.values():
+            keys.sort(key=lambda value: int(value.rsplit("#", 1)[1]))
+        self.window_keyframes = mapping
+        self.window_mapping_error = None
+        if cache_path is not None:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = cache_path.with_suffix(".tmp")
+            temporary.write_text(
+                json.dumps(mapping, ensure_ascii=False, separators=(",", ":")),
+                encoding="utf-8",
+            )
+            temporary.replace(cache_path)
+        logger.info(
+            "window map: %d windows / %d keyframes (fps from %s)",
+            len(mapping), sum(map(len, mapping.values())), maps,
+        )
+        return mapping
 
     def build_bm25(self, source: str):
         """Dựng BM25 cho một nguồn, chỉ khi thật sự cần.
@@ -336,6 +495,7 @@ def load_flat_bundle(
     models=None,
     cache_dir: str | Path = DEFAULT_CACHE_DIR,
     use_cache: bool = True,
+    map_keyframes: str | Path | None = None,
 ) -> FlatBundle:
     """`FlatBundle.load` cộng lớp cache dẫn xuất — đường dùng cho mọi công cụ.
 
@@ -344,7 +504,9 @@ def load_flat_bundle(
     cộng vài chục giây dựng BM25. Một lượt quét trọng số chạy hàng chục lần.
     """
     if not use_cache:
-        return FlatBundle.load(root, sources=sources, models=models)
+        return FlatBundle.load(
+            root, sources=sources, models=models, map_keyframes=map_keyframes
+        )
 
     base = flat_base(root)
     cache_dir = Path(cache_dir)
@@ -362,6 +524,8 @@ def load_flat_bundle(
         bundle.vector_keys[model] = ids
     for source in sorted(bundle.texts):
         load_cached_bm25(bundle, source, base, cache_dir)
+    if map_keyframes is not None:
+        bundle.build_window_keyframes(map_keyframes, cache_dir=cache_dir)
     return bundle
 
 
@@ -378,7 +542,12 @@ def build_flat_cascade(config, root: str | Path, **overrides):
     """
     from mfe.online.cascade import Cascade  # noqa: PLC0415 — tránh vòng import
 
-    bundle = overrides.pop("flat_bundle", None) or load_flat_bundle(root)
+    map_keyframes = getattr(getattr(config, "paths", None), "map_keyframes", None)
+    bundle = overrides.pop("flat_bundle", None)
+    if bundle is None:
+        bundle = load_flat_bundle(root, map_keyframes=map_keyframes)
+    elif map_keyframes is not None and not bundle.window_keyframes:
+        bundle.build_window_keyframes(map_keyframes)
     return Cascade.from_config(
         config,
         flat_bundle=bundle,
@@ -405,6 +574,65 @@ def _candidates(pairs, arm_name: str, run_id: str) -> list[Candidate]:
     return out
 
 
+def _window_candidates(
+    pairs,
+    bundle: FlatBundle,
+    arm_name: str,
+    run_id: str,
+    top_k: int,
+) -> list[Candidate]:
+    """Expand ranked windows into ranked keyframes.
+
+    The first request is `top_k // 6` windows, as a 15-second window contains
+    roughly 5.6--7.5 keyframes in the current batches.  If that estimate does
+    not fill the requested frame depth, the already-ranked window list is
+    expanded until `top_k`; this keeps the arm's contract at the same frame
+    depth as every other arm without making a window source dominate fusion.
+    """
+    if top_k <= 0:
+        return []
+    initial_windows = max(1, top_k // 6)
+    limit = min(len(pairs), initial_windows)
+    output: list[Candidate] = []
+    rank = 0
+    seen: set[str] = set()
+
+    def add_window(window_id: str, score: float) -> None:
+        nonlocal rank
+        for keyframe_id in bundle.window_keyframes.get(window_id, ()):
+            if keyframe_id in seen:
+                continue
+            # This also enforces the downstream Candidate contract and makes a
+            # regression to returning `#w0000` fail at the arm boundary.
+            video_id, _ = parse_keyframe_id(keyframe_id)
+            seen.add(keyframe_id)
+            rank += 1
+            output.append(
+                Candidate(
+                    keyframe_id=keyframe_id,
+                    video_id=video_id,
+                    score=float(score),
+                    evidence_id=create_evidence_id(arm_name, run_id, rank),
+                )
+            )
+            if len(output) >= top_k:
+                return
+
+    for window_id, score in pairs[:limit]:
+        add_window(window_id, score)
+        if len(output) >= top_k:
+            return output[:top_k]
+
+    # B1 averages fewer than six frames per window.  Continue through the
+    # already-ranked window candidates only when the initial estimate did not
+    # fill the requested frame depth.
+    for window_id, score in pairs[limit:]:
+        add_window(window_id, score)
+        if len(output) >= top_k:
+            break
+    return output[:top_k]
+
+
 def build_flat_text_arms(bundle: FlatBundle, weights=None, enabled=None) -> list[Arm]:
     """Một `Arm` mỗi mục `TEXT_ARM_SPECS`, đọc từ `bundle`."""
     weights = weights or {}
@@ -421,6 +649,22 @@ def build_flat_text_arms(bundle: FlatBundle, weights=None, enabled=None) -> list
                     unavailable_reason=bundle.missing.get(
                         source, f"khong co nguon {source} trong ban gop"
                     ),
+                    query_language=lang,
+                )
+            )
+            continue
+        if name == _WINDOW_TEXT_ARM and not bundle.window_keyframes:
+            arms.append(
+                Arm(
+                    name=name,
+                    search=None,
+                    weight=float(weights.get(name, 1.0)),
+                    enabled=bool(enabled.get(name, True)),
+                    unavailable_reason=(
+                        bundle.window_mapping_error
+                        or "khong co bang window_id -> keyframe_id"
+                    ),
+                    description="Bản ghi cửa sổ 15 giây (cần ánh xạ về keyframe)",
                     query_language=lang,
                 )
             )
@@ -459,9 +703,10 @@ def build_flat_text_arms(bundle: FlatBundle, weights=None, enabled=None) -> list
             scores = model.get_scores(tokens)
             keys = bundle.text_keys[_source]
             top = np.argsort(scores)[::-1][:k]
-            return _candidates(
-                [(keys[i], scores[i]) for i in top if scores[i] > 0], _name, run
-            )
+            pairs = [(keys[i], scores[i]) for i in top if scores[i] > 0]
+            if _name == _WINDOW_TEXT_ARM:
+                return _window_candidates(pairs, bundle, _name, run, k)
+            return _candidates(pairs, _name, run)
 
         arms.append(
             Arm(
@@ -497,6 +742,22 @@ def build_flat_dense_arms(bundle: FlatBundle, weights=None, enabled=None) -> lis
                 )
             )
             continue
+        if name == _WINDOW_DENSE_ARM and not bundle.window_keyframes:
+            arms.append(
+                Arm(
+                    name=name,
+                    search=None,
+                    weight=float(weights.get(name, 1.0)),
+                    enabled=bool(enabled.get(name, True)),
+                    query_language=language,
+                    unavailable_reason=(
+                        bundle.window_mapping_error
+                        or "khong co bang window_id -> keyframe_id"
+                    ),
+                    description=description,
+                )
+            )
+            continue
 
         matrix = bundle.vectors[name]
         if matrix.shape[1] != dim:
@@ -517,9 +778,15 @@ def build_flat_dense_arms(bundle: FlatBundle, weights=None, enabled=None) -> lis
             vector = encode_query(q, _ckpt, _dim)
             scores = bundle.vectors[_name] @ vector
             keys = bundle.vector_keys[_name]
-            top = np.argpartition(scores, -min(k, len(scores)))[-min(k, len(scores)):]
+            count = min(k, len(scores))
+            if count == 0:
+                return []
+            top = np.argpartition(scores, -count)[-count:]
             top = top[np.argsort(scores[top])[::-1]]
-            return _candidates([(keys[i], scores[i]) for i in top], _name, run)
+            pairs = [(keys[i], scores[i]) for i in top]
+            if _name == _WINDOW_DENSE_ARM:
+                return _window_candidates(pairs, bundle, _name, run, k)
+            return _candidates(pairs, _name, run)
 
         arms.append(
             Arm(

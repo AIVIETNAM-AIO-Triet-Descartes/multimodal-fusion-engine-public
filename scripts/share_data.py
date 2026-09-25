@@ -55,6 +55,11 @@ FLAT_FILES = (
     "qwen_ocr.json",         # ocr_qwen25    (BM25 trên OCR Qwen2.5-VL)
     "dense_vectors.npz",     # bge_m3        (nhúng CAPTION, 1024 chiều)
     "subtitles_dense.npz",   # subtitle_bge_m3 (nhúng PHỤ ĐỀ, 1024 chiều)
+    # Gemini mới nhất và hai arm bản ghi cửa sổ của kho BTC B1+B2.
+    "gemini_captions.json",  # caption_gemini
+    "gemini_ocr.json",       # ocr_gemini
+    "window_text.json",      # window_bm25
+    "window_dense.npz",      # window_bge_m3 (1024 chiều)
 )
 
 
