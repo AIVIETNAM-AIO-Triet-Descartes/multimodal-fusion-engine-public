@@ -474,9 +474,19 @@ class TestBgeM3DocDungNguonCaption:
 
     Địa chỉ sai ở đây **không ném lỗi ồn ào** — nó tải về một part không tồn tại
     và arm `bge_m3` tối trên toàn bộ video. Nên nó phải bị khoá bằng test.
+
+    ⚠ **ĐÃ HẾT "cứng" từ 25-09-2026.** `0c9e75f` cho tầng này tự nhận batch qua
+    `ctx.layout.root`: batch 1 đọc caption **Gemini** ở gốc nghiên cứu, batch 2
+    vẫn đọc part `qwen_captions` trong bundle. Nên `source` giờ có hai giá trị
+    hợp lệ, và cả hai đều phải có test — xem `TestBgeM3NhanBatch`.
     """
 
     class _Layout:
+        #: Bản giả PHẢI có `root`: `stage_n6_bge_m3` đọc nó để nhận batch. Thiếu
+        #: nó thì năm test dưới đây đỏ bằng `AttributeError`, tức chúng báo một
+        #: lỗi chẳng liên quan gì tới thứ chúng định kiểm.
+        root = "/bundle/aic_btc_b2_v1"
+
         def part(self, artifact, video_id):
             return f"parts/{artifact}/{video_id}.json"
 
@@ -549,7 +559,11 @@ class TestBgeM3DocDungNguonCaption:
         ctx = _ctx(tmp_path, n_frames=1)
         ctx.writer = self._Writer(transport)
         ctx.layout = self._Layout()
-        with pytest.raises(RuntimeError, match="n6_caption_qwen"):
+        # Khớp theo TÊN NGUỒN chứ không theo tên tầng: `0c9e75f` đổi lời nhắn
+        # từ "chay n6_caption_qwen truoc" sang "chay tao caption truoc", và
+        # test đỏ theo. Thứ đáng khoá là "nó ném, và nó nói THIẾU CÁI GÌ" —
+        # lời khuyên đi kèm thì được phép đổi.
+        with pytest.raises(RuntimeError, match="qwen_captions"):
             stages.stage_n6_bge_m3(ctx)
 
     def test_thu_tu_khoa_TAT_DINH(self, tmp_path, fake_st):
@@ -605,6 +619,82 @@ class TestBgeM3DocDungNguonCaption:
         finally:
             module.SentenceTransformer = original
             stages.unload_models()
+
+
+class TestBgeM3NhanBatch:
+    """`n6_bge_m3` tự nhận batch qua `ctx.layout.root` (`0c9e75f`, 25-09-2026).
+
+    Hai batch để caption ở hai chỗ khác nhau, và tầng này phải đi đúng chỗ:
+
+        batch 1   /research/caption-gemini-trammay-v1/parts/captions/   Gemini
+        batch 2   {bundle}/parts/qwen_captions/                         Qwen
+
+    Nhánh batch 1 ra đời cùng ngày và **chưa có test nào** — trong khi đi nhầm
+    gốc ở đây không ném lỗi ồn ào, nó tải về một part không tồn tại và arm
+    `bge_m3` tối trên toàn bộ video.
+
+    Và `source` đi vào `params`, nên hai nhánh phải khai hai giá trị KHÁC NHAU:
+    `check_fingerprints` so `params` giữa các mảnh, và hai người nhúng hai
+    nguồn khác nhau vào cùng `dense_vectors` phải bị từ chối ở bước gộp.
+    """
+
+    # Mượn nguyên bản giả và fixture của lớp trên: hai lớp kiểm cùng một tầng,
+    # nên hai bản giả khác nhau là hai lần cơ hội để chúng lệch.
+    _Transport = TestBgeM3DocDungNguonCaption._Transport
+    _Writer = TestBgeM3DocDungNguonCaption._Writer
+    fake_st = TestBgeM3DocDungNguonCaption.fake_st
+
+    class _Layout:
+        def __init__(self, root):
+            self.root = root
+
+        def part(self, artifact, video_id):
+            return f"parts/{artifact}/{video_id}.json"
+
+    def _run(self, tmp_path, root):
+        transport = self._Transport({"L21_V001#000100": "a man waters plants"})
+        ctx = _ctx(tmp_path, n_frames=1)
+        ctx.writer = self._Writer(transport)
+        ctx.layout = self._Layout(root)
+        stages.stage_n6_bge_m3(ctx)
+        return transport, ctx.writer
+
+    def test_batch1_doc_caption_GEMINI_o_goc_nghien_cuu(self, tmp_path, fake_st):
+        transport, writer = self._run(tmp_path, "/bundle/aic_btc_b1_v1")
+        assert transport.asked == [
+            "/research/caption-gemini-trammay-v1/parts/captions/L21_V001.json"
+        ]
+        _, kwargs = writer.written["dense_vectors"]
+        assert kwargs["params"]["source"] == "gemini_captions"
+
+    def test_batch2_doc_part_qwen_trong_bundle(self, tmp_path, fake_st):
+        transport, writer = self._run(tmp_path, "/bundle/aic_btc_b2_v1")
+        assert transport.asked == ["parts/qwen_captions/L21_V001.json"]
+        _, kwargs = writer.written["dense_vectors"]
+        assert kwargs["params"]["source"] == "qwen_captions"
+
+    def test_hai_nhanh_khai_hai_SOURCE_khac_nhau(self, tmp_path, fake_st):
+        """Cùng `source` cho hai nội dung khác nhau là mất khả năng truy nguyên.
+
+        `dense_vectors` của batch 1 nhúng caption Gemini, của batch 2 nhúng
+        caption Qwen. Nếu cả hai cùng khai một `source` thì không ai đọc ngược
+        được vector nào sinh từ nội dung nào.
+        """
+        _, w1 = self._run(tmp_path, "/bundle/aic_btc_b1_v1")
+        _, w2 = self._run(tmp_path, "/bundle/aic_btc_b2_v1")
+        assert w1.written["dense_vectors"][1]["params"]["source"] != (
+            w2.written["dense_vectors"][1]["params"]["source"]
+        )
+
+    def test_goc_LA_thi_ve_nhanh_batch2(self, tmp_path, fake_st):
+        """Phép nhận batch là so TIỀN TỐ chuỗi, nên nó có mặc định.
+
+        Khoá lại mặc định đó ở đây: một bundle lạ đi đường batch 2. Đó là lựa
+        chọn hợp lý (batch 2 là đường chung), nhưng nó phải là lựa chọn được
+        ghi ra chứ không phải một hệ quả tình cờ của `startswith`.
+        """
+        transport, _ = self._run(tmp_path, "/bundle/khong_he_ton_tai_v9")
+        assert transport.asked == ["parts/qwen_captions/L21_V001.json"]
 
 
 class TestPromptKhongDayModelTaoStopword:
