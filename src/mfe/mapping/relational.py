@@ -13,6 +13,7 @@ much of the rest may not.
 from __future__ import annotations
 
 import sqlite3
+import threading
 from pathlib import Path
 
 from mfe.contracts.errors import ContractError, ErrorCode
@@ -25,30 +26,92 @@ class RelationalMap:
     ON, executemany-in-transaction, Row factory). Extract into `backends/` when
     adding Postgres — see backends/README.md."""
 
+    #: Chờ bao lâu khi một connection khác đang giữ khoá ghi, trước khi ném
+    #: `database is locked`. Mặc định của sqlite3 là **0** — hỏng ngay lập tức.
+    BUSY_TIMEOUT_MS = 5_000
+
     def __init__(self, db_path: str) -> None:
-        """`check_same_thread=False` là BẮT BUỘC cho giao diện Streamlit.
+        """MỘT connection cho MỖI LUỒNG, tạo lười.
 
-        Streamlit chạy **mỗi lần vẽ lại trong một luồng khác**, còn
-        `@st.cache_resource` thì giữ nguyên đối tượng qua các lần đó. Mặc định
-        `sqlite3` cấm dùng một connection ngoài luồng đã tạo ra nó, nên lần vẽ
-        đầu chạy được rồi mọi thao tác sau ném `ProgrammingError: SQLite objects
-        created in a thread can only be used in that same thread` — đúng lúc
-        người dùng bấm nút xuất file. Đã xảy ra thật ở `app/submit_lab.py`.
+        Bản trước dùng **một** connection dùng chung với `check_same_thread=False`,
+        và tự biện minh: *"an toàn vì mọi lối dùng đều tuần tự — Streamlit chạy
+        một lần vẽ tại một thời điểm cho mỗi phiên"*.
 
-        An toàn ở đây vì mọi lối dùng đều **tuần tự**: Streamlit chạy một lần vẽ
-        tại một thời điểm cho mỗi phiên, còn ingest thì một luồng. Nới cờ này
-        KHÔNG cho phép ghi đồng thời; nếu sau này có hai luồng cùng ghi thì phải
-        thêm khoá, chứ không phải gỡ cờ này ra.
+        ⚠ Câu đó đúng cho MỘT phiên, và vỡ ở phiên thứ hai. `@st.cache_resource`
+        chia **một** đối tượng này cho **mọi** phiên, còn Streamlit chạy mỗi
+        phiên trong một luồng riêng — nên 5 người cùng truy vấn là 5 luồng dùng
+        chung một connection. Chung kết cần đúng 5 người, nên giả định "tuần tự"
+        hết hiệu lực ở đúng con số ta sắp chạy.
+
+        Sửa bằng `threading.local()`: mỗi luồng mở connection của riêng nó ở lần
+        chạm đầu. Không còn chia sẻ ⇒ không còn cần khoá, và 24 chỗ gọi
+        `self._conn` không phải đổi một dòng nào.
+
+        `check_same_thread=False` **vẫn giữ**, nhưng vai trò đã khác: giờ nó chỉ
+        để `close()` gọi được từ luồng khác lúc dọn dẹp, chứ không còn để chia
+        connection giữa các luồng. Trên Windows một connection còn mở là còn giữ
+        khoá file, nên `close()` phải với tới được mọi connection đã tạo.
+
+        `busy_timeout` là hàng rào thứ hai: nhiều connection nghĩa là hai lượt
+        ghi có thể chồng nhau, và mặc định của sqlite3 là hỏng NGAY thay vì chờ.
+        Đọc đồng thời thì sqlite vốn đã cho phép, nên phía giao diện (gần như
+        chỉ đọc) không bị ảnh hưởng.
         """
         self.db_path = db_path
-        self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
-        self._conn.row_factory = sqlite3.Row
-        self._conn.execute("PRAGMA foreign_keys = ON;")
+        self._local = threading.local()
+        self._da_mo: list[sqlite3.Connection] = []
+        self._khoa = threading.Lock()
+        # `:memory:` KHÔNG chia sẻ được giữa các connection — mỗi lần `connect`
+        # là một database RỖNG mới. Chia theo luồng ở đây sẽ cho luồng thứ hai
+        # một DB trống trơn: `init_schema` chạy ở luồng chính, còn luồng thứ hai
+        # thậm chí không có BẢNG nào, nên mọi truy vấn ném `OperationalError:
+        # no such table`. Ồn ào chứ không im lặng — nhưng ồn ào ở một chỗ hoàn
+        # toàn không liên quan tới nguyên nhân. Nên bộ nhớ trong giữ nguyên MỘT
+        # connection dùng chung như bản cũ.
+        #
+        # Chấp nhận được vì `:memory:` chỉ dùng trong test (đơn luồng); đường
+        # chạy thật luôn là file trên đĩa.
+        self._chung = self._mo() if self._la_bo_nho(db_path) else None
+
+    @staticmethod
+    def _la_bo_nho(db_path: str) -> bool:
+        return db_path == ":memory:" or "mode=memory" in db_path
+
+    def _mo(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON;")
+        conn.execute(f"PRAGMA busy_timeout = {self.BUSY_TIMEOUT_MS};")
+        return conn
+
+    @property
+    def _conn(self) -> sqlite3.Connection:
+        """Connection của LUỒNG hiện tại, mở ở lần chạm đầu tiên."""
+        if self._chung is not None:
+            return self._chung
+        conn = getattr(self._local, "conn", None)
+        if conn is None:
+            conn = self._mo()
+            self._local.conn = conn
+            with self._khoa:
+                self._da_mo.append(conn)
+        return conn
 
     def close(self) -> None:
-        """Close the SQLite connection. On Windows an open connection keeps a
-        lock on the db file, so callers (and tests) must release it."""
-        self._conn.close()
+        """Đóng MỌI connection đã mở, của mọi luồng.
+
+        Trên Windows một connection còn mở là còn giữ khoá file, nên test và
+        người gọi phải đóng được hết — kể cả những cái do luồng khác mở.
+        """
+        with self._khoa:
+            for conn in [*self._da_mo, *([self._chung] if self._chung else [])]:
+                try:
+                    conn.close()
+                except sqlite3.Error:
+                    pass          # đã đóng hoặc luồng chủ đã chết: không sao
+            self._da_mo.clear()
+            self._chung = None
+        self._local = threading.local()
 
     def __enter__(self) -> RelationalMap:
         return self
