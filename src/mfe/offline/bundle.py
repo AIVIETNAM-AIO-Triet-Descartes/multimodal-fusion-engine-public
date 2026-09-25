@@ -269,6 +269,9 @@ class BundleLayout:
     def subtitle_segments(self, video_id: str) -> str:
         return f"{self.root}/subtitles_segments/{video_id}.json"
 
+    def window_records(self, video_id: str) -> str:
+        return f"{self.root}/parts/window_records/{video_id}.json"
+
     def part(self, artifact: str, video_id: str) -> str:
         suffix = "npz" if ARTIFACTS[artifact].kind == "vector" else "json"
         return f"{self.root}/parts/{artifact}/{video_id}.{suffix}"

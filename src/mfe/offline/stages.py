@@ -2180,7 +2180,7 @@ def stage_n8_bge_m3_window(ctx: StageContext) -> dict:
 
     checkpoint = "BAAI/bge-m3"
     local = ctx.workdir / f"window_records_{ctx.video_id}.json"
-    ctx.writer.transport.get(ctx.layout.part("window_records", ctx.video_id), local)
+    ctx.writer.transport.get(ctx.layout.window_records(ctx.video_id), local)
     records = json.loads(local.read_text(encoding="utf-8"))
 
     keys = sorted(records)
