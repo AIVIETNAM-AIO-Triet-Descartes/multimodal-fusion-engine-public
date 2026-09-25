@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MFE · tìm kiếm video</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1020;
+      --panel: #121a2d;
+      --panel-2: #17223a;
+      --line: #2a3958;
+      --text: #e8eefc;
+      --muted: #9eacce;
+      --accent: #6ea8fe;
+      --accent-2: #68d391;
+      --danger: #fc8181;
+      --shadow: 0 18px 55px rgba(0, 0, 0, .28);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font: 15px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+      color: var(--text);
+      background: radial-gradient(circle at 10% 0%, #17264a 0, var(--bg) 38rem);
+    }
+    button, input, textarea { font: inherit; }
+    button { cursor: pointer; }
+    .hidden { display: none !important; }
+    .shell { width: min(1500px, calc(100% - 32px)); margin: 0 auto; }
+    .login-shell { min-height: 100vh; display: grid; place-items: center; }
+    .login-card, .panel {
+      background: rgba(18, 26, 45, .92);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+    }
+    .login-card { width: min(420px, 100%); padding: 34px; }
+    h1, h2, h3 { margin: 0; line-height: 1.2; }
+    h1 { font-size: 27px; letter-spacing: -.02em; }
+    h2 { font-size: 18px; }
+    h3 { font-size: 14px; }
+    .eyebrow { color: var(--accent); text-transform: uppercase; letter-spacing: .13em; font-size: 11px; font-weight: 700; }
+    .muted { color: var(--muted); }
+    .small { font-size: 12px; }
+    .stack { display: grid; gap: 14px; }
+    label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; }
+    input, textarea {
+      width: 100%; color: var(--text); background: #0c1426;
+      border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px;
+      outline: none; transition: border-color .15s, box-shadow .15s;
+    }
+    input:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(110, 168, 254, .13); }
+    textarea { min-height: 96px; resize: vertical; }
+    .button-row { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; }
+    button.primary, button.secondary, button.ghost {
+      border: 1px solid transparent; border-radius: 10px; padding: 10px 15px; font-weight: 700;
+    }
+    button.primary { color: #07111f; background: var(--accent); }
+    button.primary:hover { background: #94bcff; }
+    button.secondary { color: #06140d; background: var(--accent-2); }
+    button.secondary:hover { background: #91e6b2; }
+    button.ghost { color: var(--text); background: transparent; border-color: var(--line); }
+    button:disabled { cursor: wait; opacity: .55; }
+    .notice { min-height: 21px; color: var(--danger); font-size: 13px; }
+    header {
+      display: flex; justify-content: space-between; align-items: center; gap: 18px;
+      padding: 24px 0 20px; border-bottom: 1px solid rgba(42, 57, 88, .7);
+    }
+    .brand { display: flex; align-items: center; gap: 13px; }
+    .brand-mark { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; color: #07111f; background: var(--accent); font-weight: 900; }
+    .header-tools { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+    .pill { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 12px; }
+    .dot { width: 8px; height: 8px; border-radius: 99px; background: var(--muted); }
+    .dot.ok { background: var(--accent-2); box-shadow: 0 0 12px rgba(104, 211, 145, .65); }
+    .dot.warn { background: #f6ad55; }
+    .dot.bad { background: var(--danger); }
+    main { padding: 24px 0 48px; }
+    .intro { display: flex; justify-content: space-between; gap: 22px; align-items: end; margin-bottom: 20px; }
+    .intro p { max-width: 760px; margin: 8px 0 0; color: var(--muted); }
+    .intro-tools { display: grid; gap: 10px; justify-items: end; }
+    .lane-switch { display: inline-flex; padding: 4px; gap: 4px; border: 1px solid var(--line); border-radius: 12px; background: #0c1426; }
+    .switch-button { border: 0; border-radius: 8px; padding: 9px 13px; color: var(--muted); background: transparent; font-weight: 700; }
+    .switch-button:hover { color: var(--text); background: rgba(110, 168, 254, .12); }
+    .switch-button.active { color: #07111f; background: var(--accent); }
+    .switch-button.private.active { color: #06140d; background: var(--accent-2); }
+    .lanes { display: block; }
+    .lane-card { display: none; }
+    .lane-card.active { display: block; }
+    .panel { padding: 20px; min-width: 0; }
+    .panel-heading { display: flex; justify-content: space-between; gap: 12px; align-items: start; margin-bottom: 15px; }
+    .mode-tag { color: var(--accent); font-size: 12px; font-weight: 700; white-space: nowrap; }
+    .query-type-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+    .query-type-row label { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+    .query-type-row select { color: var(--text); background: #0c1426; border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; }
+    .query-extra { display: grid; gap: 10px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; background: rgba(23, 34, 58, .6); }
+    .query-extra .hint { margin: -3px 0 0; color: var(--muted); font-size: 12px; }
+    .check-label { display: flex; align-items: center; gap: 8px; }
+    .check-label input { width: auto; }
+    .run-meta { display: flex; flex-wrap: wrap; gap: 9px; color: var(--muted); font-size: 12px; }
+    .run-meta strong { color: var(--text); }
+    .state-line { min-height: 24px; margin: 12px 0; color: var(--muted); }
+    .state-line.running { color: var(--accent); }
+    .state-line.done { color: var(--accent-2); }
+    .state-line.error { color: var(--danger); }
+    .advanced { margin-top: 12px; }
+    details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+    .advanced-grid { display: grid; grid-template-columns: 1fr 100px; gap: 10px; margin-top: 10px; }
+    .results-panel { margin-top: 18px; }
+    .results-heading { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; margin-bottom: 14px; }
+    .results-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+    .result-card { overflow: hidden; background: var(--panel-2); border: 1px solid var(--line); border-radius: 13px; }
+    .result-card img, .image-empty { width: 100%; height: 145px; display: block; object-fit: cover; background: #0a1120; }
+    .image-empty { display: grid; place-items: center; color: var(--muted); font-size: 12px; }
+    .result-body { padding: 11px; }
+    .result-top { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 11px; }
+    .rank { color: var(--accent); font-weight: 800; }
+    .result-caption { margin-top: 7px; font-size: 13px; line-height: 1.4; }
+    .result-ocr { margin-top: 7px; color: #f6d365; font-size: 12px; }
+    .trake-events { display: grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); gap: 8px; margin-top: 10px; }
+    .trake-event { overflow: hidden; border: 1px solid var(--line); border-radius: 9px; background: #0c1426; }
+    .trake-event img, .trake-event .image-empty { width: 100%; height: 92px; object-fit: cover; }
+    .trake-event .image-empty { display: grid; place-items: center; color: var(--muted); font-size: 11px; }
+    .trake-event-label { padding: 6px 7px; color: var(--muted); font-size: 11px; }
+    .result-empty { padding: 34px 12px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 12px; }
+    .footer-note { margin-top: 17px; color: var(--muted); font-size: 12px; }
+    .toast { position: fixed; right: 18px; bottom: 18px; z-index: 10; max-width: min(450px, calc(100% - 36px)); padding: 12px 15px; border: 1px solid var(--line); border-radius: 10px; background: #111b30; box-shadow: var(--shadow); }
+    @media (max-width: 900px) {
+      .intro { display: block; }
+      .intro-tools { justify-items: start; margin-top: 16px; }
+    }
+    @media (max-width: 560px) {
+      .shell { width: min(100% - 20px, 1500px); }
+      header { align-items: start; flex-direction: column; }
+      .header-tools { justify-content: start; }
+      .advanced-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <section id="loginView" class="login-shell">
+    <div class="login-card stack">
+      <div>
+        <div class="eyebrow">Multimodal Fusion Engine</div>
+        <h1 style="margin-top:8px">Đăng nhập hệ thống</h1>
+        <p class="muted" style="margin:10px 0 0">Tài khoản được cấp sẵn. Hệ thống không có đăng ký.</p>
+      </div>
+      <form id="loginForm" class="stack">
+        <label>Tài khoản<input id="username" name="username" autocomplete="username" required></label>
+        <label>Mật khẩu<input id="password" name="password" type="password" autocomplete="current-password" required></label>
+        <button class="primary" type="submit">Đăng nhập</button>
+        <div id="loginNotice" class="notice"></div>
+      </form>
+    </div>
+  </section>
+
+  <section id="appView" class="hidden">
+    <div class="shell">
+      <header>
+        <div class="brand">
+          <div class="brand-mark">M</div>
+          <div>
+            <div class="eyebrow">Async video retrieval</div>
+            <h1>MFE Search Console</h1>
+          </div>
+        </div>
+        <div class="header-tools">
+          <span id="healthPill" class="pill"><span class="dot warn"></span><span>Đang kiểm tra engine</span></span>
+          <span id="userPill" class="pill">—</span>
+          <button id="logoutButton" class="ghost" type="button">Đăng xuất</button>
+        </div>
+      </header>
+
+      <main>
+        <div class="intro">
+          <div>
+            <div class="eyebrow">Batch 1 + Batch 2 · local mmap cache</div>
+            <h2 style="margin-top:7px">Tìm kiếm theo mô tả cảnh</h2>
+            <p>Luồng xem chung được phát trực tiếp tới mọi người đang đăng nhập. Luồng riêng chạy trong executor và Cascade riêng của từng tài khoản.</p>
+          </div>
+          <div class="intro-tools">
+            <div class="lane-switch" role="tablist" aria-label="Chuyển đổi luồng">
+              <button id="sharedSwitch" class="switch-button active" type="button" role="tab" aria-selected="true" data-scope="shared">👁 Luồng chung</button>
+              <button id="privateSwitch" class="switch-button private" type="button" role="tab" aria-selected="false" data-scope="private">⚡ Luồng riêng</button>
+            </div>
+            <div id="hardwareNote" class="muted small"></div>
+          </div>
+        </div>
+
+        <div class="lanes">
+          <section id="sharedPanel" class="panel lane-card active">
+            <div class="panel-heading">
+              <div>
+                <div class="mode-tag">XEM CHUNG · LIVE</div>
+                <h2 style="margin-top:5px">Shared run</h2>
+              </div>
+              <span class="pill small">mọi user cùng xem</span>
+            </div>
+            <form id="sharedForm" class="stack">
+              <div class="query-type-row">
+                <label for="sharedType">Dạng truy vấn</label>
+                <select id="sharedType">
+                  <option value="KIS">KIS · tìm cảnh</option>
+                  <option value="QA">QA · hỏi đáp</option>
+                  <option value="TRAKE">TRAKE · chuỗi sự kiện</option>
+                </select>
+              </div>
+              <label id="sharedQueryLabel">Mô tả truy vấn<textarea id="sharedQuery" placeholder="Ví dụ: Một đàn sư tử đang nghỉ ngơi trên các bục gỗ..." ></textarea></label>
+              <div id="sharedQaFields" class="query-extra hidden">
+                <label>Đáp án QA (tuỳ chọn, nhập tay)<input id="sharedAnswer" placeholder="Ví dụ: áo màu xanh lá"></label>
+                <label class="check-label"><input id="sharedAutoAnswer" type="checkbox"> Tự đọc đáp án bằng VLM sau khi tìm</label>
+                <p class="hint">Nếu không nhập đáp án, bật VLM để hệ thống đọc từ tối đa 8 ảnh đầu.</p>
+              </div>
+              <div id="sharedTrakeFields" class="query-extra hidden">
+                <label>Các sự kiện TRAKE, mỗi dòng một sự kiện<textarea id="sharedEvents" placeholder="E1: Người bắt đầu chạy\nE2: Người nhảy qua chướng ngại vật\nE3: Người tiếp đất"></textarea></label>
+                <label>Bản tiếng Anh từng sự kiện (tuỳ chọn)<textarea id="sharedEventsEn" placeholder="Một dòng tương ứng cho mỗi sự kiện"></textarea></label>
+                <p class="hint">DANTE sẽ ghép các frame theo đúng thứ tự dòng và trả về một chuỗi cho mỗi video.</p>
+              </div>
+              <div id="sharedAdvanced" class="advanced">
+                <details>
+                  <summary>Tuỳ chọn tiếng Anh và số kết quả</summary>
+                  <div class="advanced-grid">
+                    <label>Bản tiếng Anh (tuỳ chọn)<input id="sharedQueryEn" placeholder="Để trống để backend tự xử lý"></label>
+                    <label>Top K<input id="sharedTopK" type="number" min="1" max="100" value="50"></label>
+                  </div>
+                </details>
+              </div>
+              <div class="button-row"><button class="primary" type="submit">Chạy luồng chung</button><span id="sharedNotice" class="notice"></span></div>
+            </form>
+            <div id="sharedState" class="state-line">Chưa có lượt chạy.</div>
+            <div id="sharedMeta" class="run-meta"></div>
+          </section>
+
+          <section id="privatePanel" class="panel lane-card">
+            <div class="panel-heading">
+              <div>
+                <div class="mode-tag" style="color:var(--accent-2)">CHẠY RIÊNG · PRIVATE</div>
+                <h2 style="margin-top:5px">Private run</h2>
+              </div>
+              <span class="pill small">chỉ tài khoản này thấy</span>
+            </div>
+            <form id="privateForm" class="stack">
+              <div class="query-type-row">
+                <label for="privateType">Dạng truy vấn</label>
+                <select id="privateType">
+                  <option value="KIS">KIS · tìm cảnh</option>
+                  <option value="QA">QA · hỏi đáp</option>
+                  <option value="TRAKE">TRAKE · chuỗi sự kiện</option>
+                </select>
+              </div>
+              <label id="privateQueryLabel">Mô tả truy vấn<textarea id="privateQuery" placeholder="Truy vấn riêng của bạn..." ></textarea></label>
+              <div id="privateQaFields" class="query-extra hidden">
+                <label>Đáp án QA (tuỳ chọn, nhập tay)<input id="privateAnswer" placeholder="Ví dụ: áo màu xanh lá"></label>
+                <label class="check-label"><input id="privateAutoAnswer" type="checkbox"> Tự đọc đáp án bằng VLM sau khi tìm</label>
+                <p class="hint">Nếu không nhập đáp án, bật VLM để hệ thống đọc từ tối đa 8 ảnh đầu.</p>
+              </div>
+              <div id="privateTrakeFields" class="query-extra hidden">
+                <label>Các sự kiện TRAKE, mỗi dòng một sự kiện<textarea id="privateEvents" placeholder="E1: Người bắt đầu chạy\nE2: Người nhảy qua chướng ngại vật\nE3: Người tiếp đất"></textarea></label>
+                <label>Bản tiếng Anh từng sự kiện (tuỳ chọn)<textarea id="privateEventsEn" placeholder="Một dòng tương ứng cho mỗi sự kiện"></textarea></label>
+                <p class="hint">DANTE sẽ ghép các frame theo đúng thứ tự dòng và trả về một chuỗi cho mỗi video.</p>
+              </div>
+              <div id="privateAdvanced" class="advanced">
+                <details>
+                  <summary>Tuỳ chọn tiếng Anh và số kết quả</summary>
+                  <div class="advanced-grid">
+                    <label>Bản tiếng Anh (tuỳ chọn)<input id="privateQueryEn" placeholder="Để trống để backend tự xử lý"></label>
+                    <label>Top K<input id="privateTopK" type="number" min="1" max="100" value="50"></label>
+                  </div>
+                </details>
+              </div>
+              <div class="button-row"><button class="secondary" type="submit">Chạy luồng riêng</button><span id="privateNotice" class="notice"></span></div>
+            </form>
+            <div id="privateState" class="state-line">Chưa có lượt chạy.</div>
+            <div id="privateMeta" class="run-meta"></div>
+          </section>
+        </div>
+
+        <section class="panel results-panel">
+          <div class="results-heading"><h2 id="resultsTitle">Kết quả</h2><span id="resultsHint" class="muted small">Chọn một luồng để xem kết quả.</span></div>
+          <div id="resultsGrid" class="results-grid"><div class="result-empty">Kết quả sẽ xuất hiện ở đây.</div></div>
+        </section>
+        <div class="footer-note">Streamlit backend được giữ nguyên ở loopback :8502. Web HTML này phục vụ qua :8501.</div>
+      </main>
+    </div>
+  </section>
+  <div id="toast" class="toast hidden"></div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let csrf = null;
+    let currentUser = null;
+    let socket = null;
+    let socketConnected = false;
+    let pollTimer = null;
+    let toastTimer = null;
+    let selectedScope = 'shared';
+    const states = { shared: null, private: null };
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>'"]/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+    }
+    function showToast(message) {
+      $('toast').textContent = message;
+      $('toast').classList.remove('hidden');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => $('toast').classList.add('hidden'), 4200);
+    }
+    async function api(path, options = {}) {
+      const response = await fetch(path, { credentials: 'same-origin', ...options, headers: {'Content-Type': 'application/json', ...(options.headers || {})} });
+      let data = {};
+      try { data = await response.json(); } catch (_) {}
+      if (response.status === 401) { showLogin(); throw new Error(data.error || 'Cần đăng nhập'); }
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+      return data;
+    }
+    function showLogin() {
+      $('appView').classList.add('hidden');
+      $('loginView').classList.remove('hidden');
+      if (socket) { socket.close(); socket = null; }
+    }
+    function showApp(me) {
+      currentUser = me.username;
+      csrf = me.csrf;
+      $('loginView').classList.add('hidden');
+      $('appView').classList.remove('hidden');
+      $('userPill').textContent = `${me.username} · ${me.role}`;
+      connectSocket();
+      syncState();
+    }
+    function statusText(state) {
+      if (!state) return 'Chưa có lượt chạy.';
+      const labels = {idle:'Sẵn sàng.', queued:'Đang xếp hàng tài nguyên…', running:'Đang truy vấn…', done:'Đã hoàn tất.', error:'Lỗi khi chạy.'};
+      return labels[state.status] || state.status;
+    }
+    function splitEventLines(value) {
+      return String(value || '').split(/\r?\n/)
+        .map((line) => line.replace(/^\s*(?:E|C(?:ả|a)nh)\s*\d+\s*[:.\-]?\s*/i, '').trim())
+        .filter(Boolean);
+    }
+    function updateFormType(scope) {
+      const type = $(`${scope}Type`).value;
+      $(`${scope}QaFields`).classList.toggle('hidden', type !== 'QA');
+      $(`${scope}TrakeFields`).classList.toggle('hidden', type !== 'TRAKE');
+      const label = $(`${scope}QueryLabel`);
+      label.childNodes[0].nodeValue = type === 'TRAKE' ? 'Mô tả chung (tuỳ chọn)' : (type === 'QA' ? 'Câu hỏi / mô tả QA' : 'Mô tả truy vấn');
+      $(`${scope}Query`).placeholder = type === 'TRAKE' ? 'Có thể để trống; nhập từng sự kiện ở ô bên dưới.' : (type === 'QA' ? 'Ví dụ: Người trong cảnh mặc áo màu gì?' : 'Mô tả cảnh cần tìm...');
+    }
+    function renderEmptyResults(scope, state) {
+      const title = scope === 'shared' ? 'Kết quả luồng chung' : 'Kết quả luồng riêng của bạn';
+      $('resultsTitle').textContent = title;
+      $('resultsHint').textContent = statusText(state);
+      $('resultsGrid').innerHTML = `<div class="result-empty">${escapeHtml(statusText(state))}</div>`;
+    }
+    function setActiveMode(scope) {
+      if (scope !== 'shared' && scope !== 'private') return;
+      selectedScope = scope;
+      document.querySelectorAll('.switch-button').forEach((button) => {
+        const active = button.dataset.scope === scope;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+      document.querySelectorAll('.lane-card').forEach((panel) => {
+        panel.classList.toggle('active', panel.id === `${scope}Panel`);
+      });
+      const state = states[scope];
+      if (state && state.status === 'done') renderResults(scope, state);
+      else renderEmptyResults(scope, state);
+    }
+    function renderState(scope, state) {
+      states[scope] = state;
+      const prefix = scope === 'shared' ? 'shared' : 'private';
+      const line = $(`${prefix}State`);
+      line.textContent = statusText(state);
+      line.className = `state-line ${state.status || ''}`;
+      const meta = $(`${prefix}Meta`);
+      const bits = [];
+      if (state.query_type) bits.push(`<span>dạng: <strong>${escapeHtml(state.query_type)}</strong></span>`);
+      if (state.query_type === 'TRAKE' && state.events && state.events.length) bits.push(`<span>sự kiện: <strong>${state.events.length}</strong></span>`);
+      if (state.owner) bits.push(`<span>người chạy: <strong>${escapeHtml(state.owner)}</strong></span>`);
+      if (state.query) bits.push(`<span>query: <strong>${escapeHtml(state.query.slice(0, 110))}${state.query.length > 110 ? '…' : ''}</strong></span>`);
+      if (state.duration_ms != null) bits.push(`<span>thời gian: <strong>${escapeHtml(state.duration_ms)} ms</strong></span>`);
+      if (state.answer && state.answer.text) bits.push(`<span>đáp án QA: <strong>${escapeHtml(state.answer.text)}</strong></span>`);
+      if (state.answer && state.answer.reason && state.query_type === 'QA') bits.push(`<span style="color:var(--danger)">${escapeHtml(state.answer.reason)}</span>`);
+      if (state.error) bits.push(`<span style="color:var(--danger)">${escapeHtml(state.error)}</span>`);
+      meta.innerHTML = bits.join('');
+      if (scope === selectedScope) {
+        if (state.status === 'done') renderResults(scope, state);
+        else renderEmptyResults(scope, state);
+      }
+    }
+    function renderResults(scope, state) {
+      const title = scope === 'shared' ? 'Kết quả luồng chung' : 'Kết quả luồng riêng của bạn';
+      $('resultsTitle').textContent = title;
+      if (state.query_type === 'TRAKE') {
+        renderTrakeResults(scope, state);
+        return;
+      }
+      const answerText = state.answer && state.answer.text ? ` · đáp án QA: ${escapeHtml(state.answer.text)}` : '';
+      $('resultsHint').innerHTML = `${(state.results || []).length} ứng viên${answerText} · ${scope === 'shared' ? 'mọi user đã đăng nhập đều thấy' : 'chỉ bạn thấy'}`;
+      const results = state.results || [];
+      if (!results.length) { $('resultsGrid').innerHTML = '<div class="result-empty">Không có ứng viên phù hợp.</div>'; return; }
+      $('resultsGrid').innerHTML = results.map((item) => {
+        const image = item.image_url ? `<img loading="lazy" src="${escapeHtml(item.image_url)}" alt="${escapeHtml(item.video_id)} frame ${escapeHtml(item.frame_idx)}">` : '<div class="image-empty">Ảnh chưa có trong cache</div>';
+        const caption = item.caption ? escapeHtml(item.caption) : '<span class="muted">Không có caption</span>';
+        const ocr = item.ocr ? `<div class="result-ocr">OCR: ${escapeHtml(item.ocr)}</div>` : '';
+        return `<article class="result-card">${image}<div class="result-body"><div class="result-top"><span class="rank">#${escapeHtml(item.rank)}</span><span>${escapeHtml(item.batch || '')} · ${escapeHtml(item.video_id)} · ${escapeHtml(item.timestamp_ms)} ms</span></div><div class="result-caption">${caption}</div>${ocr}<div class="muted small" style="margin-top:8px">score ${escapeHtml(item.score)} · frame ${escapeHtml(item.frame_idx)}</div></div></article>`;
+      }).join('');
+    }
+    function renderTrakeResults(scope, state) {
+      const results = state.results || [];
+      $('resultsHint').textContent = `${results.length} chuỗi video · ${state.events ? state.events.length : 0} sự kiện/chuỗi · ${scope === 'shared' ? 'mọi user đã đăng nhập đều thấy' : 'chỉ bạn thấy'}`;
+      if (!results.length) { $('resultsGrid').innerHTML = '<div class="result-empty">Không ghép được chuỗi TRAKE theo thứ tự thời gian.</div>'; return; }
+      $('resultsGrid').innerHTML = results.map((item) => {
+        const events = (item.events || []).map((event) => {
+          const image = event.image_url ? `<img loading="lazy" src="${escapeHtml(event.image_url)}" alt="event ${escapeHtml(event.event_index)}">` : '<div class="image-empty">Ảnh chưa có</div>';
+          return `<div class="trake-event">${image}<div class="trake-event-label">E${escapeHtml(event.event_index)} · frame ${escapeHtml(event.frame_idx)}<br>${escapeHtml(event.timestamp_ms)} ms</div></div>`;
+        }).join('');
+        return `<article class="result-card"><div class="result-body"><div class="result-top"><span class="rank">#${escapeHtml(item.rank)} · ${escapeHtml(item.video_id)}</span><span>score ${escapeHtml(item.score)}</span></div><div class="muted small" style="margin-top:6px">support ${escapeHtml(item.support)} · frames ${escapeHtml((item.frame_ids || []).join(', '))}</div><div class="trake-events">${events || '<div class="result-empty">Thiếu frame</div>'}</div></div></article>`;
+      }).join('');
+    }
+    function renderHealth(health) {
+      const map = {ready:['ok', 'Engine sẵn sàng'], warming:['warn', 'Engine đang nạp model'], error:['bad', 'Engine lỗi']};
+      const [kind, label] = map[health.status] || ['warn', health.status || 'unknown'];
+      $('healthPill').innerHTML = `<span class="dot ${kind}"></span><span>${escapeHtml(label)}</span>`;
+      if (health.hardware) {
+        const h = health.hardware;
+        $('hardwareNote').textContent = `${h.physical_cpus} core vật lý · ${h.logical_cpus} CPU · ${h.torch_threads} torch threads · ${h.accelerator}`;
+      }
+      if (health.status === 'error') showToast(health.error || 'Engine không khởi động được');
+    }
+    function handleMessage(message) {
+      if (message.type === 'health') renderHealth(message.health);
+      if (message.type === 'snapshot') { renderState('shared', message.shared); renderState('private', message.private); }
+      if (message.type === 'state') renderState(message.scope, message.state);
+    }
+    function connectSocket() {
+      if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
+      const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+      socket = new WebSocket(`${scheme}://${location.host}/ws`);
+      socket.onopen = () => { socketConnected = true; socket.send('ping'); };
+      socket.onmessage = (event) => { try { handleMessage(JSON.parse(event.data)); } catch (_) {} };
+      socket.onclose = () => { socketConnected = false; setTimeout(() => { if (currentUser) connectSocket(); }, 2500); };
+      socket.onerror = () => { socketConnected = false; };
+    }
+    async function syncState() {
+      try {
+        const data = await api('/api/state');
+        renderState('shared', data.shared); renderState('private', data.private);
+      } catch (_) {}
+      try { renderHealth(await api('/api/health')); } catch (_) {}
+    }
+    function startPolling() {
+      clearInterval(pollTimer);
+      pollTimer = setInterval(() => { if (currentUser && !socketConnected) syncState(); }, 2500);
+    }
+    async function submitRun(scope, event) {
+      event.preventDefault();
+      const queryType = $(`${scope}Type`).value;
+      const query = $(`${scope}Query`).value.trim();
+      const queryEn = $(`${scope}QueryEn`).value.trim();
+      const events = queryType === 'TRAKE' ? splitEventLines($(`${scope}Events`).value) : [];
+      const eventsEn = queryType === 'TRAKE' ? splitEventLines($(`${scope}EventsEn`).value) : [];
+      const answer = queryType === 'QA' ? $(`${scope}Answer`).value.trim() : '';
+      const autoAnswer = queryType === 'QA' && $(`${scope}AutoAnswer`).checked;
+      const topK = Math.max(1, Math.min(100, Number($(`${scope}TopK`).value || 50)));
+      const notice = $(`${scope}Notice`);
+      notice.textContent = '';
+      if (queryType === 'TRAKE' && !events.length) { notice.textContent = 'Hãy nhập ít nhất một sự kiện TRAKE, mỗi dòng một sự kiện.'; return; }
+      if (queryType !== 'TRAKE' && !query) { notice.textContent = 'Hãy nhập mô tả truy vấn.'; return; }
+      if (queryType === 'TRAKE' && eventsEn.length && eventsEn.length !== events.length) { notice.textContent = 'Số dòng tiếng Anh phải bằng số sự kiện.'; return; }
+      const button = event.submitter;
+      button.disabled = true;
+      try {
+        await api(`/api/${scope}/run`, {method:'POST', headers:{'X-CSRF-Token': csrf}, body: JSON.stringify({query, query_type: queryType, query_en: queryEn, events, events_en: eventsEn, answer, auto_answer: autoAnswer, top_k: topK})});
+        showToast(`${queryType} · ${scope === 'shared' ? 'đã xếp luồng chung; mọi user sẽ thấy tiến trình.' : 'đã chạy luồng riêng của bạn.'}`);
+      } catch (error) { notice.textContent = error.message; }
+      finally { button.disabled = false; }
+    }
+    $('loginForm').addEventListener('submit', async (event) => {
+      event.preventDefault(); $('loginNotice').textContent = '';
+      try {
+        const me = await api('/api/login', {method:'POST', body: JSON.stringify({username:$('username').value.trim(), password:$('password').value})});
+        $('password').value = ''; showApp(me); startPolling();
+      } catch (error) { $('loginNotice').textContent = error.message; }
+    });
+    $('logoutButton').addEventListener('click', async () => {
+      try { await api('/api/logout', {method:'POST', headers:{'X-CSRF-Token': csrf}}); } catch (_) {}
+      currentUser = null; showLogin();
+    });
+    $('sharedForm').addEventListener('submit', (event) => submitRun('shared', event));
+    $('privateForm').addEventListener('submit', (event) => submitRun('private', event));
+    $('sharedType').addEventListener('change', () => updateFormType('shared'));
+    $('privateType').addEventListener('change', () => updateFormType('private'));
+    document.querySelectorAll('.switch-button').forEach((button) => {
+      button.addEventListener('click', () => setActiveMode(button.dataset.scope));
+    });
+    updateFormType('shared');
+    updateFormType('private');
+    setActiveMode('shared');
+    (async function boot() {
+      startPolling();
+      try {
+        renderHealth(await api('/api/health'));
+        const me = await api('/api/me');
+        if (me.authenticated) { showApp(me); startPolling(); } else showLogin();
+      } catch (_) { showLogin(); }
+    })();
+  </script>
+</body>
+</html>

@@ -25,7 +25,7 @@ from mfe.online.text_arms import TEXT_ARM_SPECS
 
 #: Arm nào đọc chỉ mục TIẾNG ANH. Suy thẳng từ prompt sinh ra nguồn đó:
 #: nửa `[CAPTION]` viết tiếng Anh, nửa `[TEXT]` cấm dịch.
-ARM_TIENG_ANH = {"caption", "caption_qwen"}
+ARM_TIENG_ANH = {"caption", "caption_qwen", "caption_gemini"}
 
 
 def test_moi_spec_co_du_ba_cot():

@@ -71,6 +71,8 @@ TEXT_ARM_SPECS: dict[str, tuple[str, bool, str]] = {
     # Hai arm caption: chỉ mục TIẾNG ANH, nên phải ăn bản dịch.
     "caption": ("caption", False, "en"),
     "caption_qwen": ("caption_qwen", False, "en"),
+    "caption_gemini": ("caption_gemini", False, "en"),
+    "ocr_gemini": ("ocr_gemini", False, "vi"),
 }
 
 _DESCRIPTIONS = {
@@ -85,6 +87,8 @@ _DESCRIPTIONS = {
     # TIẾNG ANH, nên arm này chỉ khớp khi truy vấn đã được dịch. Nửa `[TEXT]` thì
     # ngược lại — nó chép chữ trên màn hình, phần lớn là tiếng Việt.
     "caption_qwen": "Mô tả ảnh bởi Qwen2.5-VL (TIẾNG ANH — cần bản dịch truy vấn)",
+    "caption_gemini": "Mô tả ảnh Gemini mới nhất (TIẾNG ANH — cần bản dịch truy vấn)",
+    "ocr_gemini": "OCR Gemini mới nhất trên batch 2",
     "ocr_qwen25": "Chữ trên màn hình do Qwen2.5-VL chép, cùng lượt sinh với caption",
 }
 

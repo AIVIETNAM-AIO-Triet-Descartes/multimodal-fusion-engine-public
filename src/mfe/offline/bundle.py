@@ -111,7 +111,10 @@ ARTIFACTS: dict[str, Artifact] = {
         Artifact("window_text",  "text",   "window_text.json",  "window_bm25", None, "n8_window"),
         Artifact("window_dense", "vector", "window_dense.npz",  None,
                  1024, "n8_bge_m3_window"),
-        Artifact("gemini_raw", "text", "gemini_raw.json", None, None, "n6_caption_gemini_raw"),
+        # Intermediate Gemini response kept for deterministic re-splitting; it
+        # has an audit source tag but is intentionally not an online arm.
+        Artifact("gemini_raw", "text", "gemini_raw.json", "caption_gemini_raw", None,
+                 "n6_caption_gemini_raw"),
         Artifact("gemini_captions", "text", "gemini_captions.json", "caption_gemini",
                  None, "n6_split_gemini_captions"),
         Artifact("gemini_ocr", "text", "gemini_ocr.json", "ocr_gemini",
@@ -185,6 +188,9 @@ STAGE_PACKAGES: dict[str, tuple[str, ...]] = {
     # lo, cach luong tu hoa KV cache, va do la nhung thu doi duoc chuoi tra ve.
     "n6_caption_qwen": ("torch", "transformers", "vllm"),
     "n6_ocr_qwen25": ("torch", "transformers", "vllm"),
+    "n6_caption_gemini_raw": ("google-genai",),
+    "n6_split_gemini_captions": ("google-genai", "torch", "transformers", "sentence-transformers"),
+    "n6_split_gemini_ocr": ("google-genai",),
     "n6_bge_m3": ("torch", "transformers", "sentence-transformers"),
     "n7_bge_m3_subtitles": ("torch", "transformers", "sentence-transformers"),
     "n8_window": (),

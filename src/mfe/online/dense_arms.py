@@ -217,6 +217,24 @@ def encode_query(text: str, checkpoint: str, expected_dim: int) -> np.ndarray:
     return _encode_cached(text, checkpoint, expected_dim)
 
 
+def preload_query_encoders(arm_names: list[str] | None = None) -> None:
+    """Load query towers before the first user query.
+
+    Streamlit keeps the cascade in ``st.cache_resource`` for the process, so
+    preloading here moves model startup cost out of the first search. The
+    warm-up vector is cached too, but it is only one entry in the bounded query
+    cache; subsequent user text is encoded normally.
+    """
+    names = list(DENSE_ARM_SPECS) if arm_names is None else arm_names
+    warmup_text = "warm up query encoder"
+    for name in names:
+        try:
+            _, dimension, checkpoint, _, _ = DENSE_ARM_SPECS[name]
+        except KeyError:
+            continue
+        encode_query(warmup_text, checkpoint, dimension)
+
+
 def _encode_raw(text: str, checkpoint: str, expected_dim: int) -> np.ndarray:
     """Mã hoá thật, không qua cache.
 

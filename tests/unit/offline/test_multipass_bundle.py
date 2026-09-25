@@ -160,9 +160,17 @@ class TestThreePassesAgreeOnOwnership:
     def test_every_pass_assigns_the_same_videos_to_the_same_member(self):
         plans = [load_shard_plan(p) for p in self.PLANS]
         first = plans[0]
-        for plan in plans[1:]:
+        # The BGE pass is intentionally archive-split into 14 workers so the
+        # CPU encoder can finish within a session.  Its ownership need only be
+        # complete and disjoint; the five earlier passes retain the two-member
+        # assignment because they share the vLLM/GPU work partition.
+        for plan in plans[1:-1]:
             assert plan.bundle == first.bundle
             assert plan.members == first.members
+        bge = plans[-1]
+        assert bge.bundle == first.bundle
+        assert sorted(bge.videos) == sorted(first.videos)
+        assert len(bge.videos) == len(set(bge.videos))
 
     def test_the_passes_together_cover_every_stage(self):
         stages = [s for p in self.PLANS for s in load_shard_plan(p).stages]

@@ -1,0 +1,1014 @@
+"""Async HTML front end for the existing multimodal-fusion-engine pipeline.
+
+The Streamlit application remains intact.  This process owns public port 8501;
+Streamlit is kept alive on the private loopback port 8502.
+
+There are two execution lanes:
+
+* ``shared`` has one queue and one Cascade.  Its state and results are
+  broadcast to every authenticated WebSocket client.
+* every account gets a private, single-worker executor and its own Cascade
+  object.  Private state is sent only to that account.
+
+The large FlatBundle and the read-only query models are shared to avoid loading
+hundreds of megabytes repeatedly.  Mutable orchestration state, SQLite thread
+connections and job executors are kept per lane.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import copy
+import hashlib
+import hmac
+import json
+import logging
+import os
+import re
+import secrets
+import sys
+import threading
+import time
+import uuid
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+from urllib.parse import quote
+
+from starlette.applications import Starlette
+from starlette.middleware import Middleware
+from starlette.middleware.sessions import SessionMiddleware
+from starlette.requests import Request
+from starlette.responses import FileResponse, JSONResponse, PlainTextResponse
+from starlette.routing import Route, WebSocketRoute
+from starlette.websockets import WebSocket, WebSocketDisconnect
+
+WEB_ROOT = Path("/home/ubuntu/web")
+REPO_ROOT = Path("/home/ubuntu/multimodal-fusion-engine")
+INDEX_PATH = WEB_ROOT / "index.html"
+ACCOUNTS_PATH = WEB_ROOT / "accounts.json"
+SESSION_SECRET_PATH = WEB_ROOT / ".session_secret"
+RUNTIME_ROOT = Path("/data/multimodal-fusion-engine/runtime/btc_b12")
+CONFIG_PATH = REPO_ROOT / "config" / "btc_b12.yaml"
+FLAT_ROOT = RUNTIME_ROOT / "flat"
+IMAGE_CACHE = RUNTIME_ROOT / "image-cache"
+MAP_ROOT = RUNTIME_ROOT / "relational" / "map-keyframes"
+B1_IMAGE_ROOT = Path(
+    "/data/multimodal-fusion-engine/modal/keyframes-btc/bundle/aic_btc_b1_v1/keyframes"
+)
+B2_IMAGE_ROOT = Path(
+    "/data/multimodal-fusion-engine/modal/keyframes-batch-2-v2/bundle/aic_btc_b2_v1/keyframes"
+)
+
+sys.path.insert(0, str(REPO_ROOT / "src"))
+
+from mfe.core.config import load_config  # noqa: E402
+from mfe.eval.official import to_event_hits  # noqa: E402
+from mfe.mapping.relational import RelationalMap  # noqa: E402
+from mfe.offline.transport import load_dotenv  # noqa: E402
+from mfe.online import dante  # noqa: E402
+from mfe.online.dense_arms import preload_query_encoders  # noqa: E402
+from mfe.online.flat_arms import build_flat_cascade, load_flat_bundle  # noqa: E402
+from mfe.online.keyframe_images import KeyframeImages  # noqa: E402
+from mfe.online.vqa_answer import read_answer  # noqa: E402
+
+for _key, _value in load_dotenv(REPO_ROOT / ".env").items():
+    os.environ.setdefault(_key, _value)
+
+
+logging.basicConfig(
+    level=os.getenv("MFE_WEB_LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)s [mfe-web] %(message)s",
+)
+logger = logging.getLogger("mfe-web")
+
+
+_USERNAME_RE = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+_VIDEO_RE = re.compile(r"^[A-Za-z0-9_.-]{1,160}$")
+
+
+def _safe_int_env(name: str, default: int) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def _visible_cpus() -> list[int]:
+    try:
+        return sorted(os.sched_getaffinity(0))
+    except AttributeError:
+        return list(range(os.cpu_count() or 1))
+
+
+def _physical_cpu_count(cpus: list[int]) -> int:
+    pairs: set[tuple[str, str]] = set()
+    for cpu in cpus:
+        base = Path(f"/sys/devices/system/cpu/cpu{cpu}/topology")
+        core = base / "core_id"
+        package = base / "physical_package_id"
+        if core.is_file() and package.is_file():
+            try:
+                pairs.add((package.read_text().strip(), core.read_text().strip()))
+            except OSError:
+                pass
+    return len(pairs) or max(1, len(cpus) // 2)
+
+
+@dataclass(frozen=True)
+class HardwareInfo:
+    logical_cpus: int
+    physical_cpus: int
+    torch_threads: int
+    torch_interop_threads: int
+    max_parallel_lanes: int
+    accelerator: str
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "logical_cpus": self.logical_cpus,
+            "physical_cpus": self.physical_cpus,
+            "torch_threads": self.torch_threads,
+            "torch_interop_threads": self.torch_interop_threads,
+            "max_parallel_lanes": self.max_parallel_lanes,
+            "accelerator": self.accelerator,
+        }
+
+
+def detect_hardware() -> HardwareInfo:
+    cpus = _visible_cpus()
+    logical = max(1, len(cpus))
+    physical = _physical_cpu_count(cpus)
+    # This host has 23 physical / 46 logical CPUs.  Sixteen intra-query
+    # threads and two simultaneous lanes use the machine without turning two
+    # BGE matmuls into a 46-thread oversubscribed queue.
+    torch_threads = _safe_int_env("MFE_WEB_TORCH_THREADS", min(16, max(4, physical)))
+    interop = _safe_int_env("MFE_WEB_TORCH_INTEROP_THREADS", min(4, max(1, physical // 8)))
+    parallel = _safe_int_env("MFE_WEB_MAX_PARALLEL_LANES", max(1, min(4, physical // 8)))
+    accelerator = "cpu"
+    try:
+        import torch
+
+        torch.set_num_threads(torch_threads)
+        try:
+            torch.set_num_interop_threads(interop)
+        except RuntimeError:
+            # Another imported component may have already initialized the
+            # inter-op pool.  The process still uses the configured intra-op
+            # pool and remains healthy.
+            pass
+        if torch.cuda.is_available():
+            accelerator = f"cuda:{torch.cuda.device_count()}"
+    except Exception as exc:  # noqa: BLE001 - health still works without torch
+        logger.warning("khong cau hinh duoc torch pool: %s", exc)
+    return HardwareInfo(logical, physical, torch_threads, interop, parallel, accelerator)
+
+
+def _read_session_secret() -> str:
+    if not SESSION_SECRET_PATH.is_file():
+        SESSION_SECRET_PATH.write_text(secrets.token_urlsafe(48) + "\n", encoding="utf-8")
+        SESSION_SECRET_PATH.chmod(0o600)
+    return SESSION_SECRET_PATH.read_text(encoding="utf-8").strip()
+
+
+def _load_accounts() -> dict[str, dict[str, Any]]:
+    if not ACCOUNTS_PATH.is_file():
+        raise RuntimeError(f"Thieu {ACCOUNTS_PATH}; chay /home/ubuntu/web/create_accounts.py")
+    payload = json.loads(ACCOUNTS_PATH.read_text(encoding="utf-8"))
+    users = payload.get("users")
+    if not isinstance(users, dict) or not users:
+        raise RuntimeError("accounts.json khong co users hop le")
+    return users
+
+
+def _verify_password(password: str, record: dict[str, Any]) -> bool:
+    try:
+        salt = bytes.fromhex(str(record["salt"]))
+        expected = bytes.fromhex(str(record["hash"]))
+        n = int(record.get("n", 2**14))
+        r = int(record.get("r", 8))
+        p = int(record.get("p", 1))
+        actual = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=n, r=r, p=p)
+    except (KeyError, TypeError, ValueError):
+        return False
+    return hmac.compare_digest(actual, expected)
+
+
+def _copy_state(state: dict[str, Any]) -> dict[str, Any]:
+    return copy.deepcopy(state)
+
+
+class Lane:
+    """One serialized job lane backed by a dedicated OS thread."""
+
+    def __init__(self, manager: EngineManager, name: str) -> None:
+        self.manager = manager
+        self.name = name
+        prefix = re.sub(r"[^A-Za-z0-9_.-]", "_", f"mfe-{name}")[:48]
+        self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix=prefix)
+        self.cascade: Any = None
+        self.active = False
+        self.lock = asyncio.Lock()
+
+    def _ensure_cascade(self) -> Any:
+        if self.cascade is None:
+            if self.name == "shared":
+                self.cascade = self.manager.base_cascade
+            else:
+                self.cascade = self.manager.new_cascade()
+        return self.cascade
+
+    def run_sync(
+        self,
+        query: str,
+        query_en: str | None,
+        top_k: int,
+        run_id: str,
+        query_type: str = "KIS",
+        events: list[str] | None = None,
+        events_en: list[str] | None = None,
+        answer: str = "",
+        auto_answer: bool = False,
+        penalty: float = dante.PENALTY,
+    ) -> dict[str, Any]:
+        cascade = self._ensure_cascade()
+        started = time.perf_counter()
+
+        def search_one(text: str, text_en: str | None, search_run_id: str):
+            # QueryTranslator owns a small mutable usage/cache object. Keep that
+            # object shared, but guard the complete search only when an English
+            # arm actually needs translation.
+            needs_translation = (
+                not text_en and cascade.translator is not None and cascade.arms.needs_english()
+            )
+            if needs_translation:
+                with self.manager.translation_lock:
+                    return cascade.search(
+                        query_text=text,
+                        top_k=top_k,
+                        run_id=search_run_id,
+                        query_text_en=text_en,
+                    )
+            return cascade.search(
+                query_text=text,
+                top_k=top_k,
+                run_id=search_run_id,
+                query_text_en=text_en,
+            )
+
+        def candidates_of(raw: Any) -> list[Any]:
+            return raw[0] if isinstance(raw, tuple) else raw
+
+        if query_type == "TRAKE":
+            event_texts = [text.strip() for text in (events or []) if text.strip()]
+            if not event_texts:
+                raise ValueError("TRAKE can it nhat mot su kien")
+            per_event: list[list[Any]] = []
+            for index, event_text in enumerate(event_texts):
+                event_en = (
+                    events_en[index].strip()
+                    if events_en and index < len(events_en) and events_en[index].strip()
+                    else None
+                )
+                raw = search_one(event_text, event_en, f"{run_id}-e{index}")
+                per_event.append(candidates_of(raw)[:top_k])
+            alignments = dante.align(
+                [to_event_hits(candidates, self.manager.relational) for candidates in per_event],
+                penalty=penalty,
+                limit=top_k,
+            )
+            results = self.manager.alignment_payload(alignments)
+            answer_payload = None
+        else:
+            raw = search_one(query, query_en, run_id)
+            candidates = candidates_of(raw)
+            results = self.manager.candidate_payload(candidates[:top_k])
+            answer_payload = None
+            if query_type == "QA":
+                if answer.strip():
+                    answer_payload = {
+                        "text": answer.strip(),
+                        "source": "manual",
+                        "ok": True,
+                    }
+                elif auto_answer:
+                    if self.manager.images is None:
+                        answer_payload = {
+                            "text": "",
+                            "source": "vlm_failed",
+                            "ok": False,
+                            "reason": "image cache chua san sang",
+                        }
+                    else:
+                        vqa = read_answer(
+                            query,
+                            candidates,
+                            self.manager.images.cached,
+                            depth=min(8, len(candidates)),
+                        )
+                        answer_payload = {
+                            "text": vqa.text,
+                            "frame": vqa.frame,
+                            "confidence": vqa.confidence,
+                            "why": vqa.why,
+                            "source": "vlm" if vqa.ok else "vlm_failed",
+                            "ok": vqa.ok,
+                            "reason": vqa.reason,
+                        }
+                else:
+                    answer_payload = {
+                        "text": "",
+                        "source": "missing",
+                        "ok": False,
+                        "reason": "QA chua co dap an; nhap dap an hoac bat VLM",
+                    }
+        return {
+            "results": results,
+            "query_type": query_type,
+            "answer": answer_payload,
+            "events": events or [],
+            "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+        }
+
+    def close(self) -> None:
+        self.executor.shutdown(wait=False, cancel_futures=True)
+
+
+class EngineManager:
+    def __init__(self) -> None:
+        self.hardware = detect_hardware()
+        self.config: Any = None
+        self.bundle: Any = None
+        self.base_cascade: Any = None
+        self.relational: RelationalMap | None = None
+        self.images: KeyframeImages | None = None
+        self.batch2_video_ids: set[str] = set()
+        self.ready = False
+        self.initializing = False
+        self.init_error: str | None = None
+        self.init_started = time.time()
+        self.init_task: asyncio.Task[None] | None = None
+        self.cpu_gate: asyncio.Semaphore | None = None
+        self.translation_lock = threading.RLock()
+        self.shared_lane: Lane | None = None
+        self.private_lanes: dict[str, Lane] = {}
+        self.clients: dict[WebSocket, str] = {}
+        self.shared_state: dict[str, Any] = self._idle_state("shared", None)
+        self.private_states: dict[str, dict[str, Any]] = {}
+
+    @staticmethod
+    def _idle_state(scope: str, owner: str | None) -> dict[str, Any]:
+        return {
+            "scope": scope,
+            "status": "idle",
+            "owner": owner,
+            "query": None,
+            "query_type": "KIS",
+            "events": [],
+            "answer": None,
+            "started_at": None,
+            "finished_at": None,
+            "duration_ms": None,
+            "error": None,
+            "results": [],
+        }
+
+    def start(self) -> None:
+        self.shared_lane = Lane(self, "shared")
+        self.cpu_gate = asyncio.Semaphore(self.hardware.max_parallel_lanes)
+        self.initializing = True
+        self.init_task = asyncio.create_task(asyncio.to_thread(self._initialize_sync))
+        self.init_task.add_done_callback(self._initialization_done)
+
+    def _initialize_sync(self) -> None:
+        logger.info(
+            "hardware: %d logical / %d physical CPU, torch=%d threads, max_lanes=%d, %s",
+            self.hardware.logical_cpus,
+            self.hardware.physical_cpus,
+            self.hardware.torch_threads,
+            self.hardware.max_parallel_lanes,
+            self.hardware.accelerator,
+        )
+        logger.info("dang nap config + FlatBundle B1+B2; cache mmap duoc giu lai")
+        config = load_config(str(CONFIG_PATH))
+        # Keep derived mmap/BM25 caches beside the combined runtime.  Reusing
+        # the old default cache can silently serve a B1-only index after the
+        # B1+B2 flat files have changed.
+        flat_cache = RUNTIME_ROOT / "flat-cache"
+        bundle = load_flat_bundle(str(FLAT_ROOT), cache_dir=flat_cache)
+        cascade = build_flat_cascade(config, str(FLAT_ROOT), flat_bundle=bundle)
+        active = [arm.name for arm in cascade.arms.active()]
+        logger.info("preload query encoders: %s", active)
+        preload_query_encoders(active)
+        relational = RelationalMap(config.paths.relational_db)
+        batch2_video_ids = {path.stem for path in B2_IMAGE_ROOT.iterdir() if path.is_dir()}
+        image_roots = {
+            video_id: (B2_IMAGE_ROOT if video_id in batch2_video_ids else B1_IMAGE_ROOT)
+            for path in MAP_ROOT.glob("*.csv")
+            for video_id in (path.stem,)
+        }
+        images = KeyframeImages(
+            cache_dir=IMAGE_CACHE,
+            maps=MAP_ROOT,
+            bundle="aic_btc_b12_runtime",
+            volume="keyframes-batch-2-v2",
+            offline=True,
+            image_roots=image_roots,
+        )
+        self.config = config
+        self.bundle = bundle
+        self.base_cascade = cascade
+        self.relational = relational
+        self.images = images
+        self.batch2_video_ids = batch2_video_ids
+        logger.info("engine san sang; active arms=%s; %s", active, bundle.report())
+
+    def _initialization_done(self, task: asyncio.Task[None]) -> None:
+        self.initializing = False
+        try:
+            task.result()
+        except asyncio.CancelledError:
+            return
+        except Exception as exc:  # noqa: BLE001 - exposed through health endpoint
+            self.init_error = f"{type(exc).__name__}: {exc}"
+            logger.exception("engine initialization failed")
+        else:
+            self.ready = True
+            logger.info("HTML backend ready on port 8501")
+        asyncio.create_task(broadcast_health(self))
+
+    def new_cascade(self) -> Any:
+        if not self.ready and self.base_cascade is None:
+            raise RuntimeError("engine dang khoi dong")
+        return build_flat_cascade(
+            self.config,
+            str(FLAT_ROOT),
+            flat_bundle=self.bundle,
+            # The translator has mutable cache accounting; all lanes use the
+            # lock in Lane.run_sync around the only section that can mutate it.
+            translator=self.base_cascade.translator,
+        )
+
+    def private_lane(self, username: str) -> Lane:
+        lane = self.private_lanes.get(username)
+        if lane is None:
+            lane = Lane(self, f"private-{username}")
+            self.private_lanes[username] = lane
+        return lane
+
+    def state_for(self, username: str) -> dict[str, Any]:
+        private = self.private_states.get(username)
+        if private is None:
+            private = self._idle_state("private", username)
+            self.private_states[username] = private
+        return {"shared": _copy_state(self.shared_state), "private": _copy_state(private)}
+
+    def _keyframe_payload(
+        self,
+        keyframe_id: str,
+        video_id: str,
+        score: float,
+        rank: int,
+    ) -> dict[str, Any] | None:
+        if self.relational is None or self.images is None or self.bundle is None:
+            return None
+        try:
+            row = self.relational.get_keyframe(keyframe_id)
+        except Exception as exc:  # noqa: BLE001 - one stale hit must not kill a job
+            logger.warning("bo qua keyframe %s: %s", keyframe_id, exc)
+            return None
+        image = self.images.cached(keyframe_id)
+        image_url = None
+        if image is not None and _VIDEO_RE.fullmatch(row.video_id):
+            image_url = f"/media/{quote(row.video_id, safe='')}/{row.frame_idx}"
+
+        caption = ""
+        for source in ("caption_gemini", "caption_qwen", "caption"):
+            caption = str(self.bundle.texts.get(source, {}).get(keyframe_id, ""))
+            if caption.strip():
+                break
+        ocr = ""
+        for source in ("ocr_gemini", "ocr_qwen25", "ocr", "ocr_vietocr"):
+            ocr = str(self.bundle.texts.get(source, {}).get(keyframe_id, ""))
+            if ocr.strip():
+                break
+        return {
+            "rank": rank,
+            "keyframe_id": keyframe_id,
+            "video_id": row.video_id or video_id,
+            "batch": "batch2" if (row.video_id or video_id) in self.batch2_video_ids else "batch1",
+            "frame_idx": row.frame_idx,
+            "keyframe_index": row.keyframe_index,
+            "timestamp_ms": row.timestamp_ms,
+            "shot_id": row.shot_id,
+            "score": round(float(score), 8),
+            "caption": caption,
+            "ocr": ocr,
+            "image_url": image_url,
+        }
+
+    def candidate_payload(self, candidates: list[Any]) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        for rank, candidate in enumerate(candidates, start=1):
+            item = self._keyframe_payload(
+                candidate.keyframe_id, candidate.video_id, candidate.score, rank
+            )
+            if item is not None:
+                out.append(item)
+        return out
+
+    def alignment_payload(self, alignments: list[Any]) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        for rank, alignment in enumerate(alignments, start=1):
+            events: list[dict[str, Any]] = []
+            for index, hit in enumerate(alignment.hits, start=1):
+                item = self._keyframe_payload(hit.keyframe_id, hit.video_id, hit.score, index)
+                if item is not None:
+                    item["event_index"] = index
+                    item["frame_id"] = hit.frame_id
+                    events.append(item)
+            out.append(
+                {
+                    "rank": rank,
+                    "video_id": alignment.video_id,
+                    "score": round(float(alignment.score), 8),
+                    "support": alignment.support,
+                    "frame_ids": [event["frame_idx"] for event in events],
+                    "events": events,
+                }
+            )
+        return out
+
+    def health(self) -> dict[str, Any]:
+        if self.ready:
+            status = "ready"
+        elif self.init_error:
+            status = "error"
+        else:
+            status = "warming"
+        return {
+            "status": status,
+            "ready": self.ready,
+            "dataset": "btc_b12",
+            "batches": {"batch1": "ready", "batch2": "ready"},
+            "streamlit_preserved": True,
+            "streamlit_internal_port": 8502,
+            "hardware": self.hardware.as_dict(),
+            "bundle": self.bundle.report() if self.bundle is not None else None,
+            "active_arms": [arm.name for arm in self.base_cascade.arms.active()]
+            if self.base_cascade is not None
+            else [],
+            "error": self.init_error,
+            "uptime_s": round(max(0.0, time.time() - self.init_started), 1),
+        }
+
+    def close(self) -> None:
+        if self.init_task and not self.init_task.done():
+            self.init_task.cancel()
+        if self.shared_lane:
+            self.shared_lane.close()
+        for lane in self.private_lanes.values():
+            lane.close()
+        if self.relational:
+            self.relational.close()
+
+
+def _session_user(request: Request) -> str | None:
+    username = request.session.get("user")
+    return username if isinstance(username, str) else None
+
+
+def _csrf_ok(request: Request) -> bool:
+    expected = request.session.get("csrf")
+    provided = request.headers.get("x-csrf-token")
+    return (
+        isinstance(expected, str)
+        and isinstance(provided, str)
+        and hmac.compare_digest(expected, provided)
+    )
+
+
+async def _json_body(request: Request) -> dict[str, Any] | None:
+    try:
+        payload = await request.json()
+    except (ValueError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+async def broadcast_state(manager: EngineManager, scope: str, owner: str | None) -> None:
+    payload: dict[str, Any]
+    if scope == "shared":
+        payload = {"type": "state", "scope": "shared", "state": _copy_state(manager.shared_state)}
+    else:
+        if owner is None:
+            return
+        state = manager.private_states.get(owner)
+        if state is None:
+            return
+        payload = {"type": "state", "scope": "private", "state": _copy_state(state)}
+
+    stale: list[WebSocket] = []
+    for websocket, username in list(manager.clients.items()):
+        if scope == "shared" or username == owner:
+            try:
+                await websocket.send_json(payload)
+            except Exception:  # noqa: BLE001 - disconnect cleanup is best effort
+                stale.append(websocket)
+    for websocket in stale:
+        manager.clients.pop(websocket, None)
+
+
+async def broadcast_health(manager: EngineManager) -> None:
+    payload = {"type": "health", "health": manager.health()}
+    stale: list[WebSocket] = []
+    for websocket in list(manager.clients):
+        try:
+            await websocket.send_json(payload)
+        except Exception:  # noqa: BLE001
+            stale.append(websocket)
+    for websocket in stale:
+        manager.clients.pop(websocket, None)
+
+
+async def _execute_job(
+    manager: EngineManager,
+    lane: Lane,
+    scope: str,
+    owner: str | None,
+    query: str,
+    query_en: str | None,
+    top_k: int,
+    run_id: str,
+    query_type: str,
+    events: list[str],
+    events_en: list[str],
+    answer: str,
+    auto_answer: bool,
+    penalty: float,
+) -> None:
+    state = manager.shared_state if scope == "shared" else manager.private_states[owner or ""]
+    state["status"] = "queued"
+    await broadcast_state(manager, scope, owner)
+    assert manager.cpu_gate is not None
+    try:
+        await manager.cpu_gate.acquire()
+        state["status"] = "running"
+        state["started_at"] = time.time()
+        await broadcast_state(manager, scope, owner)
+        loop = asyncio.get_running_loop()
+        async with lane.lock:
+            result = await loop.run_in_executor(
+                lane.executor,
+                lane.run_sync,
+                query,
+                query_en,
+                top_k,
+                run_id,
+                query_type,
+                events,
+                events_en,
+                answer,
+                auto_answer,
+                penalty,
+            )
+        state["status"] = "done"
+        state["results"] = result["results"]
+        state["query_type"] = result["query_type"]
+        state["events"] = result["events"]
+        state["answer"] = result["answer"]
+        state["duration_ms"] = result["duration_ms"]
+        state["finished_at"] = time.time()
+        state["error"] = None
+    except Exception as exc:  # noqa: BLE001 - surface a useful job error to UI
+        logger.exception("job failed (%s/%s)", scope, owner or "shared")
+        state["status"] = "error"
+        state["error"] = f"{type(exc).__name__}: {exc}"
+        state["finished_at"] = time.time()
+    finally:
+        manager.cpu_gate.release()
+        lane.active = False
+        await broadcast_state(manager, scope, owner)
+
+
+async def _schedule_job(
+    manager: EngineManager,
+    scope: str,
+    owner: str | None,
+    query: str,
+    query_en: str | None,
+    top_k: int,
+    query_type: str,
+    events: list[str],
+    events_en: list[str],
+    answer: str,
+    auto_answer: bool,
+    penalty: float,
+) -> JSONResponse:
+    if not manager.ready:
+        return JSONResponse(
+            {"ok": False, "error": manager.init_error or "engine dang khoi dong"},
+            status_code=503,
+        )
+    lane = manager.shared_lane if scope == "shared" else manager.private_lane(owner or "")
+    if lane is None:
+        return JSONResponse({"ok": False, "error": "shared lane chua san sang"}, status_code=503)
+    if lane.active:
+        return JSONResponse(
+            {"ok": False, "error": "lane dang co mot job; hay cho job hien tai ket thuc"},
+            status_code=409,
+        )
+
+    lane.active = True
+    state = (
+        manager.shared_state
+        if scope == "shared"
+        else manager.private_states.setdefault(owner or "", manager._idle_state("private", owner))
+    )
+    state.update(
+        {
+            "scope": scope,
+            "status": "queued",
+            "owner": owner,
+            "query": query,
+            "query_type": query_type,
+            "events": events,
+            "answer": None,
+            "started_at": None,
+            "finished_at": None,
+            "duration_ms": None,
+            "error": None,
+            "results": [],
+        }
+    )
+    run_id = f"web_{scope}_{uuid.uuid4().hex}"
+    asyncio.create_task(
+        _execute_job(
+            manager,
+            lane,
+            scope,
+            owner,
+            query,
+            query_en,
+            top_k,
+            run_id,
+            query_type,
+            events,
+            events_en,
+            answer,
+            auto_answer,
+            penalty,
+        )
+    )
+    await broadcast_state(manager, scope, owner)
+    return JSONResponse({"ok": True, "run_id": run_id, "scope": scope}, status_code=202)
+
+
+async def homepage(request: Request) -> FileResponse:
+    return FileResponse(INDEX_PATH, media_type="text/html; charset=utf-8")
+
+
+async def favicon(request: Request) -> PlainTextResponse:
+    return PlainTextResponse("", status_code=204)
+
+
+async def health(request: Request) -> JSONResponse:
+    return JSONResponse(request.app.state.manager.health())
+
+
+async def me(request: Request) -> JSONResponse:
+    username = _session_user(request)
+    if username is None:
+        return JSONResponse({"authenticated": False})
+    return JSONResponse(
+        {
+            "authenticated": True,
+            "username": username,
+            "role": request.session.get("role", "operator"),
+            "csrf": request.session.get("csrf"),
+        }
+    )
+
+
+async def login(request: Request) -> JSONResponse:
+    payload = await _json_body(request)
+    username = str(payload.get("username", "")).strip() if payload else ""
+    password = str(payload.get("password", "")) if payload else ""
+    if not _USERNAME_RE.fullmatch(username):
+        return JSONResponse(
+            {"ok": False, "error": "tai khoan hoac mat khau khong dung"}, status_code=401
+        )
+    try:
+        accounts = _load_accounts()
+        record = accounts.get(username)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("cannot load account database")
+        return JSONResponse(
+            {"ok": False, "error": f"loi cau hinh tai khoan: {exc}"}, status_code=500
+        )
+    if not isinstance(record, dict) or not _verify_password(password, record):
+        return JSONResponse(
+            {"ok": False, "error": "tai khoan hoac mat khau khong dung"}, status_code=401
+        )
+    request.session.clear()
+    request.session.update(
+        {
+            "user": username,
+            "role": str(record.get("role", "operator")),
+            "csrf": secrets.token_urlsafe(24),
+        }
+    )
+    return JSONResponse(
+        {
+            "ok": True,
+            "username": username,
+            "role": str(record.get("role", "operator")),
+            "csrf": request.session["csrf"],
+        }
+    )
+
+
+async def logout(request: Request) -> JSONResponse:
+    if _session_user(request) is not None and not _csrf_ok(request):
+        return JSONResponse({"ok": False, "error": "csrf token khong dung"}, status_code=403)
+    request.session.clear()
+    return JSONResponse({"ok": True})
+
+
+async def state(request: Request) -> JSONResponse:
+    username = _session_user(request)
+    if username is None:
+        return JSONResponse({"ok": False, "error": "can dang nhap"}, status_code=401)
+    return JSONResponse({"ok": True, **request.app.state.manager.state_for(username)})
+
+
+async def run_shared(request: Request) -> JSONResponse:
+    username = _session_user(request)
+    if username is None:
+        return JSONResponse({"ok": False, "error": "can dang nhap"}, status_code=401)
+    if not _csrf_ok(request):
+        return JSONResponse({"ok": False, "error": "csrf token khong dung"}, status_code=403)
+    return await _run_request(request, "shared", username)
+
+
+async def run_private(request: Request) -> JSONResponse:
+    username = _session_user(request)
+    if username is None:
+        return JSONResponse({"ok": False, "error": "can dang nhap"}, status_code=401)
+    if not _csrf_ok(request):
+        return JSONResponse({"ok": False, "error": "csrf token khong dung"}, status_code=403)
+    return await _run_request(request, "private", username)
+
+
+async def _run_request(request: Request, scope: str, username: str) -> JSONResponse:
+    payload = await _json_body(request)
+    query_type = str(payload.get("query_type", "KIS")).strip().upper() if payload else "KIS"
+    if query_type not in {"KIS", "QA", "TRAKE"}:
+        return JSONResponse(
+            {"ok": False, "error": "query_type phai la KIS, QA hoac TRAKE"}, status_code=400
+        )
+    query = str(payload.get("query", "")).strip() if payload else ""
+    query_en = str(payload.get("query_en", "")).strip() if payload else ""
+    events_raw = payload.get("events", []) if payload else []
+    events = (
+        [str(item).strip() for item in events_raw if str(item).strip()]
+        if isinstance(events_raw, list)
+        else [line.strip() for line in str(events_raw).splitlines() if line.strip()]
+    )
+    events_en_raw = payload.get("events_en", []) if payload else []
+    events_en = (
+        [str(item).strip() for item in events_en_raw if str(item).strip()]
+        if isinstance(events_en_raw, list)
+        else [line.strip() for line in str(events_en_raw).splitlines() if line.strip()]
+    )
+    answer = str(payload.get("answer", "")).strip() if payload else ""
+    auto_answer = bool(payload.get("auto_answer", False)) if payload else False
+    try:
+        top_k = int(payload.get("top_k", 50)) if payload else 50
+    except (TypeError, ValueError):
+        top_k = 50
+    if query_type == "TRAKE" and not events:
+        return JSONResponse(
+            {"ok": False, "error": "TRAKE can it nhat mot su kien moi dong"}, status_code=400
+        )
+    if query_type != "TRAKE" and not query:
+        return JSONResponse({"ok": False, "error": "query khong duoc rong"}, status_code=400)
+    if query_type == "TRAKE" and len(events_en) not in {0, len(events)}:
+        return JSONResponse(
+            {"ok": False, "error": "events_en phai co cung so dong voi events"}, status_code=400
+        )
+    if (
+        len(query) > 4000
+        or len(query_en) > 4000
+        or any(len(item) > 4000 for item in events + events_en)
+    ):
+        return JSONResponse({"ok": False, "error": "query qua dai"}, status_code=400)
+    if len(answer) > 1000:
+        return JSONResponse({"ok": False, "error": "dap an QA qua dai"}, status_code=400)
+    top_k = max(1, min(100, top_k))
+    return await _schedule_job(
+        request.app.state.manager,
+        scope,
+        username,
+        query,
+        query_en or None,
+        top_k,
+        query_type,
+        events,
+        events_en,
+        answer,
+        auto_answer if query_type == "QA" else False,
+        dante.PENALTY,
+    )
+
+
+async def media(request: Request) -> FileResponse | JSONResponse:
+    if _session_user(request) is None:
+        return JSONResponse({"error": "can dang nhap"}, status_code=401)
+    video_id = request.path_params["video_id"]
+    frame_raw = request.path_params["frame_idx"]
+    if not _VIDEO_RE.fullmatch(video_id) or not str(frame_raw).isdigit():
+        return JSONResponse({"error": "invalid media path"}, status_code=404)
+    manager: EngineManager = request.app.state.manager
+    if manager.images is None:
+        return JSONResponse({"error": "engine warming"}, status_code=503)
+    keyframe_id = f"{video_id}#{int(frame_raw):06d}"
+    path = manager.images.cached(keyframe_id)
+    if path is None or not path.is_file():
+        return JSONResponse({"error": "image not found"}, status_code=404)
+    if not manager.images.is_allowed_local_path(path):
+        return JSONResponse({"error": "invalid image path"}, status_code=404)
+    return FileResponse(
+        path,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=86400, immutable"},
+    )
+
+
+async def websocket_endpoint(websocket: WebSocket) -> None:
+    username = websocket.session.get("user")
+    if not isinstance(username, str):
+        await websocket.close(code=4401)
+        return
+    manager: EngineManager = websocket.app.state.manager
+    await websocket.accept()
+    manager.clients[websocket] = username
+    await websocket.send_json({"type": "health", "health": manager.health()})
+    snapshot = manager.state_for(username)
+    await websocket.send_json({"type": "snapshot", **snapshot})
+    try:
+        while True:
+            message = await websocket.receive_text()
+            if message == "ping":
+                await websocket.send_json({"type": "pong"})
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        logger.debug("websocket closed", exc_info=True)
+    finally:
+        manager.clients.pop(websocket, None)
+
+
+@asynccontextmanager
+async def lifespan(app: Starlette):
+    manager = EngineManager()
+    app.state.manager = manager
+    manager.start()
+    try:
+        yield
+    finally:
+        manager.close()
+
+
+routes = [
+    Route("/", homepage),
+    Route("/favicon.ico", favicon),
+    Route("/api/health", health),
+    Route("/api/me", me),
+    Route("/api/login", login, methods=["POST"]),
+    Route("/api/logout", logout, methods=["POST"]),
+    Route("/api/state", state),
+    Route("/api/shared/run", run_shared, methods=["POST"]),
+    Route("/api/private/run", run_private, methods=["POST"]),
+    Route("/media/{video_id}/{frame_idx:int}", media),
+    WebSocketRoute("/ws", websocket_endpoint),
+]
+
+app = Starlette(
+    debug=False,
+    routes=routes,
+    middleware=[
+        Middleware(
+            SessionMiddleware,
+            secret_key=_read_session_secret(),
+            session_cookie="mfe_session",
+            max_age=86400,
+            same_site="lax",
+            https_only=False,
+        )
+    ],
+    lifespan=lifespan,
+)

@@ -78,6 +78,7 @@ from mfe.eval.submission_bundle import (  # noqa: E402
 from mfe.mapping.relational import RelationalMap  # noqa: E402
 from mfe.offline.transport import load_dotenv  # noqa: E402
 from mfe.online import dante  # noqa: E402
+from mfe.online.dense_arms import preload_query_encoders  # noqa: E402
 from mfe.online.flat_arms import build_flat_cascade, load_flat_bundle  # noqa: E402
 from mfe.online.keyframe_images import KeyframeImages  # noqa: E402
 from mfe.online.query_options import (  # noqa: E402
@@ -129,10 +130,11 @@ for _key, _value in load_dotenv(ROOT / ".env").items():
 
 @st.cache_resource(show_spinner="Nạp kho phẳng + tháp text SigLIP …")
 def load_engine():
-    """`(config, cascade, relational)`. Nạp ~10s, nên đúng một lần mỗi phiên."""
+    """`(config, cascade, relational)`, including dense model warm-up."""
     config = load_config(str(CONFIG))
     bundle = load_flat_bundle(str(FLAT_ROOT))
     cascade = build_flat_cascade(config, str(FLAT_ROOT), flat_bundle=bundle)
+    preload_query_encoders([arm.name for arm in cascade.arms.active()])
     relational = RelationalMap(config.paths.relational_db)
     return config, cascade, relational
 

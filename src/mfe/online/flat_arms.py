@@ -74,7 +74,9 @@ SOURCE_FILE = {
     "object": "objects_text.json",
     "caption": "dense_captions.json",
     "caption_qwen": "qwen_captions.json",
+    "caption_gemini": "gemini_captions.json",
     "ocr_qwen25": "qwen_ocr.json",
+    "ocr_gemini": "gemini_ocr.json",
 }
 
 #: Tên arm dense -> tên file phẳng.

@@ -168,8 +168,8 @@ Learn the shape of the answer; do not copy the content.
 [CAPTION] Two presenters read from a red folder and speak toward the camera from behind a curved white desk. The man on the left wears glasses, a dark navy shirt and a pale tie; the woman on the right has long hair and wears a light blue blouse. The man rests his free hand on the desk while the woman turns a page. Behind them a wide city skyline glows orange at sunset.
 [TEXT] HTV9 HD
 06:31:14
-TIN CHÃNH
-Äá»£t mÆ°a lÅ© vá»«a qua khiáº¿n 3 ngÆ°á»i thiá»‡t máº¡ng
+TIN CHÍNH
+Đợt mưa lũ vừa qua khiến 3 người thiệt mạng
 
 ### Example 2
 [CAPTION] Five people peel bamboo shoots together on a concrete yard, sitting on low plastic stools around the heap. The woman on the far left, in a red and white checked shirt and yellow trousers, strips the husk from a shoot; the person in the middle in a green t-shirt passes a peeled shoot toward her; the man on the far right in camouflage-patterned clothing sorts the shoots into a yellow plastic basket. A row of blue plastic drums stands behind them.
@@ -177,11 +177,11 @@ TIN CHÃNH
 
 ### Example 3
 [CAPTION] Close-up of a lecture slide on a white background. Three rounded blue buttons run down the left half, each one pointing to an empty white box on its right. In the lower left corner an inset shows a male lecturer in a white shirt sitting in front of an open laptop and looking at its screen.
-[TEXT] THANH NIÃŠN
-HOA KÃŒ
-NHáº¬T Báº¢N
-TÃ‚Y Ã‚U
-CHÆ¯Æ NG TRÃŒNH Ã”N THI THPT MÃ”N Lá»ŠCH Sá»¬
+[TEXT] THANH NIÊN
+HOA KỲ
+NHẬT BẢN
+TÂY ÂU
+CHƯƠNG TRÌNH ÔN THI THPT MÔN LỊCH SỬ
 
 Now do exactly the same for the frame you are given."""
 

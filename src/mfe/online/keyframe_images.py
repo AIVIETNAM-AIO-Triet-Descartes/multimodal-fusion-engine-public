@@ -62,6 +62,7 @@ class KeyframeImages:
         bundle: str = DEFAULT_BUNDLE,
         volume: str = DEFAULT_VOLUME,
         offline: bool = False,
+        image_roots: dict[str, Path | str] | None = None,
     ) -> None:
         self.cache_dir = Path(cache_dir)
         self.maps = Path(maps)
@@ -69,6 +70,13 @@ class KeyframeImages:
         self.volume = volume
         #: True = chỉ đọc cache, không bao giờ ra mạng. Dùng khi chạy không có token.
         self.offline = offline
+        # Optional local bundle roots.  The combined B1+B2 runtime keeps the
+        # raw keyframes on /data, so serving an image must not first copy it into
+        # the old three-digit cache layout.  The map still remains the only
+        # source of truth for frame_idx -> ordinal.
+        self.image_roots = {
+            video: Path(root) for video, root in (image_roots or {}).items()
+        }
         self._transport = None
         self._layout = None
         self.misses: list[str] = []
@@ -96,7 +104,14 @@ class KeyframeImages:
         ordinal = ordinal_for(video_id, int(frame), self.maps)
         if ordinal is None:
             return None
-        return self.cache_dir / video_id / f"{ordinal:03d}.jpg"
+        direct_root = self.image_roots.get(video_id)
+        if direct_root is not None:
+            for filename in (f"{ordinal:03d}.jpg", f"{ordinal:04d}.jpg"):
+                candidate = direct_root / video_id / filename
+                if candidate.is_file():
+                    return candidate
+        width = 4 if ordinal >= 1000 else 3
+        return self.cache_dir / video_id / f"{ordinal:0{width}d}.jpg"
 
     def get(self, keyframe_id: str) -> Path | None:
         """Ảnh của một keyframe. Tải nếu chưa có; None nếu không lấy được."""
@@ -135,6 +150,18 @@ class KeyframeImages:
         if target is None or not target.is_file() or target.stat().st_size == 0:
             return None
         return target
+
+    def is_allowed_local_path(self, path: Path) -> bool:
+        """Return whether ``path`` belongs to one of the configured image roots."""
+        try:
+            resolved = path.resolve()
+            roots = [
+                self.cache_dir.resolve(),
+                *(root.resolve() for root in self.image_roots.values()),
+            ]
+            return any(resolved == root or root in resolved.parents for root in roots)
+        except OSError:
+            return False
 
     def prefetch(self, keyframe_ids: Iterable[str], workers: int = 8) -> int:
         """Tải song song. Trả về số ảnh sẵn sàng.

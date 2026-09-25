@@ -2052,8 +2052,12 @@ def stage_n6_bge_m3(ctx: StageContext) -> dict:
     from sentence_transformers import SentenceTransformer  # noqa: PLC0415
 
     checkpoint = "BAAI/bge-m3"
-    
-    if ctx.layout.root.startswith("/bundle/aic_btc_b1"):
+
+    # Test doubles and older notebook adapters may only implement ``part``.
+    # Treat those as the legacy B1/Qwen route; a real BundleLayout exposes the
+    # remote root and selects the newest Gemini B1 parts explicitly.
+    layout_root = getattr(ctx.layout, "root", "")
+    if layout_root.startswith("/bundle/aic_btc_b1"):
         source = "gemini_captions"
         remote_path = f"/research/caption-gemini-trammay-v1/parts/captions/{ctx.video_id}.json"
     else:
@@ -2063,16 +2067,22 @@ def stage_n6_bge_m3(ctx: StageContext) -> dict:
     local = ctx.workdir / f"{source}_{ctx.video_id}.json"
     ctx.writer.transport.get(remote_path, local)
     captions = json.loads(local.read_text(encoding="utf-8"))
-    
+
     if not captions:
+        missing_stage = (
+            "n6_caption_gemini_raw"
+            if source == "gemini_captions"
+            else "n6_caption_qwen"
+        )
         raise RuntimeError(
-            f"{ctx.video_id}: chua co {source} ở {remote_path} — chay tao caption truoc"
+            f"{ctx.video_id}: chua co {source} ở {remote_path} — "
+            f"chay {missing_stage} truoc"
         )
 
     # `sorted` chu khong phai thu tu file: `write_vector_part` gan `ids` voi
     # `vectors` theo VI TRI, nen hai lan chay phai duyet cung mot thu tu.
     keys = sorted(captions)
-    
+
     model = cached_model(f"bge-m3 {checkpoint}", lambda: SentenceTransformer(checkpoint))
     with Stopwatch() as timer:
         vectors = model.encode(

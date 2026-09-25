@@ -48,6 +48,8 @@ online = [
     # the shipped keyframe features. Verified at cosine 0.9992-1.0000 against
     # them (scripts/verify_clip_checkpoint.py). Pulls torch.
     "sentence-transformers>=2.5",
+    # SigLIP's tokenizer and the EnViT5 translator use SentencePiece.
+    "sentencepiece>=0.2",
     "pillow>=10.0",
     # Bo doc cau tra loi Q&A (mfe.online.readers). BTC cho phep goi API trong
     # vong so tuyen. Cung thu vien `build_gemini_generate` dung cho ReCap, nen
