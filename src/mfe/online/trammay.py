@@ -212,14 +212,26 @@ class TrammayClient:
         prompt: str,
         *,
         images: list[Path | str] | None = None,
+        images_b64: list[str] | None = None,
         model: str | None = None,
         max_tokens: int = 512,
         temperature: float = 0.0,
     ) -> str:
-        """Một lượt hỏi. `images` biến nó thành lượt hỏi thị giác."""
+        """Một lượt hỏi. `images` biến nó thành lượt hỏi thị giác.
+
+        `images_b64` là cùng thứ đó nhưng **đã mã hoá sẵn** (base64 của JPEG,
+        không kèm tiền tố `data:`). Có mặt vì người gọi đôi khi đã thu nhỏ ảnh
+        rồi: `rerank_tiers.VlmTier` hạ cạnh dài về 512 px trước khi gửi, và bắt
+        nó ghi ra file tạm chỉ để hàm này đọc lại là trả hai lần cùng một chi
+        phí — trên 20 ảnh 1280×720 thì đó là vài MB base64 thừa mỗi truy vấn.
+        """
         noi_dung: list[dict] = [{"type": "text", "text": prompt}]
         for p in images or []:
             b64 = base64.b64encode(Path(p).read_bytes()).decode()
+            noi_dung.append(
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
+            )
+        for b64 in images_b64 or []:
             noi_dung.append(
                 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
             )

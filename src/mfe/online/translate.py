@@ -185,6 +185,22 @@ class MachineTranslator:
 
     The checkpoint is ~1.2 GB and loads on first use only, so a run whose
     English arms are all off never pays for it.
+
+    **Chạy trên GPU khi máy có GPU** (25-09-2026). Đo được **560 → 268 ms**
+    (2,1×), và đó không phải con số trang trí: sau khi tầng văn bản chuyển sang
+    ma trận thưa, bước dịch trở thành **khoản lớn nhất** của một truy vấn.
+
+    ⚠ Và nó chỉ hiện ra ở chung kết. `measure_latency.py` báo *"DỊCH 0 ms"* vì
+    `eval/translations.json` đã cache sẵn mọi câu dev; mỗi câu BTC thả xuống là
+    một lần **trượt cache**.
+
+    ⚠ **`device` KHÔNG vào `model_id`, và đó là chủ ý.** Ràng buộc 2 ở đầu
+    module nói cache phải xác định; nếu CPU và GPU cho hai bản dịch khác nhau
+    thì cùng một khoá cache sẽ trỏ vào hai kết quả. Đã kiểm 25-09 trên 6 câu:
+    **6/6 trùng khít từng ký tự** — giải mã greedy không phụ thuộc thiết bị ở
+    độ dài này. Nên đưa `device` vào khoá chỉ làm mọi bản dịch đã cache mất
+    hiệu lực mà không mua được tính đúng đắn nào. Nếu một ngày thấy hai thiết bị
+    ra khác nhau thì **thêm `device` vào `model_id`**, đừng bỏ cache.
     """
 
     def __init__(
@@ -192,10 +208,13 @@ class MachineTranslator:
         checkpoint: str = DEFAULT_MT_CHECKPOINT,
         num_beams: int = 1,
         max_new_tokens: int = 128,
+        device: str | None = None,
     ) -> None:
         self.checkpoint = checkpoint
         self.num_beams = num_beams
         self.max_new_tokens = max_new_tokens
+        #: None = tự dò. `MFE_MT_DEVICE=cpu` để ép về CPU khi cần so hai lượt.
+        self.device = device or os.getenv("MFE_MT_DEVICE") or None
         self._model = None
         self._tokenizer = None
 
@@ -203,14 +222,40 @@ class MachineTranslator:
     def model_id(self) -> str:
         return f"{self.checkpoint}|beams={self.num_beams}|max_new={self.max_new_tokens}"
 
+    def _chon_thiet_bi(self) -> str:
+        """`cuda` nếu có, `cpu` nếu không. Hỏng ở đây phải rơi về CPU, không ném.
+
+        Một máy có driver lệch bản vẫn phải dịch được — mất 300 ms còn hơn mất
+        arm `siglip` (trọng số 2,0, bỏ nó là −0,093 Final).
+        """
+        if self.device:
+            return self.device
+        try:
+            import torch
+
+            return "cuda" if torch.cuda.is_available() else "cpu"
+        except Exception as err:  # noqa: BLE001 — thiếu torch/driver lệch đều về CPU
+            logger.info("khong do duoc GPU (%s); dich tren CPU", err)
+            return "cpu"
+
     def _load(self):
         if self._model is None:
             from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
             logger.info("Loading MT checkpoint %s (first call downloads ~1.2 GB)", self.checkpoint)
             self._tokenizer = self._load_tokenizer(AutoTokenizer)
-            self._model = AutoModelForSeq2SeqLM.from_pretrained(self.checkpoint)
-            self._model.eval()
+            model = AutoModelForSeq2SeqLM.from_pretrained(self.checkpoint)
+            model.eval()
+            thiet_bi = self._chon_thiet_bi()
+            if thiet_bi != "cpu":
+                try:
+                    model = model.to(thiet_bi)
+                except Exception as err:  # noqa: BLE001
+                    logger.warning("khong dua model len %s (%s); dung CPU", thiet_bi, err)
+                    thiet_bi = "cpu"
+            self.device = thiet_bi
+            logger.info("MT chay tren %s", thiet_bi)
+            self._model = model
         return self._tokenizer, self._model
 
     def _load_tokenizer(self, auto_tokenizer):
@@ -252,6 +297,11 @@ class MachineTranslator:
         import torch
 
         batch = tokenizer([f"vi: {text}"], return_tensors="pt", padding=True)
+        # Tensor phải đi theo model: `_load` có thể đã đẩy model lên CUDA, và
+        # một batch còn nằm trên CPU thì `generate` ném "Expected all tensors to
+        # be on the same device" chứ không tự chuyển.
+        if self.device and self.device != "cpu":
+            batch = batch.to(self.device)
         with torch.inference_mode():
             generated = model.generate(
                 **batch,

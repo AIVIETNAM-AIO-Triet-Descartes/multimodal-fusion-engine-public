@@ -18,6 +18,7 @@ import pytest
 
 from mfe.contracts.tools import Candidate
 from mfe.online.rerank_tiers import (
+    TRAMMAY_ENV_KEY,
     ColPaliTier,
     HfCrossEncoderTier,
     TierOutcome,
@@ -27,6 +28,28 @@ from mfe.online.rerank_tiers import (
     _score_of,
     apply_tiers,
 )
+
+#: Mọi khoá nhà cung cấp mà một tầng có thể hỏi tới.
+KHOA_NHA_CUNG_CAP = (TRAMMAY_ENV_KEY, "GEMINI_API_KEY", "NVIDIA_API_KEY", "HF_TOKEN")
+
+
+@pytest.fixture(autouse=True)
+def khong_dung_khoa_that(monkeypatch):
+    """Xoá mọi khoá khỏi môi trường TRƯỚC mỗi test trong module này.
+
+    Không phải phép lịch sự — đây là lỗi ĐÃ XẢY RA hai lần. Cả file này kiểm
+    "khi hỏng thì hỏng thế nào", mà phần lớn nhánh hỏng được kích hoạt bằng
+    **thiếu khoá**. Nên kết quả từng phụ thuộc vào `.env` của máy đang chạy:
+    `test_tang_khong_chay_khong_lam_doi_thu_tu` xanh trên máy không có khoá và
+    đỏ trên máy có, với một `TypeError: 'NoneType' object is not callable` chẳng
+    liên quan gì tới thứ nó định kiểm.
+
+    Nó nổ lần gần nhất khi `VlmTier` học thêm đường Trammay (25-09): hai test
+    xoá tay `GEMINI_API_KEY` + `NVIDIA_API_KEY` bỗng thiếu một tên. Xoá theo
+    DANH SÁCH ở một chỗ thì thêm nhà cung cấp mới không đẻ ra lỗi kiểu đó nữa.
+    """
+    for ten in KHOA_NHA_CUNG_CAP:
+        monkeypatch.delenv(ten, raising=False)
 
 
 def candidates(n: int = 5) -> list[Candidate]:
@@ -159,9 +182,9 @@ class TestKhongChayDuoc:
         )
         assert after == pool and not outcome.ran
 
-    def test_vlm_thieu_key(self, monkeypatch):
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-        monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
+    def test_vlm_thieu_key(self):
+        # Khoá đã được `khong_dung_khoa_that` xoá sạch — xoá tay ở đây là chỗ
+        # sẽ quên một tên khi có nhà cung cấp mới.
         pool = candidates()
         after, outcome = VlmTier().rerank(
             pool, query_vi="x", query_en="x", images=lambda _: None

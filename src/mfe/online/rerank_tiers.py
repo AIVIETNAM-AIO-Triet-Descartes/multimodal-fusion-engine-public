@@ -76,6 +76,12 @@ NVIDIA_VLM_MODEL = "meta/llama-3.2-90b-vision-instruct"
 #: con so tron vao nhau.
 GEMINI_VLM_MODEL = os.getenv("MFE_GEMINI_VLM_MODEL", "gemini-3.6-flash")
 
+#: Khoá của cổng Trammay. Nhập lại tên ở đây thay vì `from ... import ENV_KEY`
+#: để `available()` trả lời được "thiếu gì" mà **không** phải import cả module
+#: trammay — tầng này được hỏi `available()` cả khi nó sẽ không chạy.
+#: Một test khoá hai tên này bằng nhau ở `test_vlm_trammay.py`.
+TRAMMAY_ENV_KEY = "TRAMMAY_API_KEY"
+
 #: NVIDIA NIM chỉ nhận MỘT ảnh mỗi request. Bản của Bảo có `if ... <= 1` cho
 #: chuyện này, nên trên thực tế rerank nhiều ảnh của bạn ấy luôn rơi xuống
 #: Gemini — cái tên "Llama-3.2-90B" trên giao diện gần như không được dùng.
@@ -489,11 +495,13 @@ class VlmTier:
         self.jpeg_quality = jpeg_quality
 
     def available(self) -> tuple[bool, str | None]:
+        if os.getenv(TRAMMAY_ENV_KEY):
+            return True, None
         if os.getenv("GEMINI_API_KEY"):
             return True, None
         if os.getenv("NVIDIA_API_KEY"):
             return True, None
-        return False, "chua co GEMINI_API_KEY hay NVIDIA_API_KEY"
+        return False, f"chua co {TRAMMAY_ENV_KEY}, GEMINI_API_KEY hay NVIDIA_API_KEY"
 
     def rerank(
         self,
@@ -563,14 +571,48 @@ class VlmTier:
         return base64.b64encode(buffer.getvalue()).decode()
 
     def _ask(self, prompt: str, paths: list[Path]) -> str:
+        """Chọn nhà cung cấp. **Trammay đi trước** (Lead chốt 25-09-2026).
+
+        Trước đó tầng này chỉ biết Gemini-native và NVIDIA. Đổi sang Trammay
+        **không phải chỉ đổi khoá**: `genai.Client` nói giao thức Gemini, còn
+        Trammay là cổng **OpenAI-compatible** (`/chat/completions`) — nhét khoá
+        Trammay vào `genai.Client` thì ăn 401, không phải chạy chậm hơn.
+
+        Thứ tự: Trammay → NVIDIA (chỉ khi đúng 1 ảnh) → Gemini. Hai đường sau
+        giữ lại làm dự phòng, vì khoá Gemini vẫn còn trong `.env` của vài máy.
+        """
+        if os.getenv(TRAMMAY_ENV_KEY):
+            return self._ask_trammay(prompt, paths)
         if os.getenv("NVIDIA_API_KEY") and len(paths) <= NVIDIA_MAX_IMAGES:
             return self._ask_nvidia(prompt, paths)
         if not os.getenv("GEMINI_API_KEY"):
             raise RuntimeError(
                 f"{len(paths)} anh nhung NVIDIA NIM chi nhan {NVIDIA_MAX_IMAGES}, "
-                "va khong co GEMINI_API_KEY de di duong con lai"
+                "va khong co TRAMMAY_API_KEY hay GEMINI_API_KEY de di duong con lai"
             )
         return self._ask_gemini(prompt, paths)
+
+    def _ask_trammay(self, prompt: str, paths: list[Path]) -> str:
+        """Qua cổng Trammay. Ảnh đã thu nhỏ 512 px ở `_encode`, gửi thẳng base64.
+
+        ⚠ **Con số +0,015 của tầng này KHÔNG mô tả đường này.** Nó đo 27-08 trên
+        `gemini-flash-lite-latest` gọi trực tiếp; Trammay mặc định
+        `ag/gemini-3.8-flash`. Khác model là khác hành vi, và CLAUDE.md §4 đã
+        ghi thẳng bài học đó: *"Mọi bảng rerank phải in kèm bảng trọng số đang
+        dùng"* — ở đây là kèm cả tên model. **Phải đo lại bằng
+        `scripts/measure_rerank.py` trước khi tin vào +0,015 trên nền mới.**
+        """
+        from mfe.online.trammay import TrammayClient  # noqa: PLC0415
+
+        client = TrammayClient.from_env()
+        if client is None:
+            raise RuntimeError(f"co {TRAMMAY_ENV_KEY} nhung TrammayClient.from_env() tra None")
+        return client.chat(
+            prompt,
+            images_b64=[self._encode(p) for p in paths],
+            max_tokens=1024,
+            temperature=0.2,
+        )
 
     def _ask_nvidia(self, prompt: str, paths: list[Path]) -> str:
         from openai import OpenAI  # noqa: PLC0415
