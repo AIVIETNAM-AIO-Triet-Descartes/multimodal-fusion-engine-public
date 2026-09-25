@@ -2151,7 +2151,10 @@ def stage_n7_bge_m3_subtitles(ctx: StageContext) -> dict:
         from mfe.offline.shot_record_prompt import loc_ao_giac_thoai
         model = cached_model(f"bge-m3 {checkpoint}", lambda: SentenceTransformer(checkpoint))
         with Stopwatch() as timer:
-            texts = [loc_ao_giac_thoai(captions[k]) for k in keys]
+            texts = []
+            for k in keys:
+                sach = loc_ao_giac_thoai([captions[k]])
+                texts.append(sach[0] if sach else "")
             vectors = model.encode(
                 texts,
                 normalize_embeddings=True,
