@@ -647,13 +647,17 @@ def check_vectors(
 
     kept_ids: list[str] = []
     for index, key in enumerate(ids):
-        got_video, frame_id = parse_keyframe_id(key)
+        got_video = key.split("#")[0]
         if got_video != video_id:
             raise ContractError(
                 ErrorCode.INVALID_ID, f"manh cua {video_id} chua khoa cua {got_video}: {key}"
             )
         if keep[index]:
-            kept_ids.append(build_keyframe_id(got_video, frame_id))
+            if "#w" in key or "#s" in key:
+                kept_ids.append(key)
+            else:
+                _, frame_id = parse_keyframe_id(key)
+                kept_ids.append(build_keyframe_id(got_video, frame_id))
 
     kept = vectors[keep]
     kept_norms = norms[keep]
