@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 
 from mfe.contracts.tools import Candidate
@@ -92,8 +93,43 @@ class ArmRegistry:
     Order is preserved for display only; fusion is order-independent.
     """
 
-    def __init__(self, arms: list[Arm] | None = None) -> None:
+    #: Số arm chạy SONG SONG trong `run()`. Đặt 1 để quay về tuần tự.
+    #:
+    #: Vì sao song song: đo 25-09 trên 8 câu dev, một truy vấn mất **7,66 s**
+    #: trung vị, và **6,7 s trong đó là 8 arm BM25 chạy lần lượt** —
+    #: `caption_qwen` 1.284 ms · `object` 1.208 ms · `ocr_paddle` 994 ms ·
+    #: `subtitle_partial` 910 ms · `ocr_vietocr` 854 ms · `ocr` 772 ms ·
+    #: `ocr_qwen25` 460 ms · `subtitle_exact` 242 ms. Bốn arm dense chỉ tốn
+    #: 49–152 ms, nên tối ưu vector là tối ưu 4% sai chỗ.
+    #:
+    #: Các arm ĐỘC LẬP: mỗi arm đọc chỉ mục riêng, không arm nào thấy kết quả
+    #: của arm khác, và `weighted_fusion` không phụ thuộc thứ tự. Nên chạy song
+    #: song KHÔNG đổi kết quả một chút nào — chỉ đổi đồng hồ.
+    #:
+    #: ⚠ ĐO RỒI: song song chỉ được **10%** (7.663 → 6.904 ms), KHÔNG phải 3 lần.
+    #:
+    #: Vì `rank_bm25.get_scores` giữ GIL gần như toàn bộ — thân của nó là một
+    #: vòng lặp PYTHON THUẦN trên 168.000 dict, cho MỖI từ của truy vấn:
+    #:
+    #:     q_freq = np.array([(doc.get(q) or 0) for doc in self.doc_freqs])
+    #:
+    #: `np.array(...)` chỉ gói kết quả; phần nặng là list comprehension, và nó
+    #: không nhả GIL. Phần 10% thu được là của bốn arm dense (torch/numpy có
+    #: nhả) cộng chút chồng lấn I/O.
+    #:
+    #: Vẫn giữ song song vì nó **đúng về mặt ngữ nghĩa** và sẽ trả cổ tức ngay
+    #: khi BM25 được thay bằng ma trận thưa — lúc đó phần nặng nằm trong scipy
+    #: và GIL không còn chặn. 760 ms cũng không phải không có gì.
+    #:
+    #: Luồng chứ không phải tiến trình: tiến trình con phải chép cả chỉ mục
+    #: 168k tài liệu qua pickle cho mỗi lượt gọi, và trên Windows `spawn` còn
+    #: phải nạp lại cả module.
+    max_workers: int = 8
+
+    def __init__(self, arms: list[Arm] | None = None, *, max_workers: int | None = None) -> None:
         self._arms: dict[str, Arm] = {}
+        if max_workers is not None:
+            self.max_workers = max_workers
         for arm in arms or []:
             self.register(arm)
 
@@ -203,7 +239,7 @@ class ArmRegistry:
         the optional English form; arms declaring `query_language="en"` need it
         and are skipped (loudly) without it.
         """
-        results: dict[str, list[Candidate]] = {}
+        viec: list[tuple[Arm, str]] = []
         for arm in self.active():
             text = query_text
             if arm.query_language == "en":
@@ -217,15 +253,39 @@ class ArmRegistry:
                 text = query_text_en
             elif ocr_keywords and arm.name in OCR_KEYWORD_ARMS:
                 text = ocr_keywords
+            viec.append((arm, text))
+
+        if not viec:
+            return {}
+
+        def chay(cap: tuple[Arm, str]):
+            arm, text = cap
             try:
-                hits = arm.search(text, top_k, run_id)  # type: ignore[misc]
+                return arm.name, arm.search(text, top_k, run_id), None  # type: ignore[misc]
             except ValueError as err:
                 # e.g. a query with no indexable term — a miss, not a crash.
-                logger.info("arm %s returned nothing for %r (%s)", arm.name, query_text, err)
-                continue
+                return arm.name, None, ("info", err)
             except Exception as err:  # noqa: BLE001 — degrade, do not abort the query
-                logger.warning("arm %s failed (%s); continuing without it", arm.name, err)
+                return arm.name, None, ("warn", err)
+
+        if len(viec) == 1 or self.max_workers <= 1:
+            ket = [chay(c) for c in viec]
+        else:
+            with ThreadPoolExecutor(max_workers=min(self.max_workers, len(viec))) as pool:
+                ket = list(pool.map(chay, viec))
+
+        # Ghi log ở LUỒNG GỌI, không trong worker: thứ tự dòng log là thứ tự
+        # arm, không phải thứ tự luồng nào về trước. Một bảng log xáo trộn giữa
+        # các lượt chạy là thứ không đối chiếu được.
+        results: dict[str, list[Candidate]] = {}
+        for ten, hits, loi in ket:
+            if loi is not None:
+                muc, err = loi
+                if muc == "info":
+                    logger.info("arm %s returned nothing for %r (%s)", ten, query_text, err)
+                else:
+                    logger.warning("arm %s failed (%s); continuing without it", ten, err)
                 continue
             if hits:
-                results[arm.name] = hits
+                results[ten] = hits
         return results

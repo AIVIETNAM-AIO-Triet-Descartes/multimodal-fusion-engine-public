@@ -22,6 +22,7 @@ and must not be paid for by a run that never enables the arm.
 from __future__ import annotations
 
 import logging
+import threading
 from functools import lru_cache
 from typing import Any
 
@@ -90,28 +91,54 @@ DENSE_ARM_SPECS: dict[str, tuple[str, int, str, str, str]] = {
 _SIGLIP_MAX_LENGTH = 64
 
 
+#: Nạp model phải VÀO TỪNG LƯỢT, vì `ArmRegistry.run` chạy các arm song song.
+#:
+#: ⚠ Đây là lỗi ĐÃ XẢY RA, không phải đề phòng lý thuyết. Lượt đầu của ablation
+#: 25-09 in ra:
+#:
+#:     arm siglip failed (cannot import name 'AutoModel' from 'transformers')
+#:     arm clap   failed (cannot import name 'ClapModel' from 'transformers')
+#:     quang_kis_01: 9 arm(s) answered      <- các câu sau đều 11
+#:
+#: `transformers` nạp lười và nạp lâu; hai luồng cùng `from transformers import`
+#: lúc gói mới đi được nửa đường thì luồng thứ hai thấy một module CHƯA có
+#: thuộc tính đó. `lru_cache` không cứu được: nó chỉ nhớ KẾT QUẢ, còn hai luồng
+#: cùng trượt cache vẫn cùng chạy thân hàm.
+#:
+#: Hậu quả không phải là lỗi ồn ào mà là **mất arm im lặng** — `arms.run` bắt
+#: mọi `Exception` để một arm hỏng không giết cả truy vấn, nên câu đầu tiên chạy
+#: thiếu `siglip` (trọng số 2,0, arm mạnh nhất: bỏ nó là −0,093 Final) mà chỉ có
+#: một dòng WARNING.
+_KHOA_NAP = threading.Lock()
+
+
 @lru_cache(maxsize=4)
 def _load_sentence_transformer(checkpoint: str) -> Any:
-    from sentence_transformers import SentenceTransformer
+    with _KHOA_NAP:
+        from sentence_transformers import SentenceTransformer
 
-    logger.info("Loading query encoder %s (first call downloads weights)", checkpoint)
-    return SentenceTransformer(checkpoint)
+        logger.info("Loading query encoder %s (first call downloads weights)", checkpoint)
+        return SentenceTransformer(checkpoint)
 
 
 @lru_cache(maxsize=2)
 def _load_siglip(checkpoint: str) -> Any:
-    from transformers import AutoModel, AutoTokenizer
+    with _KHOA_NAP:
+        from transformers import AutoModel, AutoTokenizer
 
-    logger.info("Loading SigLIP text tower %s", checkpoint)
-    return AutoTokenizer.from_pretrained(checkpoint), AutoModel.from_pretrained(checkpoint).eval()
+        logger.info("Loading SigLIP text tower %s", checkpoint)
+        return (AutoTokenizer.from_pretrained(checkpoint),
+                AutoModel.from_pretrained(checkpoint).eval())
 
 
 @lru_cache(maxsize=2)
 def _load_clap(checkpoint: str) -> Any:
-    from transformers import ClapModel, ClapProcessor
+    with _KHOA_NAP:
+        from transformers import ClapModel, ClapProcessor
 
-    logger.info("Loading CLAP text tower %s", checkpoint)
-    return ClapProcessor.from_pretrained(checkpoint), ClapModel.from_pretrained(checkpoint).eval()
+        logger.info("Loading CLAP text tower %s", checkpoint)
+        return (ClapProcessor.from_pretrained(checkpoint),
+                ClapModel.from_pretrained(checkpoint).eval())
 
 
 def _pooled(out) -> np.ndarray:

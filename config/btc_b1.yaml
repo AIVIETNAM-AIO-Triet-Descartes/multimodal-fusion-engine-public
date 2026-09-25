@@ -325,6 +325,27 @@ retrieval:
     # bằng — 0,0 nghĩa là "không đóng góp trên bộ đề này", không phải "vô dụng".
     clap: 0.0
   rerank_budget_ms: 20000
+  # ── Arm TẮT HẲN — khác trọng số 0, và khác biệt đó tốn 25% độ trễ ──────────
+  #
+  # `fusion.py` ghi thẳng: "A weight of 0 does not disable an arm — the arm
+  # still contributes its candidates to the pool". Nên ba arm dưới đây vẫn chạy
+  # đủ thời gian rồi mới bị nhân với 0.
+  #
+  # Đo 25-09 trên 163 câu dev (`scripts/measure_latency.py` + `--ablation`):
+  #
+  #   arm          thời gian   ablation (gỡ HẲN)
+  #   ocr             772 ms   +0,000 · 124/163
+  #   ocr_paddle      994 ms   +0,000 · 124/163
+  #   clap             63 ms   +0,000 · 124/163
+  #   ──────────────────────────────────────────
+  #   cộng          1.829 ms   trên tổng 7.402 ms = 25%
+  #
+  # Không mất câu nào, không đổi Final (0,563 cả hai). Chi phí thuần.
+  #
+  # ⚠ Gắn với KHO HIỆN TẠI. `ocr_paddle` thừa vì `ocr_vietocr` + `ocr_qwen25`
+  # đã phủ — mà batch 2 CHƯA có vietocr. Đo lại khi batch 2 vào kho.
+  arms_disabled: [ocr, ocr_paddle, clap]
+
   rerank_depth: 100
   temporal_window_frames: 640
   dedup_depth: 20

@@ -180,6 +180,24 @@ class RetrievalConfig(_Section):
         gt=0, description="Also the submit depth; PDF §2.2 allows 100 answers"
     )
     fusion_weights: FusionWeights = FusionWeights()
+    #: Arm KHÔNG chạy — khác hẳn trọng số 0, và khác biệt đó đã trả giá một lần.
+    #:
+    #: `fusion.py` ghi thẳng: *"A weight of 0 does not disable an arm — the arm
+    #: still contributes its candidates to the pool"*. Nên đặt 0,0 vẫn phải trả
+    #: **toàn bộ** thời gian chạy arm đó, chỉ để nó đừng cộng điểm.
+    #:
+    #: Đo 25-09 trên 163 câu dev: ba arm trọng số 0,0 (`ocr`, `ocr_paddle`,
+    #: `clap`) tốn **1.829 ms trên tổng 7.402 ms** = 25% độ trễ một truy vấn.
+    #: Ablation (gỡ HẲN từng arm, không phải đặt 0) ra **+0,000 · 124/163** cho
+    #: cả ba — không mất một câu nào. Nên ở đây chúng là chi phí thuần.
+    #:
+    #: ⚠ Danh sách này gắn với KHO hiện tại. Batch 2 vào kho là phải đo lại:
+    #: `ocr_paddle` hôm nay thừa vì `ocr_vietocr` + `ocr_qwen25` đã phủ, nhưng
+    #: batch 2 chưa có vietocr.
+    arms_disabled: list[str] = Field(
+        default_factory=list,
+        description="Tên arm bị TẮT hẳn (không chạy). Khác trọng số 0.",
+    )
     fusion: FusionConfig = FusionConfig()
     translation: TranslationConfig = TranslationConfig()
     rerank_budget_ms: int = Field(gt=0, description="Over budget -> truncate, keep coarse order")

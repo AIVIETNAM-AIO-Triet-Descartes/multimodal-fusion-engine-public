@@ -726,6 +726,22 @@ class Cascade:
         arm_weights = {name: weight_of(name) for name in TEXT_ARM_SPECS}
         dense_weights = {name: weight_of(name) for name in DENSE_ARM_SPECS}
 
+        # `arms_disabled` TẮT HẲN arm, khác trọng số 0 (xem `RetrievalConfig`).
+        # Đọc qua `getattr` để config cũ không có khoá này vẫn nạp được.
+        tat = set(getattr(getattr(self.config, "retrieval", None), "arms_disabled", None) or [])
+        if tat:
+            logger.info("arms_disabled: %s — không chạy, không vào pool", sorted(tat))
+        arm_enabled = {name: name not in tat for name in TEXT_ARM_SPECS}
+        dense_enabled = {name: name not in tat for name in DENSE_ARM_SPECS}
+        la = tat - set(TEXT_ARM_SPECS) - set(DENSE_ARM_SPECS)
+        if la:
+            # Gõ sai tên arm thì không có gì bị tắt, và không có gì báo — đúng
+            # lớp lỗi `ArmRegistry.run` đã dính với `["bm25","ocr","subtitles"]`.
+            raise ValueError(
+                f"arms_disabled có tên không tồn tại: {sorted(la)}. "
+                f"Tên hợp lệ: {sorted(set(TEXT_ARM_SPECS) | set(DENSE_ARM_SPECS))}"
+            )
+
         if self.flat_bundle is not None:
             # Đường KHÔNG KHO: đọc bản gộp trong RAM. Cùng tên arm, cùng
             # `Candidate`, cùng `query_language` — nên fusion, dedup, DANTE và
@@ -733,9 +749,13 @@ class Cascade:
             # điều kiện để so được kết quả hai đường; đổi tên arm là mất phép so.
             from mfe.online.flat_arms import build_flat_dense_arms, build_flat_text_arms
 
-            for arm in build_flat_text_arms(self.flat_bundle, weights=arm_weights):
+            for arm in build_flat_text_arms(
+                self.flat_bundle, weights=arm_weights, enabled=arm_enabled
+            ):
                 registry.register(arm)
-            for arm in build_flat_dense_arms(self.flat_bundle, weights=dense_weights):
+            for arm in build_flat_dense_arms(
+                self.flat_bundle, weights=dense_weights, enabled=dense_enabled
+            ):
                 registry.register(arm)
             return registry
 
