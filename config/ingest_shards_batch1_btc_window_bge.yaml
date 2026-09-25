@@ -1,0 +1,47 @@
+# BUNDLE BTC — nhúng BẢN GHI CỬA SỔ bằng BGE-M3, BATCH 1
+# notebooks/10.2-btc-bge-m3-caption-batch1.ipynb  (cờ BATCH = 1)
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# ĐẦU VÀO CỦA BATCH 1 KHÔNG NẰM TRONG BUNDLE — đây là cả lý do file này tồn tại.
+#
+#   đọc   /research/window-records-v1/parts/window_records/{video}.json   873
+#   ghi   /bundle/aic_btc_b1_v1/parts/window_dense/{video}.npz
+#
+# nb36 ghi bản ghi cửa sổ của batch 1 vào một gốc NGHIÊN CỨU riêng, còn của
+# batch 2 thì ghi thẳng vào bundle. Đếm 25-09:
+# `/bundle/aic_btc_b1_v1/parts/window_records` có **0 file**, còn
+# `/research/window-records-v1/parts/window_records` có **873**.
+#
+# `BundleLayout.window_records()` tự nhận chỗ đúng theo tiền tố bundle (commit
+# `abde802` của Bảo), nên file này KHÔNG cần khai đường dẫn.
+#
+# Đầu RA vẫn ở trong bundle, giống hệt `dense_vectors` của caption batch 1:
+# artifact nằm ngoài gốc bundle là artifact `merge_bundle` không thấy.
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# CÙNG volume `keyframe-augmentation-research`, CÙNG bảng phân công `capb1`
+# như lượt nhúng caption (`ingest_shards_batch1_btc_bge.yaml`). Giữ nguyên bảng
+# phân công là để `check_ownership` không từ chối bundle: `part-manifest` ghi
+# đúng MỘT `author`, và đổi người giữa hai lượt là sinh ra một lượt chạy lại.
+
+bundle: aic_btc_b1_v1
+keyframe_set: btc
+calibration_video: L21_V001
+
+assign: zips
+zip_inventory: config/zips_keyframes_btc_capb1.yaml
+
+stages:
+  - n8_bge_m3_window
+
+params:
+  n8_bge_m3_window:
+    # KHÔNG có `window_records_root` ở đây, và đó là chủ ý: Bảo đã cho
+    # `BundleLayout.window_records()` tự nhận batch 1 qua tiền tố bundle
+    # (`/bundle/aic_btc_b1...` -> `/research/window-records-v1`, commit
+    # `abde802`). Thêm một tham số nữa ở đây là hai nguồn sự thật cho cùng một
+    # đường dẫn, và chúng sẽ lệch nhau.
+    #
+    # 16 hợp với T4 15 GB. Hạ xuống 8 nếu OOM; cả nhóm phải để cùng số vì
+    # `check_fingerprints` so `params` giữa các mảnh.
+    batch_size: 16
