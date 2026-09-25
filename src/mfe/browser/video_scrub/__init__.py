@@ -51,9 +51,9 @@ def video_scrub(
 
     `None` nghĩa là chưa ai bấm chọn lần nào trong phiên này.
 
-    `fps` phải là fps của **`map-keyframes`**, không phải fps trình duyệt đoán từ
-    container: số khung trả về tính bằng `floor(currentTime × fps)` và đó chính
-    là toạ độ sẽ đi vào bài nộp.
+    `seconds` is the presented frame's mediaTime from requestVideoFrameCallback.
+    Selection is blocked without reliable PTS. `frame` is an FPS-based display
+    estimate only; it is NOT an authoritative decoded index for VFR videos.
     """
     return _declare()(
         url=url,

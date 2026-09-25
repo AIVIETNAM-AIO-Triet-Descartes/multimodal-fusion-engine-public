@@ -1,4 +1,4 @@
-"""Bàn nộp — tải cả gói đề lên, chạy, duyệt theo dạng, xếp tay, xuất CSV/ZIP.
+"""Bàn nộp — duyệt ứng viên, xếp tay, xuất một đáp án JSON DRES.
 
     streamlit run app/submit_lab.py
 
@@ -9,9 +9,9 @@ kéo thả sửa thứ hạng, và xuất ra đúng những file BTC chấm.
 
 Ba tab, vì ba dạng đề nộp ba hình dạng khác nhau
 ------------------------------------------------
-    KIS    video_id, frame_id
-    QA     video_id, frame_id, answer
-    TRAKE  video_id, frame_id × N   (đúng thứ tự sự kiện)
+    KIS    mediaItemName, start/end (ms)
+    QA     QA-answer-video_id-time_ms
+    TRAKE  TR-video_id-frame_id × N (đúng thứ tự sự kiện)
 
 Dạng đọc từ **hậu tố tên file** (`-kis` / `-qa` / `-trake`), nên tải một gói lên
 là câu tự về đúng tab. Không có ô "chọn dạng" nào cả — đoán dạng là chỗ sai
@@ -25,8 +25,7 @@ Ba thứ ở đây không được phép sai, và cả ba đều hỏng IM LẶN
 2. **`frame_id` là frame của video gốc**, đọc từ `RelationalMap`, KHÔNG suy ra
    từ `keyframe_id`. `L21_V001#031124` là frame 31.124 và tình cờ là keyframe
    thứ 250 — hai số cách nhau 17 phút video.
-3. **Thứ tự dòng có tính điểm.** Final Score = trung bình R@k tại
-   k ∈ {1, 5, 20, 50, 100}. Đó là toàn bộ lý do có phần kéo thả.
+3. **Chỉ xuất top 1 hiện tại**, sau xếp tay và tua. Tải file chưa phải nộp bài.
 
 Vì sao đi qua `build_flat_cascade` chứ không tự ghép arm
 ---------------------------------------------------------
@@ -68,11 +67,10 @@ from mfe.eval.query_package import (  # noqa: E402
     load_package,
     parse_query,
 )
-from mfe.eval.submission import to_csv_text  # noqa: E402
+from mfe.eval.dres_export import top1_payload, json_bytes, candidate_time_ms  # noqa: E402
 from mfe.eval.submission_bundle import (  # noqa: E402
     SearchText,
     apply_manual_order,
-    build_zip,
     replace_at_rank,
     run_package,
     submissions_for,
@@ -763,7 +761,7 @@ def render_answer_box(query: PackagedQuery, result, images) -> None:
     left, right = st.columns([4, 1])
     with left, st.container():
         typed = st.text_input(
-            "Đáp án (cột thứ ba của mọi dòng)", key=answer_key,
+            "Đáp án QA cho khung top 1", key=answer_key,
             help="Dấu phẩy trong đáp án được `csv` trích dẫn đúng.",
         )
     st.session_state[keep_key] = typed
@@ -881,7 +879,11 @@ def render_scrub_box(query: PackagedQuery, ranked: list[Candidate]) -> None:
             )
             return
 
-        start = (current or 0) / fps
+        try:
+            start = candidate_time_ms(target, _relational) / 1000
+        except (ValueError, ContractError):
+            st.error("Thiếu PTS của khung đã chọn; không suy ra thời gian từ FPS.")
+            return
         st.markdown(
             f"Hạng **{int(rank)}** · `{target.keyframe_id}` · "
             f"khung `{current if current is not None else '?'}` · "
@@ -907,9 +909,9 @@ def render_scrub_box(query: PackagedQuery, ranked: list[Candidate]) -> None:
         )
 
         st.caption(
-            "Tua tới đúng khoảnh khắc rồi bấm nút trên trình phát. Số khung lấy "
-            f"bằng `floor(giây × {fps:.3f})`, fps đọc từ `map-keyframes` — đúng "
-            "thứ BTC chấm."
+            "JSON KIS/QA dùng thời gian bạn chọn trên trình phát, đổi sang ms. "
+            "Số frame hiển thị khi tua chỉ là ước lượng theo FPS; không dùng "
+            "ước lượng đó để tính thời gian nộp, đặc biệt với video VFR."
         )
 
         # Giá trị component sống qua mọi lượt vẽ lại, nên phải so `nonce` mới
@@ -917,8 +919,12 @@ def render_scrub_box(query: PackagedQuery, ranked: list[Candidate]) -> None:
         # phép so này thì trang tự thay khung lại sau mỗi lần vẽ.
         nonce_key = f"scrub_nonce_{query.query_id}"
         if picked and picked.get("nonce") != st.session_state.get(nonce_key):
+            if picked.get("time_source") != "video_frame_callback":
+                st.error("Khung tua chưa có PTS xác thực. Tải lại trình phát và chọn lại.")
+                return
             st.session_state[nonce_key] = picked.get("nonce")
-            moi = replace_at_rank(ranked, int(rank), int(picked["frame"]))
+            moi = replace_at_rank(ranked, int(rank), int(picked["frame"]),
+                                  pts_time=float(picked["seconds"]))
             results[query.query_id] = moi
             # Ghim luôn thứ tự: id của khung vừa thay là id MỚI, nên thứ tự tay cũ
             # (lưu theo id) sẽ cho nó rơi ra rồi nối lại ở cuối — tức đúng cái hạng
@@ -968,7 +974,7 @@ uploads = st.sidebar.file_uploader(
     "Thả các file `query-*.txt` vào đây",
     type=["txt"], accept_multiple_files=True,
     help="Dạng đề đọc từ hậu tố tên file: `-kis`, `-qa`, `-trake`. "
-         "Tên file nộp = tên đề + `.csv`, nên ĐỪNG đổi tên file.",
+         "Xuất JSON DRES cho đáp án top 1 của từng câu.",
 )
 
 folder = st.sidebar.text_input(
@@ -979,10 +985,8 @@ folder = st.sidebar.text_input(
 )
 
 st.sidebar.header("⚙ Tuỳ chọn")
-top_k = st.sidebar.slider(
-    "Số dòng nộp mỗi câu", 10, MAX_ANSWERS_PER_QUERY, MAX_ANSWERS_PER_QUERY, 10,
-    help="R@100 vào Final Score và nó chỉ tăng khi nộp thêm dòng.",
-)
+st.sidebar.caption("Chung kết DRES: xuất đúng 1 đáp án top 1 mỗi câu.")
+top_k = 1
 pool_k = st.sidebar.slider("Độ sâu pool để xem", 50, 500, 200, 50)
 grid_cols = st.sidebar.slider("Số cột lưới ảnh", 2, 8, 5)
 show_images = st.sidebar.checkbox("Hiện ảnh (tải từ Modal)", value=True)
@@ -1081,7 +1085,7 @@ for tab, qtype in zip(tabs, TYPES, strict=True):
                 )
                 st.caption(
                     f"Đẻ ra một câu **mới** (`{ADHOC_PREFIX}-N-{qtype.lower()}`) để "
-                    "dò — **không** vào ZIP nộp. Muốn thay kết quả của một đề có "
+                    "dò. Chỉ xuất đáp án cho đúng câu BTC đang yêu cầu. Muốn thay kết quả của một đề có "
                     "sẵn thì dùng ô `🔍 Chuỗi tìm` của chính câu đó."
                 )
                 if st.form_submit_button("🔍 Tìm và thêm vào tab") and typed.strip():
@@ -1158,6 +1162,9 @@ for tab, qtype in zip(tabs, TYPES, strict=True):
             continue
 
         result = results[picked_id]
+        if not result:
+            st.warning("Chưa có ứng viên để xuất. Hãy tìm lại trước khi tải JSON.")
+            continue
         images = load_images()
 
         # QUEST đứng NGOÀI nhánh `!= TRAKE`: nó nối thêm vào câu bao nên áp được
@@ -1174,10 +1181,16 @@ for tab, qtype in zip(tabs, TYPES, strict=True):
         # --- xếp tay -------------------------------------------------------
         if query.type == "TRAKE":
             st.info(
-                "TRAKE không có phần xếp tay: mỗi dòng là **một video kèm N "
-                "khung tăng dần** do `dante.align` ghép. Kéo một dòng lên đầu "
-                "không sửa được chuỗi bên trong nó."
+                "TRAKE: mỗi đáp án là một video kèm đầy đủ chuỗi khung theo "
+                "thứ tự sự kiện. Chọn chuỗi để đưa lên top 1, không cắt còn một khung."
             )
+            chosen = st.selectbox(
+                "Đưa chuỗi TRAKE lên top 1", range(len(result)),
+                format_func=lambda i, sequences=tuple(result): f"{i + 1}. {sequences[i].video_id}: "
+                    + ",".join(map(str, sequences[i].frame_ids)),
+                key=f"trake_top_{picked_id}",
+            )
+            result = [result[chosen]] + [item for i, item in enumerate(result) if i != chosen]
             for position, item in enumerate(result[:20], start=1):
                 st.code(
                     f"{position}. {item.video_id},"
@@ -1187,10 +1200,9 @@ for tab, qtype in zip(tabs, TYPES, strict=True):
         else:
             ranked = ordered(picked_id, result)
             machine_rank = {c.keyframe_id: i for i, c in enumerate(result, start=1)}
-            depth = st.slider(
-                "Xếp tay bao nhiêu dòng đầu", 10,
-                min(MAX_ANSWERS_PER_QUERY, len(ranked)),
-                min(MAX_ANSWERS_PER_QUERY, len(ranked)), 10,
+            max_depth = min(MAX_ANSWERS_PER_QUERY, len(ranked))
+            depth = max_depth if max_depth <= 10 else st.slider(
+                "Xếp tay bao nhiêu ứng viên đầu", 10, max_depth, max_depth,
                 key=f"depth_{picked_id}",
             )
             grid = ranked[: int(depth)]
@@ -1275,58 +1287,28 @@ for tab, qtype in zip(tabs, TYPES, strict=True):
                     )
 
         try:
-            subs = rows_for(query, result, _relational, top_k)
-        except ContractError as err:
+            payload = top1_payload(query, result, _relational,
+                                   manual_order=manual_order(picked_id),
+                                   answer=answer_for(picked_id))
+        except (ContractError, ValueError) as err:
             st.error(str(err))
         else:
+            st.markdown("### Đáp án top 1 — xem trước khi xuất")
+            st.json(payload)
+            st.caption("Chỉ tải file JSON. Chưa gửi và chưa nộp lên DRES.")
             st.download_button(
-                f"⬇️ `{query.csv_name}` — {len(subs)} dòng",
-                data=to_csv_text(subs, limit=top_k).encode("utf-8"),
-                file_name=query.csv_name, mime="text/csv",
+                "Xuất đáp án top 1 — JSON DRES",
+                data=json_bytes(payload),
+                file_name=f"{query.query_id}.json", mime="application/json",
                 key=f"dl_{picked_id}",
             )
 
 # ---------------------------------------------------------------------------
-# Xuất cả gói
+# Chung kết: từng file là một payload, không phải một lượt nộp tự động.
 # ---------------------------------------------------------------------------
 
 st.markdown("---")
-ran = [q for q in parsed if q.query_id in results]
-if ran:
-    bundle = build_zip(
-        ran, results, _relational, limit=top_k,
-        manual_orders={
-            q.query_id: order for q in ran if (order := manual_order(q.query_id))
-        },
-        answers={
-            q.query_id: answer_for(q.query_id) for q in ran
-        },
-    )
-    # Mẫu số là số ĐỀ BTC, không phải số câu đã chạy: câu tự gõ để dò không bao
-    # giờ thuộc gói nộp, nên đếm chúng vào mẫu số sẽ làm một gói ĐỦ file trông
-    # như thiếu.
-    total = sum(1 for q in parsed if not is_adhoc(q.query_id))
-    written = len(ran) - len(bundle.skipped)
-    st.download_button(
-        f"⬇️ Cả gói — {written}/{total} file trong ZIP",
-        data=bundle.payload, file_name="submissions.zip",
-        mime="application/zip", type="primary",
-    )
-    missing = {k: v for k, v in bundle.skipped.items() if not is_adhoc(k)}
-    adhoc = [k for k in bundle.skipped if is_adhoc(k)]
-    if missing:
-        # Một ZIP thiếu file trông y hệt một ZIP đủ file cho tới lúc đếm, và lúc
-        # đếm thì đã nộp rồi.
-        st.warning(f"**{len(missing)} câu KHÔNG có file trong ZIP:**")
-        for query_id, reason in missing.items():
-            st.caption(f"· `{query_id}` — {reason}")
-    if adhoc:
-        st.caption(
-            f"ℹ️ {len(adhoc)} câu tự gõ để dò không vào ZIP (đúng như thiết kế): "
-            + ", ".join(f"`{k}`" for k in adhoc)
-        )
-
 st.caption(
-    "Không dòng tiêu đề · tối đa 100 dòng · **thứ tự dòng có tính điểm**. "
-    "`frame_id` đọc từ Relational Map, không suy ra từ `keyframe_id`."
+    "DRES chung kết · một đáp án top 1 · KIS/QA dùng thời gian ms; "
+    "TRAKE dùng chuỗi frame ID. Tải JSON chưa phải nộp bài."
 )

@@ -170,7 +170,7 @@ def apply_manual_order(
 
 
 def replace_at_rank(
-    candidates: Sequence[Candidate], rank: int, frame_idx: int
+    candidates: Sequence[Candidate], rank: int, frame_idx: int, *, pts_time: float | None = None
 ) -> list[Candidate]:
     """Thay ứng viên ở **hạng `rank`** (đếm từ 1) bằng khung `frame_idx` tự tua.
 
@@ -206,6 +206,7 @@ def replace_at_rank(
         score=old.score,
         evidence_id=f"tua_tay:{old.video_id}:{frame_idx}",
         frame_idx=frame_idx,
+        pts_time=pts_time,
     )
     return rows
 

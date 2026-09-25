@@ -76,6 +76,8 @@ class Candidate(BaseModel):
     #: Nhưng khung tự tua thì theo định nghĩa không nằm trong bản đồ, nên nó phải
     #: **tự khai** toạ độ của mình thay vì để phép tra đoán hộ — khai tường minh
     #: thì một khung thiếu thật vẫn ném đúng như cũ.
+    pts_time: float | None = Field(default=None, ge=0, allow_inf_nan=False,
+                                  description="Explicit presentation time in seconds for a manually selected frame")
     frame_idx: int | None = Field(
         default=None,
         description="Chỉ cho khung ngoài danh mục BTC; None = tra Relational Map",
