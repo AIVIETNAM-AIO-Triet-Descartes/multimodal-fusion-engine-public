@@ -270,6 +270,9 @@ class BundleLayout:
         return f"{self.root}/subtitles_segments/{video_id}.json"
 
     def window_records(self, video_id: str) -> str:
+        # Cấu hình cứng cho Batch 1 theo thiết kế của Notebook 36
+        if self.root.startswith("/bundle/aic_btc_b1"):
+            return f"/research/window-records-v1/parts/window_records/{video_id}.json"
         return f"{self.root}/parts/window_records/{video_id}.json"
 
     def part(self, artifact: str, video_id: str) -> str:
