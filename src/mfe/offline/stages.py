@@ -2046,38 +2046,33 @@ _BGE_M3_SOURCE = "qwen_captions"
 def stage_n6_bge_m3(ctx: StageContext) -> dict:
     """Caption -> BGE-M3. Tach khoi lan sinh caption, nen nhung lai la mien phi.
 
-    Doc part `qwen_captions` **tu Volume** chu khong nhan qua `ctx`: tang nay
-    khong can anh, khong can map-keyframes, khong can GPU sinh. Do la ly do no
-    chay o mot LUOT RIENG chu khong noi duoi `n6_caption_qwen` — vLLM giu
-    `gpu_memory_utilization=0.9` nen nap them BGE-M3 trong cung vong lap la OOM,
-    con thao/nap model theo tung video thi ton hon ca phan viec no lam.
-
-    Caption viet TIENG ANH (§4 CLAUDE.md) va BGE-M3 la mo hinh **da ngu**, nen
-    truy van tieng Viet khop thang khong qua buoc dich nao.
+    Tu dong nhan dien Batch 1 hay Batch 2 thong qua ctx.layout.root de doc dung
+    nguon caption tu volume phu hop (gemini_captions hoac qwen_captions).
     """
     from sentence_transformers import SentenceTransformer  # noqa: PLC0415
 
     checkpoint = "BAAI/bge-m3"
-    local = ctx.workdir / f"{_BGE_M3_SOURCE}_{ctx.video_id}.json"
-    ctx.writer.transport.get(ctx.layout.part(_BGE_M3_SOURCE, ctx.video_id), local)
+    
+    if ctx.layout.root.startswith("/bundle/aic_btc_b1"):
+        source = "gemini_captions"
+        remote_path = f"/research/caption-gemini-trammay-v1/parts/captions/{ctx.video_id}.json"
+    else:
+        source = "qwen_captions"
+        remote_path = ctx.layout.part(source, ctx.video_id)
+
+    local = ctx.workdir / f"{source}_{ctx.video_id}.json"
+    ctx.writer.transport.get(remote_path, local)
     captions = json.loads(local.read_text(encoding="utf-8"))
+    
     if not captions:
         raise RuntimeError(
-            f"{ctx.video_id}: chua co {_BGE_M3_SOURCE} — chay n6_caption_qwen truoc"
+            f"{ctx.video_id}: chua co {source} ở {remote_path} — chay tao caption truoc"
         )
 
     # `sorted` chu khong phai thu tu file: `write_vector_part` gan `ids` voi
     # `vectors` theo VI TRI, nen hai lan chay phai duyet cung mot thu tu.
     keys = sorted(captions)
-    # `cached_model` chu KHONG phai `SentenceTransformer(...)` thang.
-    #
-    # Bge-m3 nang ~2,2 GB. Nap trong than vong lap la nap lai cho TUNG video —
-    # 404 lan voi `trong`, 469 voi `quang` — trong khi phan viec that cua mot
-    # video la nhung vai tram cau ngan. Do la dung cai bay
-    # `tests/unit/offline/test_multipass_bundle.py::TestModelCache` do duoc o
-    # cac tang khac: **5-16 gio moi nguoi chi de nap model**.
-    #
-    # Va no khong on ao: moi video van xong, marker van cam, chi la lau gap boi.
+    
     model = cached_model(f"bge-m3 {checkpoint}", lambda: SentenceTransformer(checkpoint))
     with Stopwatch() as timer:
         vectors = model.encode(
@@ -2094,42 +2089,7 @@ def stage_n6_bge_m3(ctx: StageContext) -> dict:
         keys,
         np.asarray(vectors, dtype=np.float32),
         model=checkpoint,
-        params={"normalize": True, "source": _BGE_M3_SOURCE},
-        elapsed_s=timer.seconds,
-    )
-
-def stage_n6_bge_m3_batch1(ctx: StageContext) -> dict:
-    """Caption -> BGE-M3 specifically for batch 1 reading from research path."""
-    from sentence_transformers import SentenceTransformer  # noqa: PLC0415
-
-    checkpoint = "BAAI/bge-m3"
-    local = ctx.workdir / f"gemini_captions_{ctx.video_id}.json"
-    
-    # Batch 1 Gemini captions are on the research volume at this specific path
-    remote_path = f"/research/caption-gemini-trammay-v1/parts/captions/{ctx.video_id}.json"
-    ctx.writer.transport.get(remote_path, local)
-    
-    captions = json.loads(local.read_text(encoding="utf-8"))
-    if not captions:
-        raise RuntimeError(f"{ctx.video_id}: chưa có caption ở {remote_path}")
-
-    keys = sorted(captions)
-    model = cached_model(f"bge-m3 {checkpoint}", lambda: SentenceTransformer(checkpoint))
-    with Stopwatch() as timer:
-        vectors = model.encode(
-            [captions[k] for k in keys],
-            normalize_embeddings=True,
-            batch_size=ctx.params.get("batch_size", 16),
-            convert_to_numpy=True,
-        )
-
-    return ctx.writer.write_vector_part(
-        "dense_vectors",
-        ctx.video_id,
-        keys,
-        np.asarray(vectors, dtype=np.float32),
-        model=checkpoint,
-        params={"normalize": True, "source": "gemini_captions"},
+        params={"normalize": True, "source": source},
         elapsed_s=timer.seconds,
     )
 
@@ -2284,7 +2244,7 @@ STAGES = {
     "n6_caption_sota_qwen": stage_n6_caption_sota_qwen,
     "n6_ocr_qwen25": stage_n6_ocr_qwen25,
     "n6_bge_m3": stage_n6_bge_m3,
-    "n6_bge_m3_batch1": stage_n6_bge_m3_batch1,
+    "n6_bge_m3_batch1": stage_n6_bge_m3,
     "n6_gemini_split_embed": stage_n6_gemini_split_embed,
     "n7_bge_m3_subtitles": stage_n7_bge_m3_subtitles,
     "n8_bge_m3_window": stage_n8_bge_m3_window,
