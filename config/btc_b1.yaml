@@ -342,9 +342,37 @@ retrieval:
   #
   # Không mất câu nào, không đổi Final (0,563 cả hai). Chi phí thuần.
   #
-  # ⚠ Gắn với KHO HIỆN TẠI. `ocr_paddle` thừa vì `ocr_vietocr` + `ocr_qwen25`
-  # đã phủ — mà batch 2 CHƯA có vietocr. Đo lại khi batch 2 vào kho.
-  arms_disabled: [ocr, ocr_paddle, clap]
+  # ── Thêm `object` + `ocr_vietocr` (Lead chốt 25-09) ───────────────────────
+  #
+  # Khác ba arm trên: hai arm này trọng số **0,5**, tức đang thật sự cho điểm.
+  # Lý do bỏ là **dữ liệu**, không phải hiệu năng:
+  #
+  #   ocr_vietocr  batch 2 KHÔNG kịp sinh vietocr, và `ocr_qwen25` (Gemini) đã
+  #                đảm nhận toàn bộ phần OCR cho cả hai batch. Giữ nó nghĩa là
+  #                mọi khung batch 1 được cộng tới 5,9% trần điểm hợp nhất mà
+  #                không khung batch 2 nào có cơ hội nhận — thiên lệch giữa hai
+  #                nửa kho, không phải vì nội dung mà vì thiếu một file.
+  #   object       Lead chốt không còn tính tới. Biên leo dốc của nó vốn là
+  #                0,001, và `config` tự ghi "nằm trong vùng nhiễu, giữ vì leo
+  #                dốc chọn nó, không vì tin nó".
+  #
+  # Đo 25-09 trước khi đổi, `mfe.eval.official`, gỡ CẢ HAI cùng lúc:
+  #
+  #   bộ đề      giữ        bỏ         Δ
+  #   dev      0,5192     0,5197    +0,0005
+  #   heldout  0,5419     0,5486    +0,0067
+  #
+  # ⇒ **Không mất gì, còn được một ít.** Con số "−0,006 khi bỏ vietocr" trong
+  # CLAUDE.md là của kho 12 arm hồi 28-08 và đã lạc hậu.
+  #
+  # ⚠ Vẫn NÊN leo dốc lại cả bảng trọng số (bỏ arm là đổi hợp nhất), nhưng số
+  # đo trên cho thấy đó không còn là việc CHẶN. Nhớ xoá `.cache/tune/*` trước.
+  #
+  # ⚠ Gắn với KHO HIỆN TẠI, và cả hai bộ đề đều dựng trên **batch 1** — nơi
+  # vietocr CÓ dữ liệu. Tức phép đo này đang cho vietocr lợi thế tối đa mà nó
+  # vẫn không thắng. Thiên lệch thật chỉ lộ khi khung batch 2 cạnh tranh cùng
+  # truy vấn với khung batch 1, và chưa có bộ đề nào như thế.
+  arms_disabled: [ocr, ocr_paddle, clap, object, ocr_vietocr]
 
   rerank_depth: 100
   temporal_window_frames: 640

@@ -102,6 +102,9 @@ class FlatBundle:
         self.vectors: dict[str, np.ndarray] = {}
         self.vector_keys: dict[str, list[str]] = {}
         self.missing: dict[str, str] = {}
+        #: `source` -> văn bản đã chuẩn hoá, CÙNG THỨ TỰ với `text_keys[source]`.
+        #: Chỉ dựng cho nguồn có arm khớp cụm. Xem `chuan_hoa()`.
+        self._chuan_hoa: dict[str, list[str]] = {}
 
     @classmethod
     def load(cls, root: str | Path, *, sources=None, models=None) -> FlatBundle:
@@ -170,20 +173,50 @@ class FlatBundle:
 
         Lười có chủ ý: dựng đủ 7 nguồn tốn cả phút và phần lớn lượt chạy chỉ
         đụng vài arm.
+
+        Dùng `BM25Thua` chứ không `rank_bm25.BM25Okapi`: cùng công thức, cùng
+        điểm, nhưng chấm nhanh hơn **400–779 lần** và **nhả GIL**. Lý do đầy đủ
+        + số đo ở `mfe.online.bm25_thua`.
         """
         if source in self.bm25:
             return self.bm25[source]
-        from rank_bm25 import BM25Okapi  # noqa: PLC0415
+        from mfe.online.bm25_thua import BM25Thua  # noqa: PLC0415
 
         keys = self.text_keys[source]
         corpus = [_tokenize(self.texts[source][k]) for k in keys]
         started = time.perf_counter()
-        self.bm25[source] = BM25Okapi(corpus) if corpus else None
+        self.bm25[source] = BM25Thua(corpus) if corpus else None
         logger.info(
             "bm25 %s: %d tai lieu (%.1fs)", source, len(corpus),
             time.perf_counter() - started,
         )
         return self.bm25[source]
+
+    def chuan_hoa(self, source: str) -> list[str]:
+        """Văn bản đã `_normalize_text`, dựng MỘT LẦN, cùng thứ tự `text_keys`.
+
+        Arm khớp cụm (`subtitle_exact`) trước đây chuẩn hoá **lại 159.106 chuỗi
+        cho mỗi truy vấn**:
+
+            if needle in _normalize_text(bundle.texts[_source][key])
+
+        Nhưng `_normalize_text` chỉ phụ thuộc **tài liệu**, không phụ thuộc truy
+        vấn — nên đó là một kết quả cố định bị tính lại mỗi lượt. Đo 25-09 trên
+        6 câu dev: **233,6 ms → 27,8 ms** (8×), đổi lấy **0,3 giây một lần** lúc
+        nạp.
+
+        Không đổi kết quả một chút nào: cùng hàm chuẩn hoá, cùng phép `in`.
+        """
+        if source not in self._chuan_hoa:
+            started = time.perf_counter()
+            self._chuan_hoa[source] = [
+                _normalize_text(self.texts[source][k]) for k in self.text_keys[source]
+            ]
+            logger.info(
+                "chuan hoa %s: %d dong (%.1fs)", source,
+                len(self._chuan_hoa[source]), time.perf_counter() - started,
+            )
+        return self._chuan_hoa[source]
 
     def report(self) -> str:
         text = ", ".join(f"{s}:{len(k)}" for s, k in sorted(self.text_keys.items()))
@@ -222,9 +255,15 @@ def load_cached_bm25(bundle: FlatBundle, source: str, base: Path, cache_dir: Pat
 
     Dựng lại BM25 trên 169k dòng mất hàng chục giây và cho ra **đúng** cùng một
     model; một lượt quét trọng số đụng bốn nguồn thì đó là phút chờ thuần tuý.
+
+    ⚠ Tiền tố là `bm25thua-`, KHÔNG phải `bm25-`. Cache cũ chứa object
+    `rank_bm25.BM25Okapi`, mà lớp đó **cũng có `get_scores`** — giữ nguyên tên
+    file thì `pickle.load` trả về bản chậm và mọi thứ chạy bình thường, chỉ là
+    bản vá không có tác dụng và không có gì báo. Đổi tên là cách duy nhất để
+    một thay đổi lớp làm cache cũ trượt thay vì trúng nhầm.
     """
     path = base / SOURCE_FILE[source]
-    cache = cache_dir / f"bm25-{source}-{_fingerprint(path)}.pkl"
+    cache = cache_dir / f"bm25thua-{source}-{_fingerprint(path)}.pkl"
     if cache.is_file():
         started = time.perf_counter()
         with cache.open("rb") as handle:
@@ -391,13 +430,17 @@ def build_flat_text_arms(bundle: FlatBundle, weights=None, enabled=None) -> list
                 # cụm sau khi chuẩn hoá. KHÔNG được thay bằng BM25 — làm vậy thì
                 # arm này thành bản sao của `subtitle_partial`, và fusion đếm
                 # cùng một bằng chứng hai lần.
+                #
+                # Vế phải chuẩn hoá MỘT LẦN lúc nạp (`chuan_hoa`), không phải
+                # mỗi truy vấn: 233,6 → 27,8 ms. Cùng chuỗi, cùng phép so.
                 needle = _normalize_text(q)
                 if not needle:
                     return []
+                keys = bundle.text_keys[_source]
                 hits = [
-                    (key, 1.0)
-                    for key in bundle.text_keys[_source]
-                    if needle in _normalize_text(bundle.texts[_source][key])
+                    (keys[i], 1.0)
+                    for i, sanh in enumerate(bundle.chuan_hoa(_source))
+                    if needle in sanh
                 ]
                 return _candidates(hits[:k], _name, run)
 

@@ -1430,6 +1430,12 @@
       "text_en": "close - up of an ancient human reconstructed face with large, hairy eyes"
     },
     {
+      "text": "cận cảnh một chiếc bánh xèo vàng gập đôi nằm một mình trên đĩa sứ tròn màu trắng",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "close - up of a folded yellow pancake lying alone on a white round china plate"
+    },
+    {
       "text": "cận cảnh nhãn hũ Bà Giáo Khỏe 55555 có dòng mắm cá chẽm",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -1724,6 +1730,12 @@
       "text_en": "Yellow honey poured into small plastic jars."
     },
     {
+      "text": "một chiếc muỗng màu xanh lá xúc nhân từ hộp nhựa trong rải đều lên mặt bánh",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "A green spoon, scooped from a clear plastic container, spread it evenly across the top of the cake."
+    },
+    {
       "text": "một chiếc xe máy nằm kẹt dưới gầm xe tải sau va chạm",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -1896,6 +1908,12 @@
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "People cut and gathered bamboo stems off the field."
+    },
+    {
+      "text": "người dẫn chương trình mặc áo thun màu xanh lá đứng bên lan can trắng có trụ đèn, phía sau là cabin cáp treo màu vàng trắng và ngọn núi xanh",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The host in a green T-shirt stood at the white lantern railing, behind which stood the yellow-and-white cable car and the blue mountain."
     },
     {
       "text": "người dẫn chương trình đứng trước cổng Chùa Hải Sơn Chùa Hang tại Kiên Giang",
@@ -2432,6 +2450,12 @@
       "text_en": "peeled white body held up for introduction"
     },
     {
+      "text": "quay từ BÊN TRONG cabin có khung sơn màu đỏ nhìn ra sườn núi, người dẫn chương trình chỉ tay ra ngoài cửa sổ",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "Filmed from the cabin in red paint looking out over the mountainside, the host points out of the window."
+    },
+    {
       "text": "quy trình sơ chế măng rừng: dỡ giỏ măng từ xe máy xuống, ngồi lột vỏ măng, rồi bào và rửa măng trong thùng nước",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -2846,6 +2870,12 @@
       "text_en": "The clip begins with an old man in a white tank top tapping a metal disc in a dark wood-paneled room. Then a young man in a black polo shirt speaks in front of a white board with a formula. The final scene is of a metal drum set next to an outdoor fire in the night."
     },
     {
+      "text": "Đoạn clip bắt đầu bằng cảnh nhìn từ dưới lên những cabin cáp treo màu sẫm in bóng trên nền trời xanh nhiều mây trắng",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The clip begins with a bottom - up view of dark, silhouetted cable car cabs against a white, cloudy blue sky."
+    },
+    {
       "text": "Đoạn clip bắt đầu bằng cảnh nhìn từ dưới lên những cabin cáp treo màu sẫm in bóng trên nền trời xanh nhiều mây trắng. Tiếp đến là người dẫn chương trình mặc áo thun màu xanh lá đứng bên lan can trắng có trụ đèn, phía sau là cabin cáp treo màu vàng trắng và ngọn núi xanh. Cảnh cuối quay từ BÊN TRONG cabin có khung sơn màu đỏ nhìn ra sườn núi, người dẫn chương trình chỉ tay ra ngoài cửa sổ.",
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
@@ -2886,6 +2916,12 @@
       "tier": "mt",
       "model": "VietAI/envit5-translation|beams=1|max_new=128",
       "text_en": "The clip begins with a pink poster that says, FOR A HOME LIVING. It then takes place from above, overlooking a green lawn where people are circling in a spiral. The final scene is an ukulele class in a wood-floor room, where students sit on blue plastic chairs."
+    },
+    {
+      "text": "Đoạn clip bắt đầu bằng cảnh đổ giá đỗ từ một tô nhựa màu đỏ vào chảo bột bánh xèo vàng đang chín",
+      "tier": "mt",
+      "model": "VietAI/envit5-translation|beams=1|max_new=128",
+      "text_en": "The clip begins with dumping bean sprouts from a red plastic bowl onto a pan of cooking yellow pancakes."
     },
     {
       "text": "Đoạn clip bắt đầu bằng cảnh đổ giá đỗ từ một tô nhựa màu đỏ vào chảo bột bánh xèo vàng đang chín, sau đó một chiếc muỗng màu xanh lá xúc nhân từ hộp nhựa trong rải đều lên mặt bánh. Cảnh cuối cùng là cận cảnh một chiếc bánh xèo vàng gập đôi nằm một mình trên đĩa sứ tròn màu trắng.",

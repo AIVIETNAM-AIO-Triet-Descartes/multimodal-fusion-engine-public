@@ -159,9 +159,23 @@ class TestArmsDisabledTrongConfig:
         with pytest.raises(ValueError, match="không tồn tại"):
             Cascade.from_config(hong, text_store=None, dense_store_factory=None)
 
-    def test_config_that_khai_ba_arm_trong_so_0(self):
-        """Khoá số đo 25-09: ablation ra +0,000 cho cả ba."""
+    def test_config_that_khai_dung_nam_arm_da_tat(self):
+        """Khoá hai quyết định khác nhau, cố ý gộp vào một danh sách.
+
+        `ocr` · `ocr_paddle` · `clap` tắt vì **hiệu năng**: ablation 25-09 ra
+        +0,000 cho cả ba, mà chúng ăn 1.829 ms trên 7.402 ms.
+
+        `object` · `ocr_vietocr` tắt vì **dữ liệu** (Lead chốt 25-09): batch 2
+        không kịp sinh vietocr và `ocr_qwen25` đã phủ phần OCR. Đo trước khi
+        đổi: dev 0,5192 → 0,5197 · heldout 0,5419 → 0,5486, tức bỏ còn tốt hơn
+        một chút.
+
+        Test này đỏ khi ai đó thêm/bớt mà không cập nhật lý do — và lý do mới
+        là thứ đáng đọc, không phải danh sách.
+        """
         from mfe.core.config import load_config
 
         config = load_config("config/btc_b1.yaml")
-        assert set(config.retrieval.arms_disabled) == {"ocr", "ocr_paddle", "clap"}
+        assert set(config.retrieval.arms_disabled) == {
+            "ocr", "ocr_paddle", "clap", "object", "ocr_vietocr",
+        }

@@ -184,8 +184,41 @@ def _encode_clap(text: str, checkpoint: str) -> np.ndarray:
         return _pooled(model.get_text_features(**batch))[0]
 
 
+#: Bao nhiêu vector truy vấn giữ lại. 64 là thừa cho một phiên: mỗi truy vấn
+#: sinh tối đa 3 mục (một cho mỗi tháp text), và người vận hành không gõ lại 20
+#: câu trong một lượt.
+_CACHE_VECTOR = 64
+
+
+@lru_cache(maxsize=_CACHE_VECTOR)
+def _encode_cached(text: str, checkpoint: str, expected_dim: int) -> np.ndarray:
+    """Thân của `encode_query`, nhớ theo `(text, checkpoint, dim)`.
+
+    Vì sao cần: `bge_m3` và `subtitle_bge_m3` dùng **cùng checkpoint**
+    `BAAI/bge-m3` trên **cùng chuỗi truy vấn** — hai arm, hai nguồn khác nhau,
+    nhưng một vector. `lru_cache` trên `_load_sentence_transformer` chỉ nhớ
+    **model**, nên model không nạp lại mà forward pass vẫn chạy hai lần. Đo
+    25-09: **75 ms** mỗi lượt BGE trên CPU, tức 75 ms trả thừa mỗi truy vấn.
+
+    Khoá phải gồm **cả checkpoint và số chiều**, không chỉ text: ba tháp text
+    khác nhau cùng đi qua hàm này và cho ba vector khác nhau cho cùng một câu.
+
+    Mảng trả về đặt **read-only**: `lru_cache` trả về CHÍNH đối tượng đó cho
+    mọi lượt trúng cache, nên một người gọi lỡ tay sửa tại chỗ sẽ làm hỏng mọi
+    truy vấn sau mà không có gì báo.
+    """
+    vector = _encode_raw(text, checkpoint, expected_dim)
+    vector.setflags(write=False)
+    return vector
+
+
 def encode_query(text: str, checkpoint: str, expected_dim: int) -> np.ndarray:
-    """Embed a query, L2-normalized, with the dimension checked.
+    """Embed a query, L2-normalized, with the dimension checked. Có nhớ cache."""
+    return _encode_cached(text, checkpoint, expected_dim)
+
+
+def _encode_raw(text: str, checkpoint: str, expected_dim: int) -> np.ndarray:
+    """Mã hoá thật, không qua cache.
 
     Tháp text được chọn theo **họ checkpoint**, không phải theo một thư viện
     chung: SigLIP và CLAP không phải model câu, và nạp chúng qua
