@@ -5,13 +5,14 @@ from types import SimpleNamespace as NS
 import pytest
 
 from mfe.contracts.tools import Candidate
-from mfe.eval.dres_export import top1_payload, json_bytes, milliseconds
+from mfe.eval.dres_export import json_bytes, milliseconds, top1_payload
 from mfe.eval.query_package import PackagedQuery
 from mfe.eval.submission_bundle import replace_at_rank
 
 
 def query(kind="KIS", events=()):
-    return PackagedQuery("query-test-" + kind.lower(), kind, "test", Path("test.txt"), events=events)
+    return PackagedQuery("query-test-" + kind.lower(), kind, "test",
+                         Path("test.txt"), events=events)
 
 
 def candidate(n):
@@ -34,7 +35,8 @@ def entry(payload):
 
 def test_kis_manual_order_vfr():
     rows = [candidate(100), candidate(200)]
-    value = top1_payload(query(), rows, Map(), manual_order=[rows[1].keyframe_id, rows[0].keyframe_id])
+    value = top1_payload(query(), rows, Map(),
+                         manual_order=[rows[1].keyframe_id, rows[0].keyframe_id])
     assert entry(value) == {"mediaItemName": "L21_V001", "start": 29701, "end": 29701}
 
 
@@ -63,7 +65,8 @@ def test_invalid_trake(frames):
 
 def test_complete_trake_sequence():
     payload = top1_payload(query("TRAKE", ("a", "b")),
-                           [NS(video_id="N001", frame_ids=[100, 750]), NS(video_id="N002", frame_ids=[1, 2])], Map())
+                           [NS(video_id="N001", frame_ids=[100, 750]),
+                            NS(video_id="N002", frame_ids=[1, 2])], Map())
     assert entry(payload) == {"text": "TR-N001-100,750"}
 
 

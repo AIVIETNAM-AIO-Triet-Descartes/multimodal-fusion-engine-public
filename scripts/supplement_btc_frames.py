@@ -6,9 +6,9 @@ from pathlib import Path
 from mfe.offline.dake import (
     decode_frames,
     jpeg_sizes,
+    pts_for_frame,
     select_keyframes,
     video_fps,
-    pts_for_frame,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -18,10 +18,13 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Supplement BTC keyframes with DAKE frames.")
     parser.add_argument("--video", required=True, type=Path, help="Path to video file")
     parser.add_argument("--btc-map", required=True, type=Path, help="Path to BTC map-keyframes.csv")
-    parser.add_argument("--out-map", required=True, type=Path, help="Path to save output map-keyframes.csv")
+    parser.add_argument("--out-map", required=True, type=Path,
+                        help="Path to save output map-keyframes.csv")
     parser.add_argument("--rho", type=float, default=0.02, help="DAKE rho (default: 0.02)")
-    parser.add_argument("--max-gap", type=float, default=8.0, help="DAKE max gap in seconds (default: 8.0)")
-    parser.add_argument("--min-gap", type=float, default=1.0, help="Minimum gap in seconds (default: 1.0)")
+    parser.add_argument("--max-gap", type=float, default=8.0,
+                        help="DAKE max gap in seconds (default: 8.0)")
+    parser.add_argument("--min-gap", type=float, default=1.0,
+                        help="Minimum gap in seconds (default: 1.0)")
     return parser.parse_args()
 
 

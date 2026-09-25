@@ -2219,6 +2219,7 @@ def stage_n8_bge_m3_window(ctx: StageContext) -> dict:
 def stage_n6_gemini_split_embed(ctx: StageContext) -> dict:
     """Split gemini_raw into gemini_captions and gemini_ocr, then embed gemini_captions."""
     from sentence_transformers import SentenceTransformer  # noqa: PLC0415
+
     from mfe.offline.caption_prompt import loc_khoi_ocr, tach_caption_ocr
 
     checkpoint = "BAAI/bge-m3"
@@ -2241,8 +2242,10 @@ def stage_n6_gemini_split_embed(ctx: StageContext) -> dict:
         ocrs[k] = ocr
         
     # 3. Write parts
-    ctx.writer.write_text_part("gemini_captions", ctx.video_id, captions, model="gemini", params={}, facts={}, elapsed_s=0.0)
-    ctx.writer.write_text_part("gemini_ocr", ctx.video_id, ocrs, model="gemini", params={}, facts={}, elapsed_s=0.0)
+    ctx.writer.write_text_part("gemini_captions", ctx.video_id, captions,
+                               model="gemini", params={}, facts={}, elapsed_s=0.0)
+    ctx.writer.write_text_part("gemini_ocr", ctx.video_id, ocrs,
+                               model="gemini", params={}, facts={}, elapsed_s=0.0)
 
     # 4. Embed gemini_captions
     keys = sorted(captions)

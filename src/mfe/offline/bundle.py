@@ -109,10 +109,13 @@ ARTIFACTS: dict[str, Artifact] = {
         Artifact("subtitles_dense", "vector", "subtitles_dense.npz", None, 1024,
                  "n7_bge_m3_subtitles"),
         Artifact("window_text",  "text",   "window_text.json",  "window_bm25", None, "n8_window"),
-        Artifact("window_dense", "vector", "window_dense.npz",  None,          1024, "n8_bge_m3_window"),
+        Artifact("window_dense", "vector", "window_dense.npz",  None,
+                 1024, "n8_bge_m3_window"),
         Artifact("gemini_raw", "text", "gemini_raw.json", None, None, "n6_caption_gemini_raw"),
-        Artifact("gemini_captions", "text", "gemini_captions.json", "caption_gemini", None, "n6_split_gemini_captions"),
-        Artifact("gemini_ocr", "text", "gemini_ocr.json", "ocr_gemini", None, "n6_split_gemini_ocr"),
+        Artifact("gemini_captions", "text", "gemini_captions.json", "caption_gemini",
+                 None, "n6_split_gemini_captions"),
+        Artifact("gemini_ocr", "text", "gemini_ocr.json", "ocr_gemini",
+                 None, "n6_split_gemini_ocr"),
     )
 }
 

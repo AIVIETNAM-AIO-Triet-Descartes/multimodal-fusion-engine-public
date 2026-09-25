@@ -2,7 +2,7 @@
 import json
 import math
 import re
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 
 from mfe.eval.submission_bundle import apply_manual_order
 
@@ -42,7 +42,7 @@ def top1_payload(query, result, relational, *, manual_order=None, answer=""):
             raise ValueError("Chuỗi TRAKE phải đủ một frame cho mỗi sự kiện.")
         if any(type(f) is not int or f < 0 for f in frames):
             raise ValueError("Frame TRAKE phải là số nguyên không âm.")
-        if any(a >= b for a, b in zip(frames, frames[1:])):
+        if any(a >= b for a, b in zip(frames, frames[1:], strict=False)):
             raise ValueError("Frame TRAKE phải tăng nghiêm ngặt theo thứ tự sự kiện.")
         entry = {"text": f"TR-{video}-" + ",".join(map(str, frames))}
     else:
@@ -57,4 +57,5 @@ def top1_payload(query, result, relational, *, manual_order=None, answer=""):
 
 
 def json_bytes(payload):
-    return (json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False) + "\n").encode("utf-8")
+    duoi = json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False)
+    return (duoi + "\n").encode("utf-8")

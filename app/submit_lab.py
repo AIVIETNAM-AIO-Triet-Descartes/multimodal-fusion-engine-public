@@ -58,6 +58,7 @@ from mfe.browser.video_scrub import video_scrub  # noqa: E402
 from mfe.contracts.errors import ContractError  # noqa: E402
 from mfe.contracts.tools import Candidate  # noqa: E402
 from mfe.core.config import load_config  # noqa: E402
+from mfe.eval.dres_export import candidate_time_ms, json_bytes, top1_payload  # noqa: E402
 from mfe.eval.metrics.final_score import MAX_ANSWERS_PER_QUERY  # noqa: E402
 from mfe.eval.official import candidate_frame_id  # noqa: E402
 from mfe.eval.query_package import (  # noqa: E402
@@ -67,7 +68,6 @@ from mfe.eval.query_package import (  # noqa: E402
     load_package,
     parse_query,
 )
-from mfe.eval.dres_export import top1_payload, json_bytes, candidate_time_ms  # noqa: E402
 from mfe.eval.submission_bundle import (  # noqa: E402
     SearchText,
     apply_manual_order,
@@ -1085,7 +1085,8 @@ for tab, qtype in zip(tabs, TYPES, strict=True):
                 )
                 st.caption(
                     f"Đẻ ra một câu **mới** (`{ADHOC_PREFIX}-N-{qtype.lower()}`) để "
-                    "dò. Chỉ xuất đáp án cho đúng câu BTC đang yêu cầu. Muốn thay kết quả của một đề có "
+                    "dò. Chỉ xuất đáp án cho đúng câu BTC đang yêu cầu. "
+                    "Muốn thay kết quả của một đề có "
                     "sẵn thì dùng ô `🔍 Chuỗi tìm` của chính câu đó."
                 )
                 if st.form_submit_button("🔍 Tìm và thêm vào tab") and typed.strip():
