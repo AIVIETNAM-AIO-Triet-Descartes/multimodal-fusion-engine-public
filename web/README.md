@@ -43,6 +43,11 @@ mới cạnh hộp chọn. Ghi chú được lưu ở `/home/ubuntu/web/suggesti
 Với TRAKE, nút đề xuất ở đầu mỗi chuỗi lưu toàn bộ các event; các nút trong
 từng event vẫn cho phép đánh dấu riêng một frame để kiểm tra.
 
+Khi mở video từ một kết quả, có thể tua tới đúng thời điểm rồi bấm **Chốt
+frame đang xem**. Frame được giữ theo đúng lane và kết quả/event đang mở, hiển
+thị lại bằng dấu `📌`, được dùng khi tạo đề xuất và được gửi cùng payload DRES
+nếu người vận hành nộp kết quả đó.
+
 Sau khi DRES nhận một đáp án, backend ghi fingerprint của **đúng payload đáp án**
 vào `/home/ubuntu/web/dres_submissions.json` (mode 600). Vì vậy một đáp án khác
 cho cùng truy vấn vẫn có thể được nộp lại để sửa lượt sai, còn payload giống hệt

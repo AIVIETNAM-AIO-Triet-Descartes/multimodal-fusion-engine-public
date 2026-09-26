@@ -1,4 +1,12 @@
-from mfe.eval.dres_client import build_selected_payload, dres_credentials, submission_key
+import pytest
+
+from mfe.eval.dres_client import (
+    DresError,
+    apply_selected_frame,
+    build_selected_payload,
+    dres_credentials,
+    submission_key,
+)
 
 
 def test_dres_payload_matches_final_format_for_each_query_type():
@@ -49,3 +57,29 @@ def test_dres_submission_key_allows_a_different_answer_for_same_query():
     }
     assert submission_key("eval-1", state, first) != submission_key("eval-1", state, second)
     assert submission_key("eval-1", state, first) == submission_key("eval-1", state, first)
+
+
+def test_manual_frame_selection_overlays_timestamp_without_changing_video():
+    item = {
+        "video_id": "L21_V001",
+        "frame_idx": 31,
+        "timestamp_ms": 1234,
+        "rank": 1,
+    }
+    selected = apply_selected_frame(
+        item,
+        {"video_id": "L21_V001", "frame_idx": 88, "timestamp_ms": 3520},
+    )
+    assert selected["video_id"] == "L21_V001"
+    assert selected["frame_idx"] == 88
+    assert selected["timestamp_ms"] == 3520
+    assert selected["keyframe_id"] == "L21_V001#000088"
+    assert item["frame_idx"] == 31
+
+
+def test_manual_frame_selection_cannot_switch_video():
+    with pytest.raises(DresError, match="khong cung video"):
+        apply_selected_frame(
+            {"video_id": "L21_V001"},
+            {"video_id": "L21_V002", "frame_idx": 88, "timestamp_ms": 3520},
+        )

@@ -71,6 +71,7 @@ from mfe.core.config import load_config  # noqa: E402
 from mfe.eval.dres_client import (  # noqa: E402
     DresClient,
     DresError,
+    apply_selected_frame,
     build_selected_payload,
     configured,
     submission_key,
@@ -1291,10 +1292,39 @@ async def dres_submit(request: Request) -> JSONResponse:
     if not answer and isinstance(selected_state.get("answer"), dict):
         answer = str(selected_state["answer"].get("text", "")).strip()
     try:
+        selected_frame = payload.get("selected_frame")
+        if selected_frame is not None:
+            item = apply_selected_frame(item, selected_frame)
+        selected_events = None
+        if str(selected_state.get("query_type", "")).upper() == "TRAKE":
+            raw_selected_events = payload.get("selected_events")
+            if raw_selected_events is not None:
+                if not isinstance(raw_selected_events, list):
+                    raise DresError("selected_events phai la danh sach")
+                by_index: dict[int, dict[str, Any]] = {}
+                for selected_event in raw_selected_events:
+                    if not isinstance(selected_event, dict):
+                        raise DresError("selected_events co phan tu khong hop le")
+                    try:
+                        event_index = int(selected_event["event_index"])
+                    except (KeyError, TypeError, ValueError):
+                        raise DresError("selected_events thieu event_index") from None
+                    by_index[event_index] = selected_event
+                selected_events = []
+                for event in item.get("events", []):
+                    if not isinstance(event, dict):
+                        continue
+                    event_index = int(event.get("event_index", len(selected_events) + 1))
+                    selected_events.append(
+                        apply_selected_frame(event, by_index[event_index])
+                        if event_index in by_index
+                        else event
+                    )
         submission = build_selected_payload(
             str(selected_state.get("query_type", "KIS")),
             item,
             answer=answer,
+            events=selected_events,
         )
     except (DresError, TypeError, ValueError) as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
@@ -1429,6 +1459,12 @@ async def suggestions(request: Request) -> JSONResponse:
     if source is None:
         return JSONResponse({"ok": False, "error": "khong tim thay ket qua"}, status_code=404)
     state, item = source
+    try:
+        selected_frame = payload.get("selected_frame")
+        if selected_frame is not None:
+            item = apply_selected_frame(item, selected_frame)
+    except DresError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     note = str(payload.get("note", "")).strip()
     if not note or len(note) > 2000:
         return JSONResponse(

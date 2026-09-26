@@ -183,3 +183,38 @@ def build_selected_payload(
     else:
         raise DresError("query_type khong ho tro")
     return {"answerSets": [{"answers": [entry]}]}
+
+
+def apply_selected_frame(item: dict[str, Any], selected: Any) -> dict[str, Any]:
+    """Overlay one manually selected player frame onto a result item.
+
+    The browser may seek to a frame that was not one of the retrieval
+    candidates.  Keep the original result as the source of truth for the
+    video, but allow the operator to replace its timestamp/frame after
+    checking the video.  The video id is deliberately locked to the result so
+    a client cannot turn a valid result into an answer for another video.
+    """
+    if not isinstance(item, dict) or not isinstance(selected, dict):
+        raise DresError("frame da chot khong hop le")
+    video = str(item.get("video_id", ""))
+    selected_video = str(selected.get("video_id", video))
+    if not _ID_RE.fullmatch(video) or selected_video != video:
+        raise DresError("frame da chot khong cung video voi ket qua")
+    try:
+        frame_idx = int(selected["frame_idx"])
+        timestamp_ms = int(selected["timestamp_ms"])
+    except (KeyError, TypeError, ValueError):
+        raise DresError("frame da chot thieu frame_idx hoac timestamp_ms") from None
+    if frame_idx < 0 or timestamp_ms < 0:
+        raise DresError("frame da chot phai khong am")
+    updated = dict(item)
+    updated.update(
+        {
+            "video_id": video,
+            "frame_idx": frame_idx,
+            "timestamp_ms": timestamp_ms,
+            "seconds": round(timestamp_ms / 1000.0, 3),
+            "keyframe_id": f"{video}#{frame_idx:06d}",
+        }
+    )
+    return updated
