@@ -49,9 +49,9 @@ retrieval:
     window_bm25: 1.0
     window_bge_m3: 1.0
     caption_gemini: 1.0
-    ocr_gemini: 1.0
+    ocr_gemini: 0.5
     ocr_qwen25: 1.0
-    subtitle_partial: 0.5
+    subtitle_partial: 1.0
     subtitle_exact: 1.0
   # These are intentionally unavailable/disabled in the merged runtime. A
   # zero weight would still pay their query cost and would bias one batch when
