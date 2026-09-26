@@ -12,7 +12,7 @@ import json
 import pytest
 
 from mfe.contracts.tools import Candidate
-from mfe.online.vqa_answer import Answer, parse_answer, read_answer
+from mfe.online.vqa_answer import Answer, parse_answer, read_answer, read_answer_hybrid
 
 
 def _candidates(n: int = 5) -> list[Candidate]:
@@ -169,3 +169,55 @@ def test_answer_mac_dinh_la_chua_co_dap_an():
     """`Answer()` trần phải là "chưa có", không phải "có đáp án rỗng"."""
     assert not Answer().ok
     assert Answer().text == ""
+
+
+def test_hybrid_reader_uses_continuous_and_scattered_evidence_with_budget(tmp_path):
+    candidates = _candidates(20)
+
+    class Store:
+        def fetch(self, keys):
+            return [
+                type(
+                    "Hit",
+                    (),
+                    {
+                        "video_id": video,
+                        "frame_id": frame,
+                        "source": "subtitle",
+                        "text": f"text {frame}",
+                    },
+                )()
+                for video, frame in keys
+            ]
+
+    class Relational:
+        def get_neighbors(self, _keyframe_id, window):
+            return [
+                type("Row", (), {"keyframe_id": f"L21_V003#{26000 + i:06d}"})()
+                for i in range(-2, 3)
+            ]
+
+    def image(keyframe_id):
+        path = tmp_path / f"{keyframe_id.replace('#', '_')}.jpg"
+        path.write_bytes(b"image")
+        return path
+
+    seen = {}
+
+    def ask(prompt, paths):
+        seen["prompt"] = prompt
+        seen["paths"] = paths
+        return '{"answer":"x", "frame":"L21_V003#026000"}'
+
+    out = read_answer_hybrid(
+        "cau hoi",
+        candidates,
+        image,
+        Store(),
+        Relational(),
+        ask=ask,
+        max_images=15,
+    )
+    assert out.ok
+    assert len(seen["paths"]) == 15
+    assert "continuous frames" in seen["prompt"]

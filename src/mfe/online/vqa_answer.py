@@ -36,6 +36,7 @@ from io import BytesIO
 from pathlib import Path
 
 from mfe.contracts.tools import Candidate
+from mfe.online.answering import Evidence, gather_evidence, gather_with_context
 from mfe.online.trammay import TrammayClient
 from mfe.online.trammay import available as trammay_available
 
@@ -48,7 +49,7 @@ logger = logging.getLogger(__name__)
 #: Nhìn bao nhiêu khung đầu. Đáp án gần như luôn nằm ở vài khung đầu nếu truy hồi
 #: đúng; nhìn sâu hơn chỉ tăng tiền và tăng cơ hội model đọc nhầm khung của một
 #: video khác.
-DEFAULT_DEPTH = 8
+DEFAULT_DEPTH = 15
 
 #: Cạnh dài tối đa khi nén ảnh. Lớn hơn tầng rerank (512) **có chủ ý**: ở đây model
 #: phải ĐỌC CHỮ — số trên biển báo, dòng trên slide — chứ không phải nhận ra cảnh.
@@ -61,6 +62,17 @@ _PROMPT = """You are reading frames from a Vietnamese TV/news video to answer ON
 QUESTION (Vietnamese): {question}
 
 I am giving you {count} candidate frames, in this exact order: {ids}
+
+Evidence was assembled as {continuous_count} continuous frames around the top
+retrieval anchor and {scattered_count} additional ranked frames. OCR and
+subtitles are authoritative when present; generated captions are supporting
+evidence only.
+
+OCR keywords: {ocr_keywords}
+Logic question: {logic_question}
+
+TEXT EVIDENCE:
+{evidence_text}
 
 Your job: read the answer OFF THE FRAMES. The answer is almost always something
 visible — a number on a sign, text on a slide, a channel logo, a timestamp, a
@@ -131,6 +143,9 @@ def read_answer(
     *,
     depth: int = DEFAULT_DEPTH,
     ask: Callable[[str, list[Path]], str] | None = None,
+    evidence: Sequence[Evidence] = (),
+    logic_question: str = "",
+    ocr_keywords: str = "",
 ) -> Answer:
     """Đọc đáp án từ `depth` khung đầu. Không bao giờ ném — trả `Answer` kèm lý do.
 
@@ -156,6 +171,11 @@ def read_answer(
         question=question.strip(),
         count=len(usable),
         ids=json.dumps([kid for kid, _ in usable], ensure_ascii=False),
+        continuous_count=0,
+        scattered_count=len(usable),
+        evidence_text=_evidence_text(evidence),
+        logic_question=logic_question.strip() or "(khong co)",
+        ocr_keywords=ocr_keywords.strip() or "(khong co)",
     )
     caller = ask or _ask_trammay
     try:
@@ -178,6 +198,123 @@ def read_answer(
     # Model tu bia ra mot id khong co trong danh sach nghia la no khong thuc su
     # doc tu khung nao — bo nguon di chu khong bo dap an, vi dap an van co the
     # dung; nhung nguoi van hanh phai thay la khong co nguon.
+    known = {kid for kid, _ in usable}
+    return Answer(
+        text=text,
+        frame=frame if frame in known else "",
+        confidence=str(parsed.get("confidence") or "").strip(),
+        why=str(parsed.get("why") or "").strip(),
+        ok=bool(text),
+        reason=None if text else "model nhin roi nhung khong doc duoc dap an",
+        looked_at=len(usable),
+        seconds=time.perf_counter() - started,
+    )
+
+
+def read_answer_hybrid(
+    question: str,
+    candidates: Sequence[Candidate],
+    images: Callable[[str], Path | None],
+    text_store: object,
+    relational: object,
+    *,
+    logic_question: str = "",
+    ocr_keywords: str = "",
+    ask: Callable[[str, list[Path]], str] | None = None,
+    window: int = 2,
+    max_images: int = 15,
+) -> Answer:
+    """Read QA with continuous context plus scattered ranked evidence.
+
+    The first candidate anchors a ±2 keyframe relational window. Remaining
+    candidates are added in retrieval order, skipping IDs already present in the
+    window, until the hard fifteen-image reader budget is reached.
+    """
+    head = list(candidates)
+    if not head:
+        return Answer(reason="khong co ung vien cho QA")
+    anchor = head[0].keyframe_id
+    try:
+        continuous = gather_with_context(anchor, text_store, relational, window=window)
+    except Exception as exc:  # noqa: BLE001 - QA must remain usable if context is stale
+        logger.warning("qa context skipped: %s: %s", type(exc).__name__, exc)
+        continuous = gather_evidence([anchor], text_store)
+    continuous = continuous[:max_images]
+    seen = {item.keyframe_id for item in continuous}
+    scattered: list[Evidence] = []
+    remaining = max(0, max_images - len(continuous))
+    for candidate in head[1:]:
+        if remaining <= 0:
+            break
+        if candidate.keyframe_id in seen:
+            continue
+        evidence = gather_evidence([candidate.keyframe_id], text_store)
+        if evidence:
+            scattered.extend(evidence[:1])
+            seen.add(candidate.keyframe_id)
+            remaining -= 1
+    evidence = [*continuous, *scattered]
+    items = [(item.keyframe_id, images(item.keyframe_id)) for item in evidence]
+    return _read_answer_items(
+        question,
+        items,
+        ask=ask,
+        evidence=evidence,
+        continuous_count=len(continuous),
+        scattered_count=len(scattered),
+        logic_question=logic_question,
+        ocr_keywords=ocr_keywords,
+    )
+
+
+def _evidence_text(evidence: Sequence[Evidence]) -> str:
+    return "\n\n".join(
+        f"--- {item.keyframe_id} ---\n{item.as_prompt() or '(khong co van ban)'}"
+        for item in evidence
+    ) or "(khong co van ban nao)"
+
+
+def _read_answer_items(
+    question: str,
+    items: Sequence[tuple[str, Path | None]],
+    *,
+    ask: Callable[[str, list[Path]], str] | None,
+    evidence: Sequence[Evidence],
+    continuous_count: int,
+    scattered_count: int,
+    logic_question: str,
+    ocr_keywords: str,
+) -> Answer:
+    ok, reason = available()
+    if ask is None and not ok:
+        return Answer(reason=reason)
+    started = time.perf_counter()
+    usable = [(kid, path) for kid, path in items if path is not None and path.is_file()]
+    if not usable:
+        return Answer(reason="khong lay duoc anh nao cho top ung vien")
+    prompt = _PROMPT.format(
+        question=question.strip(),
+        count=len(usable),
+        ids=json.dumps([kid for kid, _ in usable], ensure_ascii=False),
+        continuous_count=continuous_count,
+        scattered_count=scattered_count,
+        evidence_text=_evidence_text(evidence),
+        logic_question=logic_question.strip() or "(khong co)",
+        ocr_keywords=ocr_keywords.strip() or "(khong co)",
+    )
+    caller = ask or _ask_trammay
+    try:
+        raw = caller(prompt, [path for _, path in usable if path is not None])
+    except Exception as err:  # noqa: BLE001
+        logger.warning("vqa_answer: %s: %s", type(err).__name__, err)
+        return Answer(reason=f"{type(err).__name__}: {str(err)[:160]}", looked_at=len(usable))
+    parsed = parse_answer(raw)
+    if parsed is None:
+        return Answer(
+            reason=f"khong doc duoc JSON tu tra loi: {raw[:120]!r}", looked_at=len(usable)
+        )
+    text = str(parsed.get("answer") or "").strip()
+    frame = str(parsed.get("frame") or "").strip()
     known = {kid for kid, _ in usable}
     return Answer(
         text=text,

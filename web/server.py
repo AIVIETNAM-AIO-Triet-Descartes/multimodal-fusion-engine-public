@@ -51,6 +51,7 @@ REPO_ROOT = Path("/home/ubuntu/multimodal-fusion-engine")
 INDEX_PATH = WEB_ROOT / "index.html"
 ACCOUNTS_PATH = WEB_ROOT / "accounts.json"
 SESSION_SECRET_PATH = WEB_ROOT / ".session_secret"
+SUGGESTIONS_PATH = WEB_ROOT / "suggestions.json"
 RUNTIME_ROOT = Path("/data/multimodal-fusion-engine/runtime/btc_b12")
 CONFIG_PATH = REPO_ROOT / "config" / "btc_b12.yaml"
 FLAT_ROOT = RUNTIME_ROOT / "flat"
@@ -66,12 +67,20 @@ B2_IMAGE_ROOT = Path(
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from mfe.core.config import load_config  # noqa: E402
+from mfe.eval.dres_client import (  # noqa: E402
+    DresClient,
+    DresError,
+    build_selected_payload,
+    configured,
+)
 from mfe.eval.official import to_event_hits  # noqa: E402
 from mfe.mapping.relational import RelationalMap  # noqa: E402
 from mfe.offline.transport import load_dotenv  # noqa: E402
 from mfe.online import dante  # noqa: E402
 from mfe.online.dense_arms import preload_query_encoders  # noqa: E402
 from mfe.online.flat_arms import build_flat_cascade, load_flat_bundle  # noqa: E402
+from mfe.online.flat_evidence import FlatTextStore  # noqa: E402
+from mfe.online.gemini_caption_rerank import rerank_candidates  # noqa: E402
 from mfe.online.keyframe_images import KeyframeImages  # noqa: E402
 from mfe.online.quest import (  # noqa: E402
     QuestClient,
@@ -81,7 +90,9 @@ from mfe.online.quest import (  # noqa: E402
     quest_expand,
 )
 from mfe.online.video_source import resolve_video  # noqa: E402
-from mfe.online.vqa_answer import read_answer  # noqa: E402
+from mfe.online.vqa_answer import read_answer_hybrid  # noqa: E402
+
+dres_configured = configured
 
 for _key, _value in load_dotenv(REPO_ROOT / ".env").items():
     os.environ.setdefault(_key, _value)
@@ -245,9 +256,17 @@ class Lane:
         ocr_keywords: str | None = None,
         arm_weights: dict[str, float] | None = None,
         arm_enabled: dict[str, bool] | None = None,
+        gemini_rerank: bool = False,
     ) -> dict[str, Any]:
         cascade = self._ensure_cascade()
         started = time.perf_counter()
+        rerank_metrics: dict[str, Any] = {
+            "enabled": bool(gemini_rerank),
+            "ran": False,
+            "moved": 0,
+            "duration_ms": 0.0,
+            "reason": None,
+        }
 
         def search_one(text: str, text_en: str | None, search_run_id: str):
             with cascade.overriding(weights=arm_weights, enabled=arm_enabled):
@@ -279,6 +298,25 @@ class Lane:
         def candidates_of(raw: Any) -> list[Any]:
             return raw[0] if isinstance(raw, tuple) else raw
 
+        def maybe_rerank(items: list[Any], text: str, text_en: str | None) -> list[Any]:
+            if not gemini_rerank or self.manager.bundle is None:
+                return items
+            reordered, outcome = rerank_candidates(
+                items,
+                text,
+                self.manager.bundle,
+                query_en=text_en,
+                depth=_safe_int_env("MFE_GEMINI_RERANK_DEPTH", 30),
+            )
+            rerank_metrics["ran"] = rerank_metrics["ran"] or outcome.ran
+            rerank_metrics["moved"] += outcome.moved
+            rerank_metrics["duration_ms"] = round(
+                float(rerank_metrics["duration_ms"]) + outcome.duration_ms, 1
+            )
+            if outcome.reason and not rerank_metrics["reason"]:
+                rerank_metrics["reason"] = outcome.reason
+            return reordered
+
         if query_type == "TRAKE":
             event_texts = [text.strip() for text in (events or []) if text.strip()]
             if not event_texts:
@@ -291,7 +329,9 @@ class Lane:
                     else None
                 )
                 raw = search_one(event_text, event_en, f"{run_id}-e{index}")
-                per_event.append(candidates_of(raw)[:top_k])
+                per_event.append(
+                    maybe_rerank(candidates_of(raw), event_text, event_en)[:top_k]
+                )
             alignments = dante.align(
                 [to_event_hits(candidates, self.manager.relational) for candidates in per_event],
                 penalty=penalty,
@@ -301,7 +341,7 @@ class Lane:
             answer_payload = None
         else:
             raw = search_one(query, query_en, run_id)
-            candidates = candidates_of(raw)
+            candidates = maybe_rerank(candidates_of(raw), query, query_en)
             results = self.manager.candidate_payload(candidates[:top_k])
             answer_payload = None
             if query_type == "QA":
@@ -320,11 +360,14 @@ class Lane:
                             "reason": "image cache chua san sang",
                         }
                     else:
-                        vqa = read_answer(
+                        vqa = read_answer_hybrid(
                             query,
                             candidates,
                             self.manager.images.cached,
-                            depth=min(8, len(candidates)),
+                            text_store=self.manager.text_store,
+                            relational=self.manager.relational,
+                            logic_question=query,
+                            ocr_keywords=ocr_keywords or "",
                         )
                         answer_payload = {
                             "text": vqa.text,
@@ -334,6 +377,8 @@ class Lane:
                             "source": "vlm" if vqa.ok else "vlm_failed",
                             "ok": vqa.ok,
                             "reason": vqa.reason,
+                            "looked_at": vqa.looked_at,
+                            "seconds": round(vqa.seconds, 3),
                         }
                 else:
                     answer_payload = {
@@ -348,6 +393,7 @@ class Lane:
             "answer": answer_payload,
             "events": events or [],
             "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+            "gemini_rerank": rerank_metrics,
         }
 
     def close(self) -> None:
@@ -362,6 +408,7 @@ class EngineManager:
         self.base_cascade: Any = None
         self.relational: RelationalMap | None = None
         self.images: KeyframeImages | None = None
+        self.text_store: FlatTextStore | None = None
         self.batch2_video_ids: set[str] = set()
         self.ready = False
         self.initializing = False
@@ -370,6 +417,11 @@ class EngineManager:
         self.init_task: asyncio.Task[None] | None = None
         self.cpu_gate: asyncio.Semaphore | None = None
         self.translation_lock = threading.RLock()
+        self.dres_lock = threading.RLock()
+        self.dres_client: DresClient | None = None
+        self.dres_submissions: set[tuple[Any, ...]] = set()
+        self.suggestions_lock = threading.RLock()
+        self.suggestions: list[dict[str, Any]] = self._load_suggestions()
         self.shared_lane: Lane | None = None
         self.private_lanes: dict[str, Lane] = {}
         self.clients: dict[WebSocket, str] = {}
@@ -388,6 +440,13 @@ class EngineManager:
             "ocr_keywords": None,
             "arm_weights": {},
             "arm_enabled": {},
+            "gemini_rerank": {
+                "enabled": False,
+                "ran": False,
+                "moved": 0,
+                "duration_ms": 0.0,
+                "reason": None,
+            },
             "answer": None,
             "started_at": None,
             "finished_at": None,
@@ -447,6 +506,7 @@ class EngineManager:
         self.base_cascade = cascade
         self.relational = relational
         self.images = images
+        self.text_store = FlatTextStore(bundle)
         self.batch2_video_ids = batch2_video_ids
         logger.info("engine san sang; active arms=%s; %s", active, bundle.report())
 
@@ -490,6 +550,52 @@ class EngineManager:
             self.private_states[username] = private
         return {"shared": _copy_state(self.shared_state), "private": _copy_state(private)}
 
+    def dres(self) -> DresClient | None:
+        """Return the process-local DRES client without exposing its session."""
+        with self.dres_lock:
+            if self.dres_client is None:
+                self.dres_client = DresClient.from_env()
+            return self.dres_client
+
+    def suggestions_snapshot(self) -> list[dict[str, Any]]:
+        with self.suggestions_lock:
+            return _copy_state(self.suggestions)
+
+    def add_suggestion(self, suggestion: dict[str, Any]) -> dict[str, Any]:
+        with self.suggestions_lock:
+            self.suggestions.insert(0, suggestion)
+            del self.suggestions[200:]
+            self._persist_suggestions()
+            return _copy_state(suggestion)
+
+    def clear_suggestions(self) -> None:
+        with self.suggestions_lock:
+            self.suggestions.clear()
+            self._persist_suggestions()
+
+    @staticmethod
+    def _load_suggestions() -> list[dict[str, Any]]:
+        if not SUGGESTIONS_PATH.is_file():
+            return []
+        try:
+            payload = json.loads(SUGGESTIONS_PATH.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            logger.warning("khong doc duoc %s; bat dau kho de xuat rong", SUGGESTIONS_PATH)
+            return []
+        return payload if isinstance(payload, list) else []
+
+    def _persist_suggestions(self) -> None:
+        temporary = SUGGESTIONS_PATH.with_suffix(".tmp")
+        try:
+            temporary.write_text(
+                json.dumps(self.suggestions, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            temporary.replace(SUGGESTIONS_PATH)
+            SUGGESTIONS_PATH.chmod(0o600)
+        except OSError:
+            logger.warning("khong ghi duoc kho de xuat %s", SUGGESTIONS_PATH)
+
     def _keyframe_payload(
         self,
         keyframe_id: str,
@@ -501,6 +607,7 @@ class EngineManager:
             return None
         try:
             row = self.relational.get_keyframe(keyframe_id)
+            fps = float(self.relational.get_video(row.video_id).fps)
         except Exception as exc:  # noqa: BLE001 - one stale hit must not kill a job
             logger.warning("bo qua keyframe %s: %s", keyframe_id, exc)
             return None
@@ -533,6 +640,8 @@ class EngineManager:
             "frame_idx": row.frame_idx,
             "keyframe_index": row.keyframe_index,
             "timestamp_ms": row.timestamp_ms,
+            "seconds": round(float(row.timestamp_ms) / 1000.0, 3),
+            "fps": fps,
             "shot_id": row.shot_id,
             "score": round(float(score), 8),
             "caption": caption,
@@ -673,6 +782,18 @@ async def broadcast_state(manager: EngineManager, scope: str, owner: str | None)
         manager.clients.pop(websocket, None)
 
 
+async def broadcast_suggestions(manager: EngineManager) -> None:
+    payload = {"type": "suggestions", "suggestions": manager.suggestions_snapshot()}
+    stale: list[WebSocket] = []
+    for websocket in list(manager.clients):
+        try:
+            await websocket.send_json(payload)
+        except Exception:  # noqa: BLE001
+            stale.append(websocket)
+    for websocket in stale:
+        manager.clients.pop(websocket, None)
+
+
 async def broadcast_health(manager: EngineManager) -> None:
     payload = {"type": "health", "health": manager.health()}
     stale: list[WebSocket] = []
@@ -703,6 +824,7 @@ async def _execute_job(
     ocr_keywords: str | None,
     arm_weights: dict[str, float],
     arm_enabled: dict[str, bool],
+    gemini_rerank: bool,
 ) -> None:
     state = manager.shared_state if scope == "shared" else manager.private_states[owner or ""]
     state["status"] = "queued"
@@ -731,6 +853,7 @@ async def _execute_job(
                 ocr_keywords,
                 arm_weights,
                 arm_enabled,
+                gemini_rerank,
             )
         state["status"] = "done"
         state["results"] = result["results"]
@@ -738,6 +861,7 @@ async def _execute_job(
         state["events"] = result["events"]
         state["answer"] = result["answer"]
         state["duration_ms"] = result["duration_ms"]
+        state["gemini_rerank"] = result.get("gemini_rerank", state.get("gemini_rerank"))
         state["finished_at"] = time.time()
         state["error"] = None
     except Exception as exc:  # noqa: BLE001 - surface a useful job error to UI
@@ -767,6 +891,7 @@ async def _schedule_job(
     ocr_keywords: str | None,
     arm_weights: dict[str, float],
     arm_enabled: dict[str, bool],
+    gemini_rerank: bool,
 ) -> JSONResponse:
     if not manager.ready:
         return JSONResponse(
@@ -799,6 +924,13 @@ async def _schedule_job(
             "ocr_keywords": ocr_keywords,
             "arm_weights": arm_weights,
             "arm_enabled": arm_enabled,
+            "gemini_rerank": {
+                "enabled": bool(gemini_rerank),
+                "ran": False,
+                "moved": 0,
+                "duration_ms": 0.0,
+                "reason": None,
+            },
             "answer": None,
             "started_at": None,
             "finished_at": None,
@@ -827,6 +959,7 @@ async def _schedule_job(
             ocr_keywords,
             arm_weights,
             arm_enabled,
+            gemini_rerank,
         )
     )
     await broadcast_state(manager, scope, owner)
@@ -859,6 +992,17 @@ async def config(request: Request) -> JSONResponse:
                 if os.getenv("TRAMMAY_API_KEY")
                 else "chua cau hinh Trammay",
                 "model": os.getenv("MFE_TRAMMAY_MODEL", "ag/gemini-3.8-flash"),
+            },
+            "gemini_rerank": {
+                "available": bool(os.getenv("TRAMMAY_API_KEY", "").strip()),
+                "model": os.getenv("MFE_TRAMMAY_MODEL", "ag/gemini-3.8-flash"),
+                "depth": _safe_int_env("MFE_GEMINI_RERANK_DEPTH", 30),
+                "default_enabled": False,
+            },
+            "dres": {
+                "configured": dres_configured(),
+                "base_url": os.getenv("MFE_DRES_BASE_URL", "https://eventretrieval.one"),
+                "evaluation_id": os.getenv("MFE_DRES_EVALUATION_ID", "").strip() or None,
             },
             "video": {
                 "configured": bool(os.getenv("MFE_VIDEO_BASE_URL", "").strip()),
@@ -1028,6 +1172,234 @@ async def state(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, **request.app.state.manager.state_for(username)})
 
 
+def _dres_evaluation_view(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": str(item.get("id", "")),
+            "name": str(item.get("name", "")),
+            "type": str(item.get("type", "")),
+            "status": str(item.get("status", "")),
+        }
+        for item in items
+        if str(item.get("id", ""))
+    ]
+
+
+async def dres_evaluations(request: Request) -> JSONResponse:
+    if _session_user(request) is None:
+        return JSONResponse({"ok": False, "error": "can dang nhap"}, status_code=401)
+    manager: EngineManager = request.app.state.manager
+    client = manager.dres()
+    if client is None:
+        return JSONResponse(
+            {
+                "ok": True,
+                "configured": False,
+                "evaluations": [],
+                "error": "thieu user/pass DRES trong .env",
+            }
+        )
+    try:
+        with manager.dres_lock:
+            evaluations = await asyncio.to_thread(client.evaluations)
+    except DresError as exc:
+        return JSONResponse({"ok": False, "configured": True, "error": str(exc)}, status_code=502)
+    return JSONResponse(
+        {
+            "ok": True,
+            "configured": True,
+            "evaluations": _dres_evaluation_view(evaluations),
+            "default": os.getenv("MFE_DRES_EVALUATION_ID", "").strip() or None,
+        }
+    )
+
+
+async def dres_submit(request: Request) -> JSONResponse:
+    username = _session_user(request)
+    if username is None:
+        return JSONResponse({"ok": False, "error": "can dang nhap"}, status_code=401)
+    if not _csrf_ok(request):
+        return JSONResponse({"ok": False, "error": "csrf token khong dung"}, status_code=403)
+    payload = await _json_body(request)
+    if not payload:
+        return JSONResponse({"ok": False, "error": "payload rong"}, status_code=400)
+    manager: EngineManager = request.app.state.manager
+    scope = str(payload.get("scope", "")).strip()
+    if scope not in {"shared", "private"}:
+        return JSONResponse({"ok": False, "error": "scope khong hop le"}, status_code=400)
+    if scope == "shared":
+        selected_state = manager.shared_state
+    else:
+        selected_state = manager.private_states.get(username)
+    if not selected_state or selected_state.get("status") != "done":
+        return JSONResponse({"ok": False, "error": "chua co ket qua de nop"}, status_code=409)
+    try:
+        result_index = int(payload.get("result_index", 0))
+    except (TypeError, ValueError):
+        return JSONResponse({"ok": False, "error": "result_index khong hop le"}, status_code=400)
+    results = selected_state.get("results") or []
+    if result_index < 0 or result_index >= len(results):
+        return JSONResponse(
+            {"ok": False, "error": "ket qua da chon khong ton tai"}, status_code=400
+        )
+    item = results[result_index]
+    answer = str(payload.get("answer", "")).strip()
+    if not answer and isinstance(selected_state.get("answer"), dict):
+        answer = str(selected_state["answer"].get("text", "")).strip()
+    try:
+        submission = build_selected_payload(
+            str(selected_state.get("query_type", "KIS")),
+            item,
+            answer=answer,
+        )
+    except (DresError, TypeError, ValueError) as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    evaluation_id = str(payload.get("evaluation_id", "")).strip() or os.getenv(
+        "MFE_DRES_EVALUATION_ID", ""
+    ).strip()
+    client = manager.dres()
+    if client is None:
+        return JSONResponse(
+            {"ok": False, "error": "thieu user/pass DRES trong .env"}, status_code=503
+        )
+    try:
+        with manager.dres_lock:
+            if not evaluation_id:
+                evaluations = await asyncio.to_thread(client.evaluations)
+                active = [
+                    item
+                    for item in evaluations
+                    if str(item.get("status", "")).upper() == "ACTIVE"
+                ]
+                if len(active) != 1:
+                    return JSONResponse(
+                        {
+                            "ok": False,
+                            "error": "can chon mot evaluation ACTIVE",
+                            "evaluations": _dres_evaluation_view(active),
+                        },
+                        status_code=409,
+                    )
+                evaluation_id = str(active[0]["id"])
+            duplicate_key = (
+                username,
+                evaluation_id,
+                scope,
+                selected_state.get("finished_at"),
+                result_index,
+            )
+            if duplicate_key in manager.dres_submissions:
+                return JSONResponse(
+                    {"ok": False, "error": "ket qua nay da bam nop"}, status_code=409
+                )
+            response = await asyncio.to_thread(client.submit, evaluation_id, submission)
+            manager.dres_submissions.add(duplicate_key)
+    except DresError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=502)
+    return JSONResponse(
+        {
+            "ok": True,
+            "evaluation_id": evaluation_id,
+            "query_type": selected_state.get("query_type"),
+            "result_rank": item.get("rank"),
+            "response": response
+            if isinstance(response, (dict, list, str, int, float, bool))
+            else {},
+        }
+    )
+
+
+def _suggestion_source(
+    manager: EngineManager,
+    username: str,
+    scope: str,
+    result_index: int,
+    event_index: int | None,
+) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    state = manager.shared_state if scope == "shared" else manager.private_states.get(username)
+    if not state or not isinstance(state.get("results"), list):
+        return None
+    results = state["results"]
+    if not 0 <= result_index < len(results):
+        return None
+    result = results[result_index]
+    selected = result
+    if event_index is not None and isinstance(result.get("events"), list):
+        selected = next(
+            (
+                event
+                for event in result["events"]
+                if int(event.get("event_index", -1)) == event_index
+            ),
+            None,
+        )
+        if selected is None:
+            return None
+    return state, selected
+
+
+async def suggestions(request: Request) -> JSONResponse:
+    username = _session_user(request)
+    if username is None:
+        return JSONResponse({"ok": False, "error": "can dang nhap"}, status_code=401)
+    manager: EngineManager = request.app.state.manager
+    if request.method == "GET":
+        return JSONResponse({"ok": True, "suggestions": manager.suggestions_snapshot()})
+    if not _csrf_ok(request):
+        return JSONResponse({"ok": False, "error": "csrf token khong dung"}, status_code=403)
+    payload = await _json_body(request)
+    if not payload:
+        return JSONResponse({"ok": False, "error": "payload rong"}, status_code=400)
+    scope = str(payload.get("scope", "")).strip()
+    try:
+        result_index = int(payload.get("result_index", 0))
+        event_index = payload.get("event_index")
+        event_index = int(event_index) if event_index is not None else None
+    except (TypeError, ValueError):
+        return JSONResponse({"ok": False, "error": "index khong hop le"}, status_code=400)
+    source = _suggestion_source(manager, username, scope, result_index, event_index)
+    if source is None:
+        return JSONResponse({"ok": False, "error": "khong tim thay ket qua"}, status_code=404)
+    state, item = source
+    note = str(payload.get("note", "")).strip()
+    if not note or len(note) > 2000:
+        return JSONResponse(
+            {"ok": False, "error": "ghi chu phai tu 1 den 2000 ky tu"}, status_code=400
+        )
+    suggestion = {
+        "id": uuid.uuid4().hex,
+        "created_at": time.time(),
+        "user": username,
+        "scope": scope,
+        "query_type": state.get("query_type"),
+        "query": state.get("query"),
+        "note": note,
+        "result_rank": item.get("rank"),
+        "video_id": item.get("video_id"),
+        "keyframe_id": item.get("keyframe_id"),
+        "frame_idx": item.get("frame_idx"),
+        "timestamp_ms": item.get("timestamp_ms"),
+        "video_url": item.get("video_url"),
+        "score": item.get("score"),
+        "event_index": event_index,
+    }
+    manager.add_suggestion(suggestion)
+    await broadcast_suggestions(manager)
+    return JSONResponse({"ok": True, "suggestion": suggestion}, status_code=201)
+
+
+async def clear_suggestions(request: Request) -> JSONResponse:
+    if _session_user(request) is None:
+        return JSONResponse({"ok": False, "error": "can dang nhap"}, status_code=401)
+    if not _csrf_ok(request):
+        return JSONResponse({"ok": False, "error": "csrf token khong dung"}, status_code=403)
+    manager: EngineManager = request.app.state.manager
+    manager.clear_suggestions()
+    await broadcast_suggestions(manager)
+    return JSONResponse({"ok": True})
+
+
 async def run_shared(request: Request) -> JSONResponse:
     username = _session_user(request)
     if username is None:
@@ -1102,6 +1474,7 @@ async def _run_request(request: Request, scope: str, username: str) -> JSONRespo
     )
     answer = str(payload.get("answer", "")).strip() if payload else ""
     auto_answer = bool(payload.get("auto_answer", False)) if payload else False
+    gemini_rerank = bool(payload.get("gemini_rerank", False)) if payload else False
     ocr_keywords = str(payload.get("ocr_keywords", "")).strip() if payload else ""
     try:
         arm_weights, arm_enabled = _parse_arm_config(request.app.state.manager, payload)
@@ -1147,6 +1520,7 @@ async def _run_request(request: Request, scope: str, username: str) -> JSONRespo
         ocr_keywords or None,
         arm_weights,
         arm_enabled,
+        gemini_rerank,
     )
 
 
@@ -1206,6 +1580,9 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     await websocket.send_json({"type": "health", "health": manager.health()})
     snapshot = manager.state_for(username)
     await websocket.send_json({"type": "snapshot", **snapshot})
+    await websocket.send_json(
+        {"type": "suggestions", "suggestions": manager.suggestions_snapshot()}
+    )
     try:
         while True:
             message = await websocket.receive_text()
@@ -1240,6 +1617,10 @@ routes = [
     Route("/api/login", login, methods=["POST"]),
     Route("/api/logout", logout, methods=["POST"]),
     Route("/api/state", state),
+    Route("/api/dres/evaluations", dres_evaluations),
+    Route("/api/dres/submit", dres_submit, methods=["POST"]),
+    Route("/api/suggestions", suggestions, methods=["GET", "POST"]),
+    Route("/api/suggestions/clear", clear_suggestions, methods=["POST"]),
     Route("/api/shared/run", run_shared, methods=["POST"]),
     Route("/api/private/run", run_private, methods=["POST"]),
     Route("/media/{video_id}/{frame_idx:int}", media),

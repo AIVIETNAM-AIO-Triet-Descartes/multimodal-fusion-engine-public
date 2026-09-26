@@ -78,7 +78,16 @@ class Evidence:
 
     def as_prompt(self) -> str:
         """Bằng chứng dưới dạng văn bản phẳng, cho một bộ đọc hoặc cho mắt người."""
-        lines = [f"[{source}] {text}" for source, text in self.ordered()]
+        lines = []
+        for source, text in self.ordered():
+            # Captions are generated prose, and an occasional pathological
+            # caption can otherwise crowd out OCR/subtitle evidence in the
+            # reader prompt.  Keep the source label and the beginning, where
+            # the salient action normally appears.
+            value = str(text)
+            if source.startswith("caption") and len(value) > 200:
+                value = value[:200].rstrip() + "…"
+            lines.append(f"[{source}] {value}")
         return "\n".join(lines)
 
 

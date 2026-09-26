@@ -25,6 +25,20 @@ QA hiện search hint/OCR/logic question, còn TRAKE hiện các mệnh đề đ
 sắp xếp trước khi tìm. Các lời gọi QUEST và QA VLM dùng `TRAMMAY_API_KEY` qua
 `llm-gateway.invalid`.
 
+QA hybrid gom năm frame liên tục quanh ứng viên đầu từ relational map, sau đó
+thêm các ứng viên rải cho đủ tối đa 15 ảnh. Caption dài bị giới hạn 200 ký tự
+trong prompt; OCR và phụ đề được ưu tiên. Công tắc **Gemini caption rerank** ở
+mỗi lane mặc định tắt, và khi bật sẽ gửi caption/OCR/phụ đề của top ứng viên qua
+Trammay rồi ghi lại trạng thái rerank trong kết quả.
+
+Tab **Đề xuất** lưu ghi chú dùng chung cho mọi tài khoản đang đăng nhập. Nút
+**Nộp DRES** chỉ xuất hiện trên kết quả đã chạy; backend đọc `user_dres` /
+`pass_dres`, đồng thời chấp nhận tên biến cũ `user_dress` / `pass_dress`. Session
+DRES không được gửi xuống trình duyệt. Có thể đặt `MFE_DRES_EVALUATION_ID` để
+chọn evaluation mặc định, hoặc đọc danh sách evaluation ACTIVE bằng nút làm
+mới cạnh hộp chọn. Ghi chú được lưu ở `/home/ubuntu/web/suggestions.json` và
+được giới hạn 200 mục gần nhất.
+
 Để bật player video, đặt `MFE_VIDEO_BASE_URL` trong `.env` thành URL container
 Azure có SAS, ví dụ `https://...blob.core.windows.net/video?sp=...&sig=...`.
 Backend sẽ nối `{video_id}.mp4` trước phần query SAS, yêu cầu đăng nhập ở

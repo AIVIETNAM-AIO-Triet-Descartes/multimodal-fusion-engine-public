@@ -100,14 +100,18 @@
     .check-label { display: flex; align-items: center; gap: 8px; }
     .check-label input { width: auto; }
     .config-panel { margin-top: 18px; }
-    .arms-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 9px; }
+    .arms-grid { display: flex; gap: 9px; overflow-x: auto; padding: 2px 2px 9px; overscroll-behavior-inline: contain; }
+    .arms-grid::-webkit-scrollbar { height: 9px; }
+    .arms-grid::-webkit-scrollbar-thumb { background: var(--line); border-radius: 99px; }
     .arm-row { display: grid; gap: 7px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 11px; background: rgba(12, 20, 38, .72); }
+    .arm-row { flex: 0 0 min(300px, 82vw); }
     .arm-row.unavailable { opacity: .72; }
     .arm-head, .arm-weight { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
     .arm-head label { display: flex; align-items: center; gap: 8px; color: var(--text); font-weight: 700; }
     .arm-head input[type=checkbox] { width: auto; }
     .arm-weight label { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; }
     .arm-weight input[type=number] { width: 76px; padding: 6px 7px; }
+    .arm-weight input[type=range] { width: 150px; accent-color: var(--accent); }
     .arm-description { color: var(--muted); font-size: 11px; line-height: 1.35; }
     .quest-box { display: grid; gap: 10px; padding: 11px 12px; border: 1px solid rgba(110, 168, 254, .35); border-radius: 11px; background: rgba(22, 40, 74, .46); }
     .quest-title { color: var(--accent); font-size: 12px; font-weight: 800; }
@@ -127,6 +131,13 @@
     .advanced { margin-top: 12px; }
     details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
     .advanced-grid { display: grid; grid-template-columns: 1fr 100px; gap: 10px; margin-top: 10px; }
+    .events-editor { display: grid; gap: 8px; }
+    .event-row { display: grid; grid-template-columns: 36px 1fr auto; gap: 7px; align-items: center; }
+    .event-number { color: var(--accent); font-weight: 800; text-align: center; }
+    .event-remove { padding: 7px 9px; }
+    .suggestions-list { display: grid; gap: 9px; }
+    .suggestion-item { padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; background: rgba(12,20,38,.72); }
+    .suggestion-item p { margin: 6px 0 0; white-space: pre-wrap; }
     .results-panel { margin-top: 18px; }
     .results-heading { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; margin-bottom: 14px; }
     .results-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
@@ -137,6 +148,8 @@
     .result-top { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 11px; }
     .rank { color: var(--accent); font-weight: 800; }
     .result-caption { margin-top: 7px; font-size: 13px; line-height: 1.4; }
+    .caption-details { margin-top: 8px; }
+    .caption-details summary { color: var(--accent); }
     .result-ocr { margin-top: 7px; color: #f6d365; font-size: 12px; }
     .result-actions { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 10px; }
     .video-button { border: 1px solid var(--accent); border-radius: 8px; padding: 6px 9px; color: var(--text); background: rgba(110, 168, 254, .12); font-size: 12px; font-weight: 700; }
@@ -153,6 +166,10 @@
     .modal-card { width: min(960px, 100%); padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); box-shadow: var(--shadow); }
     .modal-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 11px; }
     #videoPlayer { width: 100%; max-height: 76vh; background: #02050b; border-radius: 10px; }
+    .seek-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin-top: 10px; }
+    .seek-row label { min-width: 130px; }
+    .seek-row select { color: var(--text); background: #0c1426; border: 1px solid var(--line); border-radius: 9px; padding: 9px 10px; }
+    .seek-row input { min-width: 130px; }
     @media (max-width: 900px) {
       .intro { display: block; }
       .intro-tools { justify-items: start; margin-top: 16px; }
@@ -210,6 +227,7 @@
             <div class="lane-switch" role="tablist" aria-label="Chuyển đổi luồng">
               <button id="sharedSwitch" class="switch-button active" type="button" role="tab" aria-selected="true" data-scope="shared">👁 Luồng chung</button>
               <button id="privateSwitch" class="switch-button private" type="button" role="tab" aria-selected="false" data-scope="private">⚡ Luồng riêng</button>
+              <button id="suggestionsSwitch" class="switch-button" type="button" role="tab" aria-selected="false" data-scope="suggestions">💡 Đề xuất</button>
             </div>
             <div id="hardwareNote" class="muted small"></div>
           </div>
@@ -270,20 +288,24 @@
               <div id="sharedQaFields" class="query-extra hidden">
                 <label>Đáp án QA (tuỳ chọn, nhập tay)<input id="sharedAnswer" placeholder="Ví dụ: áo màu xanh lá"></label>
                 <label class="check-label"><input id="sharedAutoAnswer" type="checkbox"> Tự đọc đáp án bằng VLM sau khi tìm</label>
-                <p class="hint">Nếu không nhập đáp án, bật VLM để hệ thống đọc từ tối đa 8 ảnh đầu.</p>
+                <p class="hint">Nếu không nhập đáp án, bật VLM để hệ thống đọc tối đa 15 frame gồm vùng liên tục và ứng viên rải.</p>
               </div>
               <div id="sharedTrakeFields" class="query-extra hidden">
-                <label>Các sự kiện TRAKE, mỗi dòng một sự kiện<textarea id="sharedEvents" placeholder="E1: Người bắt đầu chạy\nE2: Người nhảy qua chướng ngại vật\nE3: Người tiếp đất"></textarea></label>
+                    <label>Các sự kiện TRAKE</label>
+                    <div id="sharedEventsEditor" class="events-editor"></div>
+                    <div class="button-row"><button id="sharedAddEvent" class="ghost" type="button">➕ Thêm sự kiện</button></div>
+                    <textarea id="sharedEvents" class="hidden" aria-hidden="true"></textarea>
                 <label>Bản tiếng Anh từng sự kiện (tuỳ chọn)<textarea id="sharedEventsEn" placeholder="Một dòng tương ứng cho mỗi sự kiện"></textarea></label>
                 <p class="hint">DANTE sẽ ghép các frame theo đúng thứ tự dòng và trả về một chuỗi cho mỗi video.</p>
               </div>
               <div id="sharedAdvanced" class="advanced">
                 <details>
-                  <summary>Tuỳ chọn tiếng Anh và số kết quả</summary>
+                    <summary>Tuỳ chọn tiếng Anh, số kết quả và Gemini rerank</summary>
                   <div class="advanced-grid">
                     <label>Bản tiếng Anh (tuỳ chọn)<input id="sharedQueryEn" placeholder="Để trống để backend tự xử lý"></label>
                     <label>Top K<input id="sharedTopK" type="number" min="1" max="100" value="50"></label>
-                  </div>
+                      </div>
+                      <label class="check-label" style="grid-column:1 / -1"><input id="sharedGeminiRerank" type="checkbox"> Gemini caption rerank qua Trammay (tuỳ chọn, có thể tăng thời gian)</label>
                 </details>
               </div>
               <div class="button-row"><button class="primary" type="submit">Chạy luồng chung</button><span id="sharedNotice" class="notice"></span></div>
@@ -334,20 +356,24 @@
               <div id="privateQaFields" class="query-extra hidden">
                 <label>Đáp án QA (tuỳ chọn, nhập tay)<input id="privateAnswer" placeholder="Ví dụ: áo màu xanh lá"></label>
                 <label class="check-label"><input id="privateAutoAnswer" type="checkbox"> Tự đọc đáp án bằng VLM sau khi tìm</label>
-                <p class="hint">Nếu không nhập đáp án, bật VLM để hệ thống đọc từ tối đa 8 ảnh đầu.</p>
+                <p class="hint">Nếu không nhập đáp án, bật VLM để hệ thống đọc tối đa 15 frame gồm vùng liên tục và ứng viên rải.</p>
               </div>
               <div id="privateTrakeFields" class="query-extra hidden">
-                <label>Các sự kiện TRAKE, mỗi dòng một sự kiện<textarea id="privateEvents" placeholder="E1: Người bắt đầu chạy\nE2: Người nhảy qua chướng ngại vật\nE3: Người tiếp đất"></textarea></label>
+                    <label>Các sự kiện TRAKE</label>
+                    <div id="privateEventsEditor" class="events-editor"></div>
+                    <div class="button-row"><button id="privateAddEvent" class="ghost" type="button">➕ Thêm sự kiện</button></div>
+                    <textarea id="privateEvents" class="hidden" aria-hidden="true"></textarea>
                 <label>Bản tiếng Anh từng sự kiện (tuỳ chọn)<textarea id="privateEventsEn" placeholder="Một dòng tương ứng cho mỗi sự kiện"></textarea></label>
                 <p class="hint">DANTE sẽ ghép các frame theo đúng thứ tự dòng và trả về một chuỗi cho mỗi video.</p>
               </div>
               <div id="privateAdvanced" class="advanced">
                 <details>
-                  <summary>Tuỳ chọn tiếng Anh và số kết quả</summary>
+                    <summary>Tuỳ chọn tiếng Anh, số kết quả và Gemini rerank</summary>
                   <div class="advanced-grid">
                     <label>Bản tiếng Anh (tuỳ chọn)<input id="privateQueryEn" placeholder="Để trống để backend tự xử lý"></label>
                     <label>Top K<input id="privateTopK" type="number" min="1" max="100" value="50"></label>
-                  </div>
+                      </div>
+                      <label class="check-label" style="grid-column:1 / -1"><input id="privateGeminiRerank" type="checkbox"> Gemini caption rerank qua Trammay (tuỳ chọn, có thể tăng thời gian)</label>
                 </details>
               </div>
               <div class="button-row"><button class="secondary" type="submit">Chạy luồng riêng</button><span id="privateNotice" class="notice"></span></div>
@@ -357,8 +383,17 @@
           </section>
         </div>
 
+        <section id="suggestionsPanel" class="panel lane-card">
+          <div class="panel-heading">
+            <div><div class="mode-tag">COLLABORATIVE NOTES</div><h2 style="margin-top:5px">💡 Đề xuất dùng chung</h2></div>
+            <div class="button-row"><button id="refreshSuggestionsButton" class="ghost" type="button">Làm mới</button><button id="clearSuggestionsButton" class="ghost" type="button">Xoá tất cả</button></div>
+          </div>
+          <p class="muted small">Ghi chú được chia sẻ cho mọi tài khoản đang đăng nhập, dùng để đánh dấu frame cần kiểm tra hoặc điều chỉnh trước khi nộp.</p>
+          <div id="suggestionsList" class="suggestions-list"><div class="result-empty">Chưa có đề xuất.</div></div>
+        </section>
+
         <section class="panel results-panel">
-          <div class="results-heading"><h2 id="resultsTitle">Kết quả</h2><span id="resultsHint" class="muted small">Chọn một luồng để xem kết quả.</span></div>
+          <div class="results-heading"><h2 id="resultsTitle">Kết quả</h2><div class="button-row"><select id="dresEvaluation" aria-label="Evaluation DRES"><option value="">DRES: đọc evaluation</option></select><button id="loadDresButton" class="ghost" type="button">↻</button><span id="resultsHint" class="muted small">Chọn một luồng để xem kết quả.</span></div></div>
           <div id="resultsGrid" class="results-grid"><div class="result-empty">Kết quả sẽ xuất hiện ở đây.</div></div>
         </section>
         <div class="footer-note">Streamlit backend được giữ nguyên ở loopback :8502. Web HTML này phục vụ qua :8501.</div>
@@ -370,6 +405,12 @@
       <div class="modal-heading"><h2 id="videoModalTitle">Video kết quả</h2><button id="closeVideoButton" class="ghost" type="button">Đóng</button></div>
       <video id="videoPlayer" controls playsinline preload="metadata"></video>
       <div id="videoModalInfo" class="muted small" style="margin-top:8px"></div>
+      <div class="seek-row">
+        <label>Kiểu tua<select id="seekMode"><option value="frame">Frame</option><option value="seconds">Giây</option></select></label>
+        <label>Giá trị<input id="seekValue" type="number" min="0" step="0.001" placeholder="Nhập frame hoặc giây"></label>
+        <button id="seekButton" class="primary" type="button">Tua tới</button>
+      </div>
+      <div id="videoTimeInfo" class="muted small" style="margin-top:8px"></div>
     </div>
   </div>
   <div id="toast" class="toast hidden"></div>
@@ -385,7 +426,10 @@
     let selectedScope = 'shared';
     const states = { shared: null, private: null };
     const questStates = { shared: null, private: null };
+    let sharedSuggestions = [];
+    const eventInputs = { shared: [''], private: [''] };
     let armRows = [];
+    let currentVideo = {fps: 25, frame: 0, seconds: 0};
 
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>'"]/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
@@ -418,6 +462,7 @@
       connectSocket();
       syncState();
       loadConfig();
+      loadDresEvaluations();
     }
     function statusText(state) {
       if (!state) return 'Chưa có lượt chạy.';
@@ -432,6 +477,34 @@
     function armKey(name) {
       return String(name).replace(/[^A-Za-z0-9_-]/g, '_');
     }
+    function renderEventEditor(scope) {
+      const host = $(`${scope}EventsEditor`);
+      if (!host) return;
+      const values = eventInputs[scope] || [''];
+      host.innerHTML = values.map((value, index) => `<div class="event-row"><span class="event-number">E${index + 1}</span><input data-event-scope="${scope}" data-event-index="${index}" value="${escapeHtml(value)}" placeholder="Mô tả sự kiện ${index + 1}"><button class="ghost event-remove" type="button" data-event-remove="${scope}" data-event-index="${index}" ${values.length === 1 ? 'disabled' : ''}>Xoá</button></div>`).join('');
+      host.querySelectorAll('[data-event-scope]').forEach((input) => input.addEventListener('input', () => syncEvents(scope)));
+      host.querySelectorAll('[data-event-remove]').forEach((button) => button.addEventListener('click', () => {
+        const index = Number(button.dataset.eventIndex);
+        eventInputs[scope].splice(index, 1);
+        if (!eventInputs[scope].length) eventInputs[scope].push('');
+        renderEventEditor(scope);
+        syncEvents(scope);
+      }));
+      syncEvents(scope);
+    }
+    function syncEvents(scope) {
+      const host = $(`${scope}EventsEditor`);
+      if (host) eventInputs[scope] = [...host.querySelectorAll('[data-event-scope]')].map((input) => input.value);
+      const target = $(`${scope}Events`);
+      if (target) target.value = (eventInputs[scope] || []).join('\n');
+    }
+    function addEvent(scope) {
+      syncEvents(scope);
+      eventInputs[scope].push('');
+      renderEventEditor(scope);
+      const inputs = $(`${scope}EventsEditor`).querySelectorAll('input');
+      inputs[inputs.length - 1]?.focus();
+    }
     function renderArms(arms) {
       armRows = Array.isArray(arms) ? arms : [];
       if (!armRows.length) {
@@ -444,7 +517,7 @@
         const reason = unavailable ? ` · ${arm.unavailable_reason || arm.status || 'không khả dụng'}` : '';
         return `<div class="arm-row ${unavailable ? 'unavailable' : ''}">
           <div class="arm-head"><label><input id="armEnabled_${key}" type="checkbox" ${arm.enabled ? 'checked' : ''} ${unavailable ? 'disabled' : ''}> ${escapeHtml(arm.name)}</label><span class="muted small">${escapeHtml(arm.query_language || 'any')}</span></div>
-          <div class="arm-weight"><label>Trọng số <input id="armWeight_${key}" type="number" min="0" max="4" step="0.05" value="${escapeHtml(arm.weight)}"></label><span class="muted small">${arm.enabled && arm.available ? 'đang bật' : (unavailable ? 'không khả dụng' : 'đang tắt')}</span></div>
+          <div class="arm-weight"><label>Trọng số <input id="armWeight_${key}" type="range" min="0" max="4" step="0.1" value="${escapeHtml(arm.weight)}" oninput="document.getElementById('armWeightValue_${key}').textContent=Number(this.value).toFixed(1)"><output id="armWeightValue_${key}">${Number(arm.weight || 0).toFixed(1)}</output></div>
           <div class="arm-description">${escapeHtml((arm.description || '') + reason)}</div>
         </div>`;
       }).join('');
@@ -465,7 +538,7 @@
       try {
         const data = await api('/api/config');
         renderArms(data.arms);
-        $('armConfigStatus').textContent = `${(data.arms || []).length} arm · QUEST: ${data.quest?.provider || '—'} · video: ${data.video?.configured ? 'Azure sẵn sàng' : 'chưa cấu hình'}`;
+        $('armConfigStatus').textContent = `${(data.arms || []).length} arm · QUEST: ${data.quest?.provider || '—'} · video: ${data.video?.configured ? 'Azure sẵn sàng' : 'chưa cấu hình'} · DRES: ${data.dres?.configured ? 'đã cấu hình' : 'chưa cấu hình'}`;
       } catch (error) {
         $('armConfigStatus').textContent = error.message;
       }
@@ -501,6 +574,7 @@
     async function analyzeQuest(scope) {
       const type = $(`${scope}Type`).value;
       const query = $(`${scope}Query`).value.trim();
+      syncEvents(scope);
       const events = type === 'TRAKE' ? splitEventLines($(`${scope}Events`).value) : [];
       const notice = $(`${scope}QuestStatus`);
       if (type === 'TRAKE' ? !events.length && !query : !query) {
@@ -523,6 +597,7 @@
     }
     function buildRunPayload(scope) {
       const type = $(`${scope}Type`).value;
+      syncEvents(scope);
       let query = $(`${scope}Query`).value.trim();
       let queryEn = $(`${scope}QueryEn`).value.trim();
       let ocrKeywords = '';
@@ -550,6 +625,7 @@
       return {query, query_en: queryEn, ocr_keywords: ocrKeywords, events, events_en: eventsEn};
     }
     function updateFormType(scope) {
+      syncEvents(scope);
       const type = $(`${scope}Type`).value;
       $(`${scope}QaFields`).classList.toggle('hidden', type !== 'QA');
       $(`${scope}TrakeFields`).classList.toggle('hidden', type !== 'TRAKE');
@@ -564,8 +640,27 @@
       $('resultsHint').textContent = statusText(state);
       $('resultsGrid').innerHTML = `<div class="result-empty">${escapeHtml(statusText(state))}</div>`;
     }
+    function renderSuggestions() {
+      $('resultsTitle').textContent = 'Đề xuất dùng chung';
+      $('resultsHint').textContent = `${sharedSuggestions.length} ghi chú · mọi tài khoản đang đăng nhập cùng xem`;
+      if (!sharedSuggestions.length) {
+        $('resultsGrid').innerHTML = '<div class="result-empty">Chưa có đề xuất.</div>';
+        $('suggestionsList').innerHTML = '<div class="result-empty">Chưa có đề xuất.</div>';
+        return;
+      }
+      const html = sharedSuggestions.map((item) => {
+        const when = item.created_at ? new Date(Number(item.created_at) * 1000).toLocaleString('vi-VN') : '';
+        const seconds = Number(item.timestamp_ms || 0) / 1000;
+        const meta = `${item.query_type || ''} · ${item.video_id || ''} · ${seconds.toFixed(3)}s · frame ${item.frame_idx ?? ''}`;
+        const video = item.video_url ? videoButton(item, '▶ Mở video') : '';
+        return `<article class="suggestion-item"><div class="result-top"><strong>${escapeHtml(item.user || '')}</strong><span>${escapeHtml(when)}</span></div><div class="muted small" style="margin-top:5px">${escapeHtml(meta)} · query: ${escapeHtml(item.query || '')}</div><p>${escapeHtml(item.note || '')}</p><div class="result-actions">${video}</div></article>`;
+      }).join('');
+      $('suggestionsList').innerHTML = html;
+      $('resultsGrid').innerHTML = `<div class="suggestions-list">${html}</div>`;
+      bindVideoButtons();
+    }
     function setActiveMode(scope) {
-      if (scope !== 'shared' && scope !== 'private') return;
+      if (!['shared', 'private', 'suggestions'].includes(scope)) return;
       selectedScope = scope;
       document.querySelectorAll('.switch-button').forEach((button) => {
         const active = button.dataset.scope === scope;
@@ -575,6 +670,7 @@
       document.querySelectorAll('.lane-card').forEach((panel) => {
         panel.classList.toggle('active', panel.id === `${scope}Panel`);
       });
+      if (scope === 'suggestions') { renderSuggestions(); return; }
       const state = states[scope];
       if (state && state.status === 'done') renderResults(scope, state);
       else renderEmptyResults(scope, state);
@@ -592,6 +688,7 @@
       if (state.owner) bits.push(`<span>người chạy: <strong>${escapeHtml(state.owner)}</strong></span>`);
       if (state.query) bits.push(`<span>query: <strong>${escapeHtml(state.query.slice(0, 110))}${state.query.length > 110 ? '…' : ''}</strong></span>`);
       if (state.duration_ms != null) bits.push(`<span>thời gian: <strong>${escapeHtml(state.duration_ms)} ms</strong></span>`);
+      if (state.gemini_rerank?.enabled) bits.push(`<span>Gemini rerank: <strong>${state.gemini_rerank.ran ? `đã chạy, đổi ${state.gemini_rerank.moved} vị trí` : 'bật nhưng không chạy'}</strong></span>`);
       if (state.answer && state.answer.text) bits.push(`<span>đáp án QA: <strong>${escapeHtml(state.answer.text)}</strong></span>`);
       if (state.answer && state.answer.reason && state.query_type === 'QA') bits.push(`<span style="color:var(--danger)">${escapeHtml(state.answer.reason)}</span>`);
       if (state.error) bits.push(`<span style="color:var(--danger)">${escapeHtml(state.error)}</span>`);
@@ -603,7 +700,13 @@
     }
     function videoButton(item, label = '▶ Xem video') {
       if (!item.video_url) return '';
-      return `<button class="video-button" type="button" data-video-open="1" data-video-url="${escapeHtml(item.video_url)}" data-video-time="${escapeHtml(Number(item.timestamp_ms || 0) / 1000)}" data-video-label="${escapeHtml(item.video_id || '')} · frame ${escapeHtml(item.frame_idx || '')}">${label}</button>`;
+      return `<button class="video-button" type="button" data-video-open="1" data-video-url="${escapeHtml(item.video_url)}" data-video-time="${escapeHtml(Number(item.timestamp_ms || 0) / 1000)}" data-video-frame="${escapeHtml(item.frame_idx || 0)}" data-video-fps="${escapeHtml(item.fps || 25)}" data-video-label="${escapeHtml(item.video_id || '')} · frame ${escapeHtml(item.frame_idx || '')}">${label}</button>`;
+    }
+    function suggestButton(resultIndex, eventIndex = null) {
+      return `<button class="video-button" type="button" data-suggest="1" data-result-index="${resultIndex}"${eventIndex == null ? '' : ` data-event-index="${eventIndex}"`}>💡 Đề xuất</button>`;
+    }
+    function dresButton(resultIndex) {
+      return `<button class="video-button" type="button" data-dres-submit="1" data-result-index="${resultIndex}">📤 Nộp DRES</button>`;
     }
     function bindVideoButtons() {
       document.querySelectorAll('[data-video-open="1"]').forEach((button) => {
@@ -612,23 +715,91 @@
           const url = button.dataset.videoUrl;
           if (!url) return;
           $('videoModalTitle').textContent = `Video · ${button.dataset.videoLabel || ''}`;
-          $('videoModalInfo').textContent = `Tua tới ${button.dataset.videoTime || 0}s; frame được lấy từ relational map.`;
+          currentVideo = {fps: Number(button.dataset.videoFps || 25), frame: Number(button.dataset.videoFrame || 0), seconds: Number(button.dataset.videoTime || 0)};
+          $('seekMode').value = 'frame';
+          $('seekValue').value = Number.isFinite(currentVideo.frame) ? currentVideo.frame : '';
+          $('videoModalInfo').textContent = `Frame ${currentVideo.frame} · ${currentVideo.seconds.toFixed(3)}s · FPS ${currentVideo.fps}`;
           $('videoModal').classList.remove('hidden');
           player.src = url;
           player.load();
           const seek = () => {
             const time = Number(button.dataset.videoTime || 0);
             if (Number.isFinite(time) && time >= 0 && Number.isFinite(player.duration)) player.currentTime = Math.min(time, player.duration);
+            updateVideoTimeInfo();
           };
           player.addEventListener('loadedmetadata', seek, {once: true});
         });
       });
+    }
+    function updateVideoTimeInfo() {
+      const player = $('videoPlayer');
+      const seconds = Number(player.currentTime || 0);
+      const frame = Math.round(seconds * Number(currentVideo.fps || 25));
+      $('videoTimeInfo').textContent = `Đang phát: ${seconds.toFixed(3)}s · frame xấp xỉ ${frame} · FPS ${Number(currentVideo.fps || 25)}`;
+    }
+    function seekVideo() {
+      const value = Number($('seekValue').value);
+      if (!Number.isFinite(value) || value < 0) return;
+      const seconds = $('seekMode').value === 'frame' ? value / Number(currentVideo.fps || 25) : value;
+      const player = $('videoPlayer');
+      if (Number.isFinite(player.duration)) player.currentTime = Math.min(seconds, player.duration);
+      else player.currentTime = seconds;
+      updateVideoTimeInfo();
+    }
+    function bindSuggestButtons() {
+      document.querySelectorAll('[data-suggest="1"]').forEach((button) => {
+        button.addEventListener('click', async () => {
+          const note = window.prompt('Ghi chú đề xuất cho mọi người:');
+          if (!note || !note.trim()) return;
+          try {
+            await api('/api/suggestions', {method:'POST', headers:{'X-CSRF-Token': csrf}, body: JSON.stringify({scope:selectedScope, result_index:Number(button.dataset.resultIndex), event_index:button.dataset.eventIndex == null ? null : Number(button.dataset.eventIndex), note:note.trim()})});
+            showToast('Đã thêm đề xuất dùng chung.');
+          } catch (error) { showToast(error.message); }
+        });
+      });
+    }
+    function bindDresButtons() {
+      document.querySelectorAll('[data-dres-submit="1"]').forEach((button) => {
+        button.addEventListener('click', () => submitDres(selectedScope, Number(button.dataset.resultIndex)));
+      });
+    }
+    async function loadDresEvaluations() {
+      try {
+        const data = await api('/api/dres/evaluations');
+        const select = $('dresEvaluation');
+        select.innerHTML = '<option value="">DRES: chọn evaluation</option>';
+        (data.evaluations || []).forEach((item) => {
+          const option = document.createElement('option');
+          option.value = item.id;
+          option.textContent = `${item.name || item.id} · ${item.status || ''}`;
+          select.appendChild(option);
+        });
+        if (data.default) select.value = data.default;
+        if (!data.configured) $('resultsHint').textContent = 'DRES chưa có user/pass trong .env';
+      } catch (error) {
+        $('resultsHint').textContent = `DRES: ${error.message}`;
+      }
+    }
+    async function submitDres(scope, resultIndex) {
+      const state = states[scope];
+      if (!state || state.status !== 'done') { showToast('Chưa có kết quả hoàn tất để nộp.'); return; }
+      const evaluationId = $('dresEvaluation').value;
+      if (!evaluationId) { showToast('Hãy chọn evaluation DRES trước.'); return; }
+      let answer = '';
+      if (state.query_type === 'QA') answer = window.prompt('Đáp án QA để nộp:', state.answer?.text || '') || '';
+      if (!window.confirm('DRES có thể áp dụng luật không nộp trùng và điểm sai. Bạn chắc chắn muốn nộp kết quả này?')) return;
+      try {
+        await api('/api/dres/submit', {method:'POST', headers:{'X-CSRF-Token': csrf}, body: JSON.stringify({scope, result_index:resultIndex, evaluation_id:evaluationId, answer})});
+        showToast('DRES đã nhận bài. Không bấm nộp lại cùng kết quả.');
+      } catch (error) { showToast(`Nộp DRES lỗi: ${error.message}`); }
     }
     function closeVideo() {
       const player = $('videoPlayer');
       player.pause();
       player.removeAttribute('src');
       player.load();
+      $('videoTimeInfo').textContent = '';
+      $('seekValue').value = '';
       $('videoModal').classList.add('hidden');
     }
     function renderResults(scope, state) {
@@ -642,26 +813,32 @@
       $('resultsHint').innerHTML = `${(state.results || []).length} ứng viên${answerText} · ${scope === 'shared' ? 'mọi user đã đăng nhập đều thấy' : 'chỉ bạn thấy'}`;
       const results = state.results || [];
       if (!results.length) { $('resultsGrid').innerHTML = '<div class="result-empty">Không có ứng viên phù hợp.</div>'; return; }
-      $('resultsGrid').innerHTML = results.map((item) => {
+      $('resultsGrid').innerHTML = results.map((item, resultIndex) => {
         const image = item.image_url ? `<img loading="lazy" src="${escapeHtml(item.image_url)}" alt="${escapeHtml(item.video_id)} frame ${escapeHtml(item.frame_idx)}">` : '<div class="image-empty">Ảnh chưa có trong cache</div>';
-        const caption = item.caption ? escapeHtml(item.caption) : '<span class="muted">Không có caption</span>';
+        const caption = item.caption ? `<details class="caption-details"><summary>Xem Dense Caption</summary><div class="result-caption">${escapeHtml(item.caption)}</div></details>` : '<div class="muted small">Không có caption</div>';
         const ocr = item.ocr ? `<div class="result-ocr">OCR: ${escapeHtml(item.ocr)}</div>` : '';
-        return `<article class="result-card">${image}<div class="result-body"><div class="result-top"><span class="rank">#${escapeHtml(item.rank)}</span><span>${escapeHtml(item.batch || '')} · ${escapeHtml(item.video_id)} · ${escapeHtml(item.timestamp_ms)} ms</span></div><div class="result-caption">${caption}</div>${ocr}<div class="muted small" style="margin-top:8px">score ${escapeHtml(item.score)} · frame ${escapeHtml(item.frame_idx)}</div><div class="result-actions">${videoButton(item)}</div></div></article>`;
+        const seconds = Number(item.seconds ?? Number(item.timestamp_ms || 0) / 1000);
+        return `<article class="result-card">${image}<div class="result-body"><div class="result-top"><span class="rank">#${escapeHtml(item.rank)}</span><span>${escapeHtml(item.batch || '')} · ${escapeHtml(item.video_id)}</span></div><div class="muted small" style="margin-top:5px">${seconds.toFixed(3)}s · frame ${escapeHtml(item.frame_idx)} · ${escapeHtml(item.keyframe_id || '')}</div>${caption}${ocr}<div class="muted small" style="margin-top:8px">score ${Number(item.score || 0).toFixed(2)}</div><div class="result-actions">${videoButton(item)}${suggestButton(resultIndex)}${dresButton(resultIndex)}</div></div></article>`;
       }).join('');
       bindVideoButtons();
+      bindSuggestButtons();
+      bindDresButtons();
     }
     function renderTrakeResults(scope, state) {
       const results = state.results || [];
       $('resultsHint').textContent = `${results.length} chuỗi video · ${state.events ? state.events.length : 0} sự kiện/chuỗi · ${scope === 'shared' ? 'mọi user đã đăng nhập đều thấy' : 'chỉ bạn thấy'}`;
       if (!results.length) { $('resultsGrid').innerHTML = '<div class="result-empty">Không ghép được chuỗi TRAKE theo thứ tự thời gian.</div>'; return; }
-      $('resultsGrid').innerHTML = results.map((item) => {
+      $('resultsGrid').innerHTML = results.map((item, resultIndex) => {
         const events = (item.events || []).map((event) => {
           const image = event.image_url ? `<img loading="lazy" src="${escapeHtml(event.image_url)}" alt="event ${escapeHtml(event.event_index)}">` : '<div class="image-empty">Ảnh chưa có</div>';
-          return `<div class="trake-event">${image}<div class="trake-event-label">E${escapeHtml(event.event_index)} · frame ${escapeHtml(event.frame_idx)}<br>${escapeHtml(event.timestamp_ms)} ms<div class="result-actions">${videoButton(event, '▶ Mở video')}</div></div></div>`;
+          const seconds = Number(event.seconds ?? Number(event.timestamp_ms || 0) / 1000);
+          return `<div class="trake-event">${image}<div class="trake-event-label">E${escapeHtml(event.event_index)} · ${seconds.toFixed(3)}s<br>frame ${escapeHtml(event.frame_idx)} · ${escapeHtml(event.keyframe_id || '')}<div class="result-actions">${videoButton(event, '▶ Mở video')}${suggestButton(resultIndex, event.event_index)}</div></div></div>`;
         }).join('');
-        return `<article class="result-card"><div class="result-body"><div class="result-top"><span class="rank">#${escapeHtml(item.rank)} · ${escapeHtml(item.video_id)}</span><span>score ${escapeHtml(item.score)}</span></div><div class="muted small" style="margin-top:6px">support ${escapeHtml(item.support)} · frames ${escapeHtml((item.frame_ids || []).join(', '))}</div><div class="trake-events">${events || '<div class="result-empty">Thiếu frame</div>'}</div></div></article>`;
+        return `<article class="result-card"><div class="result-body"><div class="result-top"><span class="rank">#${escapeHtml(item.rank)} · ${escapeHtml(item.video_id)}</span><span>score ${Number(item.score || 0).toFixed(2)}</span></div><div class="muted small" style="margin-top:6px">support ${escapeHtml(item.support)} · frames ${escapeHtml((item.frame_ids || []).join(', '))}</div><div class="trake-events">${events || '<div class="result-empty">Thiếu frame</div>'}</div><div class="result-actions">${dresButton(resultIndex)}</div></div></article>`;
       }).join('');
       bindVideoButtons();
+      bindSuggestButtons();
+      bindDresButtons();
     }
     function renderHealth(health) {
       const map = {ready:['ok', 'Engine sẵn sàng'], warming:['warn', 'Engine đang nạp model'], error:['bad', 'Engine lỗi']};
@@ -677,6 +854,7 @@
       if (message.type === 'health') renderHealth(message.health);
       if (message.type === 'snapshot') { renderState('shared', message.shared); renderState('private', message.private); }
       if (message.type === 'state') renderState(message.scope, message.state);
+      if (message.type === 'suggestions') { sharedSuggestions = Array.isArray(message.suggestions) ? message.suggestions : []; if (selectedScope === 'suggestions') renderSuggestions(); }
     }
     function connectSocket() {
       if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
@@ -693,6 +871,7 @@
         renderState('shared', data.shared); renderState('private', data.private);
       } catch (_) {}
       try { renderHealth(await api('/api/health')); } catch (_) {}
+      try { const data = await api('/api/suggestions'); sharedSuggestions = data.suggestions || []; if (selectedScope === 'suggestions') renderSuggestions(); } catch (_) {}
     }
     function startPolling() {
       clearInterval(pollTimer);
@@ -701,6 +880,7 @@
     async function submitRun(scope, event) {
       event.preventDefault();
       const queryType = $(`${scope}Type`).value;
+      syncEvents(scope);
       const query = $(`${scope}Query`).value.trim();
       const queryEn = $(`${scope}QueryEn`).value.trim();
       const events = queryType === 'TRAKE' ? splitEventLines($(`${scope}Events`).value) : [];
@@ -713,7 +893,6 @@
       const questClauses = questStates[scope] && questStates[scope].query_type === 'TRAKE' ? splitEventLines($(`${scope}QuestClauses`).value) : [];
       if (queryType === 'TRAKE' && !events.length && !questClauses.length && !query) { notice.textContent = 'Hãy nhập ít nhất một sự kiện TRAKE, mỗi dòng một sự kiện.'; return; }
       if (queryType !== 'TRAKE' && !query) { notice.textContent = 'Hãy nhập mô tả truy vấn.'; return; }
-      if (queryType === 'TRAKE' && eventsEn.length && eventsEn.length !== events.length) { notice.textContent = 'Số dòng tiếng Anh phải bằng số sự kiện.'; return; }
       const button = event.submitter;
       button.disabled = true;
       try {
@@ -724,7 +903,8 @@
         if (queryType === 'TRAKE' && !finalEvents.length) { notice.textContent = 'Hãy nhập ít nhất một sự kiện TRAKE.'; return; }
         if (queryType !== 'TRAKE' && !finalQuery) { notice.textContent = 'Hãy nhập mô tả truy vấn.'; return; }
         if (queryType === 'TRAKE' && prepared.events_en.length && prepared.events_en.length !== finalEvents.length) { notice.textContent = 'Số dòng tiếng Anh phải bằng số sự kiện.'; return; }
-        await api(`/api/${scope}/run`, {method:'POST', headers:{'X-CSRF-Token': csrf}, body: JSON.stringify({query:finalQuery, query_type: queryType, query_en: prepared.query_en, ocr_keywords: prepared.ocr_keywords, events:finalEvents, events_en:prepared.events_en, answer, auto_answer:autoAnswer, top_k: topK, ...armConfig})});
+        const geminiRerank = $(`${scope}GeminiRerank`).checked;
+        await api(`/api/${scope}/run`, {method:'POST', headers:{'X-CSRF-Token': csrf}, body: JSON.stringify({query:finalQuery, query_type: queryType, query_en: prepared.query_en, ocr_keywords: prepared.ocr_keywords, events:finalEvents, events_en:prepared.events_en, answer, auto_answer:autoAnswer, gemini_rerank:geminiRerank, top_k: topK, ...armConfig})});
         showToast(`${queryType} · ${scope === 'shared' ? 'đã xếp luồng chung; mọi user sẽ thấy tiến trình.' : 'đã chạy luồng riêng của bạn.'}`);
       } catch (error) { notice.textContent = error.message; }
       finally { button.disabled = false; }
@@ -744,13 +924,22 @@
     $('privateForm').addEventListener('submit', (event) => submitRun('private', event));
     $('sharedQuestButton').addEventListener('click', () => analyzeQuest('shared'));
     $('privateQuestButton').addEventListener('click', () => analyzeQuest('private'));
+    $('sharedAddEvent').addEventListener('click', () => addEvent('shared'));
+    $('privateAddEvent').addEventListener('click', () => addEvent('private'));
     $('sharedType').addEventListener('change', () => updateFormType('shared'));
     $('privateType').addEventListener('change', () => updateFormType('private'));
     $('closeVideoButton').addEventListener('click', closeVideo);
+    $('seekButton').addEventListener('click', seekVideo);
+    $('videoPlayer').addEventListener('timeupdate', updateVideoTimeInfo);
+    $('loadDresButton').addEventListener('click', loadDresEvaluations);
+    $('refreshSuggestionsButton').addEventListener('click', async () => { try { const data = await api('/api/suggestions'); sharedSuggestions = data.suggestions || []; renderSuggestions(); } catch (error) { showToast(error.message); } });
+    $('clearSuggestionsButton').addEventListener('click', async () => { if (!window.confirm('Xoá toàn bộ đề xuất dùng chung?')) return; try { await api('/api/suggestions/clear', {method:'POST', headers:{'X-CSRF-Token': csrf}}); } catch (error) { showToast(error.message); } });
     $('videoModal').addEventListener('click', (event) => { if (event.target === $('videoModal')) closeVideo(); });
     document.querySelectorAll('.switch-button').forEach((button) => {
       button.addEventListener('click', () => setActiveMode(button.dataset.scope));
     });
+    renderEventEditor('shared');
+    renderEventEditor('private');
     updateFormType('shared');
     updateFormType('private');
     setActiveMode('shared');

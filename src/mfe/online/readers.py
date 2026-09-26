@@ -94,7 +94,7 @@ class GeminiAnswerReader:
     """
 
     model: str = "gemini-3.6-flash"
-    images: int = 3
+    images: int = 15
     api_key_env: str = "GEMINI_API_KEY"
     name: str = "gemini"
     #: Đếm số lần model bỏ cuộc. Không phải để chặn — để thấy nếu nó lạm dụng.
@@ -123,14 +123,15 @@ class GeminiAnswerReader:
     ) -> Answer | None:
         from google import genai  # noqa: PLC0415
 
-        used = list(evidence)[: max(1, self.images)]
+        budget = min(15, max(1, self.images))
+        used = list(evidence)[:budget]
         blob = "\n\n".join(
             f"--- {item.keyframe_id} ---\n{item.as_prompt() or '(khong co van ban)'}"
             for item in used
         ) or "(khong co van ban nao)"
 
         parts: list[object] = []
-        for path in list(image_paths)[: self.images]:
+        for path in list(image_paths)[:budget]:
             try:
                 parts.append(
                     genai.types.Part.from_bytes(
