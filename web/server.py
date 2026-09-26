@@ -1602,7 +1602,15 @@ async def verify_video_frame(request: Request) -> JSONResponse:
     except (TypeError, ValueError) as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
 
-    model = str(selected_state.get("trammay_model") or TRAMMAY_MODEL_TIERS["high"])
+    requested_tier = str(payload.get("trammay_tier") or "").strip().lower()
+    if requested_tier:
+        try:
+            selected_tier, model = _resolve_trammay_tier(requested_tier)
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    else:
+        model = str(selected_state.get("trammay_model") or TRAMMAY_MODEL_TIERS["high"])
+        selected_tier = _tier_for_trammay_model(model)
     try:
         assert manager.verify_gate is not None
         async with manager.verify_gate:
@@ -1650,6 +1658,8 @@ async def verify_video_frame(request: Request) -> JSONResponse:
         {
             "ok": True,
             "task_type": task_type,
+            "trammay_tier": selected_tier,
+            "trammay_model": model,
             "best": best,
             "alternatives": alternatives,
             "confidence": outcome.confidence,
