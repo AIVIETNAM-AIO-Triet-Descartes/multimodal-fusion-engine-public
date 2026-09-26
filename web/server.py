@@ -555,6 +555,9 @@ class EngineManager:
         self.init_task: asyncio.Task[None] | None = None
         self.cpu_gate: asyncio.Semaphore | None = None
         self.verify_gate: asyncio.Semaphore | None = None
+        self.verify_parallel = _safe_int_env(
+            "MFE_WEB_VERIFY_PARALLEL", self.hardware.max_parallel_lanes
+        )
         self.query_cache_max = _safe_int_env("MFE_WEB_QUERY_CACHE_SIZE", 128)
         self.query_cache: OrderedDict[str, dict[str, Any]] = OrderedDict()
         self.query_cache_lock = threading.RLock()
@@ -604,7 +607,11 @@ class EngineManager:
     def start(self) -> None:
         self.shared_lane = Lane(self, "shared")
         self.cpu_gate = asyncio.Semaphore(self.hardware.max_parallel_lanes)
-        self.verify_gate = asyncio.Semaphore(_safe_int_env("MFE_WEB_VERIFY_PARALLEL", 4))
+        # Frame verification spends most of its time waiting on Trammay.  Keep
+        # the event loop non-blocking and allow all configured query lanes to
+        # make progress concurrently, while the semaphore still protects the
+        # upstream gateway from an unbounded burst.
+        self.verify_gate = asyncio.Semaphore(self.verify_parallel)
         self.initializing = True
         self.init_task = asyncio.create_task(asyncio.to_thread(self._initialize_sync))
         self.init_task.add_done_callback(self._initialization_done)
@@ -895,6 +902,7 @@ class EngineManager:
             "streamlit_preserved": True,
             "streamlit_internal_port": 8502,
             "hardware": self.hardware.as_dict(),
+            "verification_parallel": self.verify_parallel,
             "bundle": self.bundle.report() if self.bundle is not None else None,
             "active_arms": [arm.name for arm in self.base_cascade.arms.active()]
             if self.base_cascade is not None

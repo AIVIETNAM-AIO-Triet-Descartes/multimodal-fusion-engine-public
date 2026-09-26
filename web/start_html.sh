@@ -9,6 +9,7 @@ export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-16}"
 export TOKENIZERS_PARALLELISM=false
 export MFE_WEB_TORCH_THREADS="${MFE_WEB_TORCH_THREADS:-16}"
 export MFE_WEB_MAX_PARALLEL_LANES="${MFE_WEB_MAX_PARALLEL_LANES:-8}"
+export MFE_WEB_VERIFY_PARALLEL="${MFE_WEB_VERIFY_PARALLEL:-8}"
 
 exec /home/ubuntu/multimodal-fusion-engine/.venv/bin/uvicorn server:app \
   --host 0.0.0.0 \
