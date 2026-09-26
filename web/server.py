@@ -1444,13 +1444,14 @@ async def state(request: Request) -> JSONResponse:
 
 def _verification_target(
     selected_state: dict[str, Any], result_index: int, event_index: int | None
-) -> tuple[dict[str, Any], str, list[str]]:
+) -> tuple[dict[str, Any], str, list[str], str, dict[str, Any]]:
     results = selected_state.get("results") or []
     if result_index < 0 or result_index >= len(results):
         raise ValueError("ket qua da chon khong ton tai")
     result = results[result_index]
     query_type = str(selected_state.get("query_type", "KIS")).upper()
     target = result
+    context: dict[str, Any]
     if query_type == "TRAKE":
         if event_index is None or event_index < 1:
             raise ValueError("TRAKE can event_index")
@@ -1466,14 +1467,45 @@ def _verification_target(
             raise ValueError("event TRAKE da chon khong ton tai")
         events = selected_state.get("events") or []
         event_query = str(events[event_index - 1]).strip() if event_index <= len(events) else ""
-        preamble = str(selected_state.get("query") or "").strip()
-        query = "\n".join(part for part in (preamble, event_query) if part)
+        query = event_query or str(selected_state.get("query") or "").strip()
+        result_events = {
+            int(event.get("event_index", -1)): event
+            for event in result.get("events", [])
+            if isinstance(event, dict)
+        }
+        previous = result_events.get(event_index - 1)
+        following = result_events.get(event_index + 1)
+        previous_text = str(events[event_index - 2]).strip() if event_index >= 2 else ""
+        next_text = str(events[event_index]).strip() if event_index < len(events) else ""
+        context = {
+            "current_event_index": event_index,
+            "event_count": len(events),
+            "current_event": query,
+            "previous_event": previous_text or None,
+            "next_event": next_text or None,
+            "previous_keyframe_id": previous.get("keyframe_id") if previous else None,
+            "next_keyframe_id": following.get("keyframe_id") if following else None,
+            "previous_timestamp_ms": previous.get("timestamp_ms") if previous else None,
+            "next_timestamp_ms": following.get("timestamp_ms") if following else None,
+        }
     else:
-        query = str(selected_state.get("query") or "").strip()
-        if query_type == "QA" and isinstance(selected_state.get("answer"), dict):
+        question = str(selected_state.get("query") or "").strip()
+        answer = ""
+        answer_source = None
+        if isinstance(selected_state.get("answer"), dict):
             answer = str(selected_state["answer"].get("text") or "").strip()
-            if answer:
-                query = f"{query}\nDap an dang doc: {answer}"
+            answer_source = selected_state["answer"].get("source")
+        query = f"{question}\n{answer}".strip() if query_type == "QA" else question
+        context = (
+            {
+                "question": question,
+                "proposed_answer": answer or None,
+                "answer_source": answer_source,
+                "ocr_keywords": selected_state.get("ocr_keywords"),
+            }
+            if query_type == "QA"
+            else {"kis_query": question}
+        )
     if not query:
         raise ValueError("truy van rong")
 
@@ -1491,7 +1523,16 @@ def _verification_target(
             candidate_id = str(event.get("keyframe_id") or "")
             if candidate_id:
                 related.append(candidate_id)
-    return target, query, related
+    return target, query, related, query_type, context
+
+
+def _verification_threshold(task_type: str) -> float:
+    defaults = {"KIS": 0.8, "QA": 0.85, "TRAKE": 0.85}
+    value = _safe_float_env(
+        f"MFE_VIDEO_VERIFY_AUTO_THRESHOLD_{task_type}",
+        _safe_float_env("MFE_VIDEO_VERIFY_AUTO_THRESHOLD", defaults[task_type]),
+    )
+    return min(1.0, max(0.0, value))
 
 
 def _verify_video_frame_sync(
@@ -1500,6 +1541,8 @@ def _verify_video_frame_sync(
     query: str,
     related: list[str],
     model: str,
+    task_type: str,
+    context: dict[str, Any],
 ) -> Any:
     if manager.relational is None or manager.bundle is None or manager.images is None:
         raise RuntimeError("engine chua nap xong mapping/bundle/anh")
@@ -1519,10 +1562,9 @@ def _verify_video_frame_sync(
         related_keyframe_ids=related,
         model=model,
         max_images=min(20, _safe_int_env("MFE_VIDEO_VERIFY_IMAGES", 12)),
-        auto_threshold=min(
-            1.0,
-            max(0.0, _safe_float_env("MFE_VIDEO_VERIFY_AUTO_THRESHOLD", 0.8)),
-        ),
+        auto_threshold=_verification_threshold(task_type),
+        task_type=task_type,
+        task_context=context,
     )
 
 
@@ -1554,7 +1596,9 @@ async def verify_video_frame(request: Request) -> JSONResponse:
         result_index = int(payload.get("result_index", -1))
         raw_event_index = payload.get("event_index")
         event_index = int(raw_event_index) if raw_event_index is not None else None
-        target, query, related = _verification_target(selected_state, result_index, event_index)
+        target, query, related, task_type, context = _verification_target(
+            selected_state, result_index, event_index
+        )
     except (TypeError, ValueError) as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
 
@@ -1563,7 +1607,14 @@ async def verify_video_frame(request: Request) -> JSONResponse:
         assert manager.verify_gate is not None
         async with manager.verify_gate:
             outcome = await asyncio.to_thread(
-                _verify_video_frame_sync, manager, target, query, related, model
+                _verify_video_frame_sync,
+                manager,
+                target,
+                query,
+                related,
+                model,
+                task_type,
+                context,
             )
     except Exception as exc:  # noqa: BLE001 - optional verifier reports its own failure
         logger.warning(
@@ -1594,13 +1645,11 @@ async def verify_video_frame(request: Request) -> JSONResponse:
         for item in [manager._keyframe_payload(keyframe_id, best["video_id"], 0.0, index)]
         if item is not None
     ]
-    threshold = min(
-        1.0,
-        max(0.0, _safe_float_env("MFE_VIDEO_VERIFY_AUTO_THRESHOLD", 0.8)),
-    )
+    threshold = _verification_threshold(task_type)
     return JSONResponse(
         {
             "ok": True,
+            "task_type": task_type,
             "best": best,
             "alternatives": alternatives,
             "confidence": outcome.confidence,
@@ -1611,6 +1660,7 @@ async def verify_video_frame(request: Request) -> JSONResponse:
             "model": model,
             "metrics": {
                 "total_keyframes_scanned": outcome.total_keyframes_scanned,
+                "eligible_keyframes": outcome.eligible_keyframes,
                 "shortlisted": outcome.shortlisted,
                 "images_sent": outcome.images_sent,
                 "image_parts_sent": outcome.image_parts_sent,

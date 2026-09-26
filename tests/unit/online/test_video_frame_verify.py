@@ -105,3 +105,75 @@ def test_low_confidence_result_requires_operator_confirmation(tmp_path: Path):
     )
     assert result.auto_selected is False
     assert result.confidence_label == "thấp"
+
+
+def test_trake_shortlist_respects_adjacent_event_times():
+    selected = shortlist_video_keyframes(
+        "the shrimp touches the plate",
+        _rows(),
+        _Bundle(),
+        anchor_keyframe_id="L21_V001#000200",
+        min_timestamp_ms=4000,
+        max_timestamp_ms=12000,
+        max_images=12,
+    )
+    assert [row.keyframe_id for row in selected] == ["L21_V001#000200"]
+
+
+def test_qa_prompt_verifies_answer_evidence(tmp_path: Path):
+    path = tmp_path / "200.jpg"
+    Image.new("RGB", (80, 45), "green").save(path)
+    client = _Client(
+        '{"best_keyframe_id":"L21_V001#000200","alternatives":[],"confidence":0.9,'
+        '"is_match":true,"reason":"Phụ đề chứng minh đáp án."}'
+    )
+    result = verify_video_keyframe(
+        "What touches the plate? Shrimp",
+        "L21_V001",
+        "L21_V001#000200",
+        _rows()[1:2],
+        _Bundle(),
+        lambda _keyframe_id: path,
+        model="ag/gemini-3.8-flash-high",
+        client=client,
+        task_type="QA",
+        task_context={"question": "What touches the plate?", "proposed_answer": "Shrimp"},
+        auto_threshold=0.85,
+    )
+    prompt = client.calls[0][0]
+    assert "This is QA verification" in prompt
+    assert '"proposed_answer": "Shrimp"' in prompt
+    assert result.task_type == "QA"
+    assert result.auto_selected is True
+
+
+def test_trake_verification_reports_temporal_eligibility(tmp_path: Path):
+    paths = {}
+    for row in _rows():
+        path = tmp_path / f"{row.frame_idx}.jpg"
+        Image.new("RGB", (80, 45), "orange").save(path)
+        paths[row.keyframe_id] = path
+    client = _Client(
+        '{"best_keyframe_id":"L21_V001#000200","alternatives":[],"confidence":0.88,'
+        '"is_match":true,"reason":"Đúng E2 và nằm giữa E1, E3."}'
+    )
+    result = verify_video_keyframe(
+        "E2: the shrimp touches the plate",
+        "L21_V001",
+        "L21_V001#000200",
+        _rows(),
+        _Bundle(),
+        lambda keyframe_id: paths.get(keyframe_id),
+        model="ag/gemini-3.8-flash-high",
+        client=client,
+        task_type="TRAKE",
+        task_context={
+            "current_event_index": 2,
+            "previous_timestamp_ms": 4000,
+            "next_timestamp_ms": 12000,
+        },
+        auto_threshold=0.85,
+    )
+    assert result.task_type == "TRAKE"
+    assert result.eligible_keyframes == 1
+    assert result.best_keyframe_id == "L21_V001#000200"

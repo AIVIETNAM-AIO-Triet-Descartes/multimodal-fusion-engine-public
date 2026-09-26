@@ -49,6 +49,7 @@ _WORD_RE = re.compile(r"[^\W_]+", re.UNICODE)
 
 @dataclass(frozen=True)
 class VideoFrameVerification:
+    task_type: str
     best_keyframe_id: str
     alternatives: tuple[str, ...]
     confidence: float
@@ -56,6 +57,7 @@ class VideoFrameVerification:
     reason: str
     auto_selected: bool
     total_keyframes_scanned: int
+    eligible_keyframes: int
     shortlisted: int
     images_sent: int
     image_parts_sent: int
@@ -118,10 +120,19 @@ def shortlist_video_keyframes(
     dense_key_index: Mapping[str, int] | None = None,
     related_keyframe_ids: Sequence[str] = (),
     max_images: int = 12,
+    min_timestamp_ms: int | None = None,
+    max_timestamp_ms: int | None = None,
 ) -> list[KeyframeRow]:
     """Scan one complete video locally and return a diverse VLM shortlist."""
     if not rows:
         return []
+    eligible = [
+        row
+        for row in rows
+        if (min_timestamp_ms is None or row.timestamp_ms > min_timestamp_ms)
+        and (max_timestamp_ms is None or row.timestamp_ms < max_timestamp_ms)
+    ]
+    rows = eligible or list(rows)
     limit = max(1, int(max_images))
     by_id = {row.keyframe_id: row for row in rows}
     query_tokens = _tokens(query)
@@ -238,6 +249,8 @@ def _cache_key(
     model: str,
     ids: Sequence[str],
     auto_threshold: float,
+    task_type: str,
+    task_context: Mapping[str, Any],
 ) -> str:
     value = json.dumps(
         {
@@ -247,12 +260,37 @@ def _cache_key(
             "model": model,
             "ids": list(ids),
             "threshold": auto_threshold,
+            "task_type": task_type,
+            "task_context": task_context,
         },
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
     )
     return hashlib.sha256(value.encode()).hexdigest()
+
+
+def _task_instructions(task_type: str) -> str:
+    if task_type == "QA":
+        return (
+            "This is QA verification. Select the frame that provides the strongest visible, OCR, "
+            "or subtitle evidence for the proposed answer to the question. Visual similarity to "
+            "the question alone is insufficient. Set is_match=false and keep confidence below "
+            "0.80 when the proposed answer is not actually supported by the supplied evidence."
+        )
+    if task_type == "TRAKE":
+        return (
+            "This is one event in an ordered TRAKE chain. Select the exact moment for "
+            "CURRENT_EVENT, not merely a generally similar scene. Respect the previous and next "
+            "event descriptions and their timestamp bounds in TASK_CONTEXT. Set is_match=false "
+            "when no candidate proves "
+            "this event while preserving the event order."
+        )
+    return (
+        "This is KIS verification. Select the keyframe that most exactly depicts the requested "
+        "visual moment, including action phase, object counts, positions, colors and "
+        "on-screen text."
+    )
 
 
 def verify_video_keyframe(
@@ -269,9 +307,33 @@ def verify_video_keyframe(
     client: Any | None = None,
     max_images: int = 12,
     auto_threshold: float = 0.8,
+    task_type: str = "KIS",
+    task_context: Mapping[str, Any] | None = None,
 ) -> VideoFrameVerification:
-    """Choose the exact catalogue keyframe with one bounded Gemini request."""
+    """Verify a KIS moment, QA evidence frame, or one ordered TRAKE event."""
     started = time.perf_counter()
+    task_type = str(task_type or "KIS").strip().upper()
+    if task_type not in {"KIS", "QA", "TRAKE"}:
+        raise ValueError("task_type phai la KIS, QA hoac TRAKE")
+    context = dict(task_context or {})
+    min_timestamp_ms = (
+        int(context["previous_timestamp_ms"])
+        if task_type == "TRAKE" and context.get("previous_timestamp_ms") is not None
+        else None
+    )
+    max_timestamp_ms = (
+        int(context["next_timestamp_ms"])
+        if task_type == "TRAKE" and context.get("next_timestamp_ms") is not None
+        else None
+    )
+    eligible_rows = [
+        row
+        for row in rows
+        if (min_timestamp_ms is None or row.timestamp_ms > min_timestamp_ms)
+        and (max_timestamp_ms is None or row.timestamp_ms < max_timestamp_ms)
+    ]
+    if not eligible_rows:
+        eligible_rows = list(rows)
     shortlisted = shortlist_video_keyframes(
         query,
         rows,
@@ -280,6 +342,8 @@ def verify_video_keyframe(
         dense_key_index=dense_key_index,
         related_keyframe_ids=related_keyframe_ids,
         max_images=max_images,
+        min_timestamp_ms=min_timestamp_ms,
+        max_timestamp_ms=max_timestamp_ms,
     )
     image_paths: dict[str, Path] = {}
     available: list[KeyframeRow] = []
@@ -298,6 +362,8 @@ def verify_video_keyframe(
         model,
         [row.keyframe_id for row in available],
         auto_threshold,
+        task_type,
+        context,
     )
     if client is None:
         with _CACHE_LOCK:
@@ -311,7 +377,7 @@ def verify_video_keyframe(
     feature_ranks: dict[str, int] = {}
     vectors = getattr(bundle, "vectors", {}).get("bge_m3")
     if dense_key_index and vectors is not None:
-        feature_rows = [row for row in rows if row.keyframe_id in dense_key_index]
+        feature_rows = [row for row in eligible_rows if row.keyframe_id in dense_key_index]
         if feature_rows:
             indices = np.asarray(
                 [dense_key_index[row.keyframe_id] for row in feature_rows], dtype=np.int64
@@ -328,10 +394,10 @@ def verify_video_keyframe(
                 for rank, position in enumerate(order, 1)
             }
     anchor_position = next(
-        (index for index, row in enumerate(rows) if row.keyframe_id == anchor_keyframe_id),
+        (index for index, row in enumerate(eligible_rows) if row.keyframe_id == anchor_keyframe_id),
         0,
     )
-    positions = {row.keyframe_id: index for index, row in enumerate(rows)}
+    positions = {row.keyframe_id: index for index, row in enumerate(eligible_rows)}
     for row in available:
         metadata = _metadata(bundle, row.keyframe_id)
         rows_for_prompt.append(
@@ -364,19 +430,22 @@ def verify_video_keyframe(
     if gateway is None:
         raise RuntimeError("thieu TRAMMAY_API_KEY")
     prompt = (
-        "You verify the exact keyframe inside a video whose video_id is already known "
-        "to be correct. "
+        f"{_task_instructions(task_type)} "
+        "The video_id is already known to be correct. "
         "The backend scanned ALL catalogue keyframes in this video with BGE-M3 and text evidence; "
         "the attached contact sheets contain the strongest shortlist, with each tile labeled by "
         "keyframe id. Inspect pixels, action timing, "
-        "counts, OCR and subtitles. Pick the frame that best matches the requested exact moment. "
+        "counts, OCR and subtitles. Apply the task-specific selection criterion above. "
         "Lower confidence when the exact action is between sampled frames, repeated, obscured, or "
         "not visibly proven. confidence must be 0..1 and should be >=0.80 only when "
         "the image clearly "
-        "confirms the requested moment. Return ONLY JSON with keys best_keyframe_id, alternatives "
+        "confirms the required evidence or moment. Return ONLY JSON with keys best_keyframe_id, "
+        "alternatives "
         "(up to 3 supplied ids), confidence, is_match, reason. Write reason briefly in Vietnamese. "
         "Never invent an id.\n"
         f"QUERY: {query.strip()}\n"
+        f"TASK_TYPE: {task_type}\n"
+        f"TASK_CONTEXT: {json.dumps(context, ensure_ascii=False)}\n"
         f"VIDEO_ID: {video_id}\n"
         f"CURRENT_FRAME: {anchor_keyframe_id}\n"
         f"CANDIDATES_IN_IMAGE_ORDER: {json.dumps(rows_for_prompt, ensure_ascii=False)}"
@@ -411,6 +480,7 @@ def verify_video_keyframe(
         if candidate in allowed and candidate != best
     )[:3] if isinstance(raw_alternatives, list) else ()
     outcome = VideoFrameVerification(
+        task_type=task_type,
         best_keyframe_id=best,
         alternatives=alternatives,
         confidence=round(confidence, 4),
@@ -418,6 +488,7 @@ def verify_video_keyframe(
         reason=str(parsed.get("reason") or "Gemini da doi chieu anh va metadata.").strip()[:1000],
         auto_selected=auto_selected,
         total_keyframes_scanned=len(rows),
+        eligible_keyframes=len(eligible_rows),
         shortlisted=len(shortlisted),
         images_sent=len(available),
         image_parts_sent=len(encoded_images),
