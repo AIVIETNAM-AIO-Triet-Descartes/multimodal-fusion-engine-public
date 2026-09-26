@@ -33,3 +33,19 @@ def test_dres_submission_key_ignores_lane_and_result_rank():
     assert submission_key("eval-1", state) == submission_key("eval-1", same_query)
     assert submission_key("eval-1", state) != submission_key("eval-1", other_query)
     assert submission_key("eval-1", state) != submission_key("eval-2", state)
+
+
+def test_dres_submission_key_allows_a_different_answer_for_same_query():
+    state = {"query_type": "KIS", "query": "một cảnh", "events": []}
+    first = {
+        "answerSets": [
+            {"answers": [{"mediaItemName": "L21_V001", "start": 100, "end": 100}]}
+        ]
+    }
+    second = {
+        "answerSets": [
+            {"answers": [{"mediaItemName": "L21_V002", "start": 200, "end": 200}]}
+        ]
+    }
+    assert submission_key("eval-1", state, first) != submission_key("eval-1", state, second)
+    assert submission_key("eval-1", state, first) == submission_key("eval-1", state, first)

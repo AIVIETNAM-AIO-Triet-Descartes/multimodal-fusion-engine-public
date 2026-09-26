@@ -28,8 +28,9 @@ sắp xếp trước khi tìm. Các lời gọi QUEST và QA VLM dùng `TRAMMAY_
 QA hybrid gom năm frame liên tục quanh ứng viên đầu từ relational map, sau đó
 thêm các ứng viên rải cho đủ tối đa 15 ảnh. Caption dài bị giới hạn 200 ký tự
 trong prompt; OCR và phụ đề được ưu tiên. Công tắc **Gemini caption rerank** ở
-mỗi lane mặc định tắt, và khi bật sẽ gửi caption/OCR/phụ đề của top ứng viên qua
-Trammay rồi ghi lại trạng thái rerank trong kết quả.
+mỗi lane mặc định bật để ưu tiên độ chính xác; có thể tắt khi cần chạy nhanh.
+Khi bật, caption/OCR/phụ đề của top ứng viên được gửi qua Trammay rồi ghi lại
+trạng thái rerank trong kết quả.
 
 Tab **Đề xuất** lưu ghi chú dùng chung cho mọi tài khoản đang đăng nhập. Nút
 **Nộp DRES** chỉ xuất hiện trên kết quả đã chạy; backend đọc `user_dres` /
@@ -42,9 +43,11 @@ mới cạnh hộp chọn. Ghi chú được lưu ở `/home/ubuntu/web/suggesti
 Với TRAKE, nút đề xuất ở đầu mỗi chuỗi lưu toàn bộ các event; các nút trong
 từng event vẫn cho phép đánh dấu riêng một frame để kiểm tra.
 
-Sau khi DRES nhận một truy vấn, backend ghi fingerprint truy vấn vào
-`/home/ubuntu/web/dres_submissions.json` (mode 600). Restart web vẫn giữ được
-hàng rào chống nộp trùng theo quy định cuộc thi.
+Sau khi DRES nhận một đáp án, backend ghi fingerprint của **đúng payload đáp án**
+vào `/home/ubuntu/web/dres_submissions.json` (mode 600). Vì vậy một đáp án khác
+cho cùng truy vấn vẫn có thể được nộp lại để sửa lượt sai, còn payload giống hệt
+vẫn bị chặn ở DRES hoặc ở web. Verdict `CORRECT/WRONG/PENDING` hiện ngay sau khi
+gửi.
 
 Để bật player video, đặt `MFE_VIDEO_BASE_URL` trong `.env` thành URL container
 Azure có SAS, ví dụ `https://...blob.core.windows.net/video?sp=...&sig=...`.

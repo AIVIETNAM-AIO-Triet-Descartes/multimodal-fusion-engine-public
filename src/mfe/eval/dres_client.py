@@ -42,8 +42,18 @@ def configured() -> bool:
     return bool(username and password)
 
 
-def submission_key(evaluation_id: str, state: dict[str, Any]) -> str:
-    """Stable per-query key used to prevent duplicate DRES submissions."""
+def submission_key(
+    evaluation_id: str,
+    state: dict[str, Any],
+    payload: dict[str, Any] | None = None,
+) -> str:
+    """Stable key for one exact DRES answer.
+
+    DRES rejects an identical answer, but it allows a different answer for the
+    same query so a team can recover from an earlier wrong attempt.  The web
+    guard therefore includes the serialized answer payload when available;
+    older callers can still request the legacy query-only fingerprint.
+    """
     identity = {
         "evaluation_id": evaluation_id,
         "query_type": str(state.get("query_type", "")).upper(),
@@ -52,6 +62,8 @@ def submission_key(evaluation_id: str, state: dict[str, Any]) -> str:
         if isinstance(state.get("events"), list)
         else [],
     }
+    if payload is not None:
+        identity["payload"] = payload
     encoded = json.dumps(identity, ensure_ascii=False, sort_keys=True).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 

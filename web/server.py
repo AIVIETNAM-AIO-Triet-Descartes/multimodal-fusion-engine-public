@@ -119,6 +119,16 @@ def _safe_int_env(name: str, default: int) -> int:
     return value if value > 0 else default
 
 
+def _gemini_rerank_default() -> bool:
+    """Prefer the accuracy pass while allowing an operator to opt out."""
+    return os.getenv("MFE_GEMINI_RERANK_DEFAULT", "1").strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+
+
 def _visible_cpus() -> list[int]:
     try:
         return sorted(os.sched_getaffinity(0))
@@ -258,7 +268,7 @@ class Lane:
         ocr_keywords: str | None = None,
         arm_weights: dict[str, float] | None = None,
         arm_enabled: dict[str, bool] | None = None,
-        gemini_rerank: bool = False,
+        gemini_rerank: bool = True,
     ) -> dict[str, Any]:
         cascade = self._ensure_cascade()
         started = time.perf_counter()
@@ -1028,7 +1038,7 @@ async def config(request: Request) -> JSONResponse:
                 "available": bool(os.getenv("TRAMMAY_API_KEY", "").strip()),
                 "model": os.getenv("MFE_TRAMMAY_MODEL", "ag/gemini-3.8-flash"),
                 "depth": _safe_int_env("MFE_GEMINI_RERANK_DEPTH", 30),
-                "default_enabled": False,
+                "default_enabled": _gemini_rerank_default(),
             },
             "dres": {
                 "configured": dres_configured(),
@@ -1313,7 +1323,7 @@ async def dres_submit(request: Request) -> JSONResponse:
                         status_code=409,
                     )
                 evaluation_id = str(active[0]["id"])
-            duplicate_key = submission_key(evaluation_id, selected_state)
+            duplicate_key = submission_key(evaluation_id, selected_state, submission)
             if duplicate_key in manager.dres_submissions:
                 return JSONResponse(
                     {"ok": False, "error": "ket qua nay da bam nop"}, status_code=409
@@ -1323,12 +1333,16 @@ async def dres_submit(request: Request) -> JSONResponse:
             manager._persist_dres_submissions()
     except DresError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=502)
+    verdict = response.get("submission") if isinstance(response, dict) else None
+    description = response.get("description") if isinstance(response, dict) else None
     return JSONResponse(
         {
             "ok": True,
             "evaluation_id": evaluation_id,
             "query_type": selected_state.get("query_type"),
             "result_rank": item.get("rank"),
+            "verdict": verdict,
+            "description": description,
             "response": response
             if isinstance(response, (dict, list, str, int, float, bool))
             else {},
@@ -1526,7 +1540,11 @@ async def _run_request(request: Request, scope: str, username: str) -> JSONRespo
     )
     answer = str(payload.get("answer", "")).strip() if payload else ""
     auto_answer = bool(payload.get("auto_answer", False)) if payload else False
-    gemini_rerank = bool(payload.get("gemini_rerank", False)) if payload else False
+    gemini_rerank = (
+        bool(payload.get("gemini_rerank", _gemini_rerank_default()))
+        if payload
+        else _gemini_rerank_default()
+    )
     ocr_keywords = str(payload.get("ocr_keywords", "")).strip() if payload else ""
     try:
         arm_weights, arm_enabled = _parse_arm_config(request.app.state.manager, payload)

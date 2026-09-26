@@ -305,7 +305,7 @@
                     <label>Bản tiếng Anh (tuỳ chọn)<input id="sharedQueryEn" placeholder="Để trống để backend tự xử lý"></label>
                     <label>Top K<input id="sharedTopK" type="number" min="1" max="100" value="50"></label>
                       </div>
-                      <label class="check-label" style="grid-column:1 / -1"><input id="sharedGeminiRerank" type="checkbox"> Gemini caption rerank qua Trammay (tuỳ chọn, có thể tăng thời gian)</label>
+                      <label class="check-label" style="grid-column:1 / -1"><input id="sharedGeminiRerank" type="checkbox" checked> Gemini caption rerank qua Trammay (khuyến nghị; có thể tăng thời gian)</label>
                 </details>
               </div>
               <div class="button-row"><button class="primary" type="submit">Chạy luồng chung</button><span id="sharedNotice" class="notice"></span></div>
@@ -373,7 +373,7 @@
                     <label>Bản tiếng Anh (tuỳ chọn)<input id="privateQueryEn" placeholder="Để trống để backend tự xử lý"></label>
                     <label>Top K<input id="privateTopK" type="number" min="1" max="100" value="50"></label>
                       </div>
-                      <label class="check-label" style="grid-column:1 / -1"><input id="privateGeminiRerank" type="checkbox"> Gemini caption rerank qua Trammay (tuỳ chọn, có thể tăng thời gian)</label>
+                      <label class="check-label" style="grid-column:1 / -1"><input id="privateGeminiRerank" type="checkbox" checked> Gemini caption rerank qua Trammay (khuyến nghị; có thể tăng thời gian)</label>
                 </details>
               </div>
               <div class="button-row"><button class="secondary" type="submit">Chạy luồng riêng</button><span id="privateNotice" class="notice"></span></div>
@@ -538,6 +538,9 @@
       try {
         const data = await api('/api/config');
         renderArms(data.arms);
+        const rerankDefault = data.gemini_rerank?.default_enabled !== false;
+        $('sharedGeminiRerank').checked = rerankDefault;
+        $('privateGeminiRerank').checked = rerankDefault;
         $('armConfigStatus').textContent = `${(data.arms || []).length} arm · QUEST: ${data.quest?.provider || '—'} · video: ${data.video?.configured ? 'Azure sẵn sàng' : 'chưa cấu hình'} · DRES: ${data.dres?.configured ? 'đã cấu hình' : 'chưa cấu hình'}`;
       } catch (error) {
         $('armConfigStatus').textContent = error.message;
@@ -815,8 +818,12 @@
       if (state.query_type === 'QA') answer = window.prompt('Đáp án QA để nộp:', state.answer?.text || '') || '';
       if (!window.confirm('DRES có thể áp dụng luật không nộp trùng và điểm sai. Bạn chắc chắn muốn nộp kết quả này?')) return;
       try {
-        await api('/api/dres/submit', {method:'POST', headers:{'X-CSRF-Token': csrf}, body: JSON.stringify({scope, result_index:resultIndex, evaluation_id:evaluationId, answer})});
-        showToast('DRES đã nhận bài. Không bấm nộp lại cùng kết quả.');
+        const data = await api('/api/dres/submit', {method:'POST', headers:{'X-CSRF-Token': csrf}, body: JSON.stringify({scope, result_index:resultIndex, evaluation_id:evaluationId, answer})});
+        const verdict = String(data.verdict || data.response?.submission || '').toUpperCase();
+        const description = data.description || data.response?.description || '';
+        if (verdict === 'CORRECT') showToast(`DRES: CORRECT · ${description || 'đáp án đúng'}`);
+        else if (verdict === 'WRONG') showToast(`DRES: WRONG · ${description || 'đáp án sai'}`);
+        else showToast(`DRES đã nhận bài${description ? ` · ${description}` : ' · đang chờ verdict'}.`);
       } catch (error) { showToast(`Nộp DRES lỗi: ${error.message}`); }
     }
     function closeVideo() {
