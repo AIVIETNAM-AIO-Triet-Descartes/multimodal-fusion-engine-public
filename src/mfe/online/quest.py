@@ -242,7 +242,8 @@ class QuestClient:
     được cấu hình Trammay; chúng không được gọi khi Trammay đã sẵn sàng.
     """
     
-    def __init__(self):
+    def __init__(self, model_override: str | None = None):
+        self.model_override = model_override.strip() if model_override else None
         self.trammay_client = TrammayClient.from_env()
         self.nvidia_key = os.environ.get("NVIDIA_API_KEY")
         self.openrouter_key = os.environ.get("OPENROUTER_API_KEY")
@@ -279,7 +280,11 @@ class QuestClient:
     def generate(self, prompt: str, max_tokens: int = 500) -> str:
         """Gửi prompt tới Gemini qua Trammay khi gateway đã được cấu hình."""
         if self.trammay_client is not None:
-            model = os.getenv("MFE_TRAMMAY_QUEST_MODEL") or self.trammay_client.model
+            model = (
+                self.model_override
+                or os.getenv("MFE_TRAMMAY_QUEST_MODEL")
+                or self.trammay_client.model
+            )
             cache_key = (
                 "trammay",
                 self.trammay_client.base_url,

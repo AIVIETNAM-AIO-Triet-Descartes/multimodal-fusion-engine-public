@@ -34,9 +34,11 @@ trạng thái rerank trong kết quả.
 
 Runtime giữ cache kết quả truy hồi trong RAM (mặc định 128 truy vấn), cùng cache
 phản hồi QUEST và thứ tự rerank Trammay. Hai nhánh dịch và mở rộng của KIS được
-gọi song song. `MFE_TRAMMAY_MODEL=ag/gemini-3.8-flash-low` là lựa chọn mặc định
-cho giao diện tương tác; có thể đổi sang model mạnh hơn khi cần ưu tiên chất
-lượng.
+gọi song song. Mặc định vẫn là `ag/gemini-3.8-flash-high`; trong phần tuỳ chọn
+của từng lane có thể chọn `high` (chất lượng cao), `medium` (cân bằng) hoặc
+`low` (nhanh). Lựa chọn được áp dụng cho QUEST, Gemini caption rerank và VLM
+đáp án QA, đồng thời được đưa vào cache key để các mức không dùng nhầm kết quả
+của nhau.
 
 Tab **Đề xuất** lưu ghi chú dùng chung cho mọi tài khoản đang đăng nhập. Nút
 **Nộp DRES** chỉ xuất hiện trên kết quả đã chạy; backend đọc `user_dres` /

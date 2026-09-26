@@ -313,6 +313,13 @@
                   <div class="advanced-grid">
                     <label>Bản tiếng Anh (tuỳ chọn)<input id="sharedQueryEn" placeholder="Để trống để backend tự xử lý"></label>
                     <label>Top K<input id="sharedTopK" type="number" min="1" max="100" value="50"></label>
+                    <label>Model Trammay
+                      <select id="sharedTrammayTier">
+                        <option value="high" selected>High · chất lượng cao</option>
+                        <option value="medium">Medium · cân bằng</option>
+                        <option value="low">Low · nhanh</option>
+                      </select>
+                    </label>
                       </div>
                       <label class="check-label" style="grid-column:1 / -1"><input id="sharedGeminiRerank" type="checkbox" checked> Gemini caption rerank qua Trammay (khuyến nghị; có thể tăng thời gian)</label>
                 </details>
@@ -382,6 +389,13 @@
                   <div class="advanced-grid">
                     <label>Bản tiếng Anh (tuỳ chọn)<input id="privateQueryEn" placeholder="Để trống để backend tự xử lý"></label>
                     <label>Top K<input id="privateTopK" type="number" min="1" max="100" value="50"></label>
+                    <label>Model Trammay
+                      <select id="privateTrammayTier">
+                        <option value="high" selected>High · chất lượng cao</option>
+                        <option value="medium">Medium · cân bằng</option>
+                        <option value="low">Low · nhanh</option>
+                      </select>
+                    </label>
                       </div>
                       <label class="check-label" style="grid-column:1 / -1"><input id="privateGeminiRerank" type="checkbox" checked> Gemini caption rerank qua Trammay (khuyến nghị; có thể tăng thời gian)</label>
                 </details>
@@ -589,7 +603,10 @@
         const rerankDefault = data.gemini_rerank?.default_enabled !== false;
         $('sharedGeminiRerank').checked = rerankDefault;
         $('privateGeminiRerank').checked = rerankDefault;
-        $('armConfigStatus').textContent = `${(data.arms || []).length} arm · QUEST: ${data.quest?.provider || '—'} · video: ${data.video?.configured ? 'Azure sẵn sàng' : 'chưa cấu hình'} · DRES: ${data.dres?.configured ? 'đã cấu hình' : 'chưa cấu hình'}`;
+        const defaultTier = data.trammay?.default_tier || data.quest?.tier || 'high';
+        $('sharedTrammayTier').value = defaultTier;
+        $('privateTrammayTier').value = defaultTier;
+        $('armConfigStatus').textContent = `${(data.arms || []).length} arm · QUEST: ${data.quest?.provider || '—'} · Trammay: ${defaultTier} · video: ${data.video?.configured ? 'Azure sẵn sàng' : 'chưa cấu hình'} · DRES: ${data.dres?.configured ? 'đã cấu hình' : 'chưa cấu hình'}`;
       } catch (error) {
         $('armConfigStatus').textContent = error.message;
       }
@@ -638,7 +655,7 @@
       notice.textContent = 'QUEST Trammay đang phân tích…';
       notice.className = 'quest-status';
       try {
-        const data = await api('/api/quest', {method:'POST', headers:{'X-CSRF-Token': csrf}, body: JSON.stringify({query, query_type: type, events})});
+        const data = await api('/api/quest', {method:'POST', headers:{'X-CSRF-Token': csrf}, body: JSON.stringify({query, query_type: type, events, trammay_tier: $(`${scope}TrammayTier`).value || 'high'})});
         renderQuest(scope, data);
         showToast(`QUEST ${type} đã sinh xong các trường chỉnh sửa.`);
       } catch (error) {
@@ -675,7 +692,7 @@
           if (clauses.length) events = clauses;
         }
       }
-      return {query, query_en: queryEn, ocr_keywords: ocrKeywords, events, events_en: eventsEn, trake_preamble: trakePreamble};
+      return {query, query_en: queryEn, ocr_keywords: ocrKeywords, events, events_en: eventsEn, trake_preamble: trakePreamble, trammay_tier: $(`${scope}TrammayTier`).value || 'high'};
     }
     function updateFormType(scope) {
       syncEvents(scope);
@@ -764,6 +781,7 @@
       if (state.query_type === 'TRAKE' && state.events && state.events.length) bits.push(`<span>sự kiện: <strong>${state.events.length}</strong></span>`);
       if (state.owner) bits.push(`<span>người chạy: <strong>${escapeHtml(state.owner)}</strong></span>`);
       if (state.query) bits.push(`<span>query: <strong>${escapeHtml(state.query.slice(0, 110))}${state.query.length > 110 ? '…' : ''}</strong></span>`);
+      if (state.trammay_tier) bits.push(`<span>Trammay: <strong>${escapeHtml(state.trammay_tier)}</strong></span>`);
       if (state.duration_ms != null) bits.push(`<span>thời gian: <strong>${escapeHtml(state.duration_ms)} ms</strong></span>`);
       if (state.cache_hit) bits.push('<span class="ok">kết quả từ cache RAM</span>');
       if (state.gemini_rerank?.enabled) bits.push(`<span>Gemini rerank: <strong>${state.gemini_rerank.cached ? `cache RAM, đổi ${state.gemini_rerank.moved} vị trí` : state.gemini_rerank.ran ? `đã chạy, đổi ${state.gemini_rerank.moved} vị trí` : 'bật nhưng không chạy'}</strong></span>`);
@@ -1104,7 +1122,7 @@
         if (queryType !== 'TRAKE' && !finalQuery) { notice.textContent = 'Hãy nhập mô tả truy vấn.'; return; }
         if (queryType === 'TRAKE' && prepared.events_en.length && finalEvents.length && prepared.events_en.length !== finalEvents.length) { notice.textContent = 'Số dòng tiếng Anh phải bằng số sự kiện.'; return; }
         const geminiRerank = $(`${scope}GeminiRerank`).checked;
-        await api(`/api/${scope}/run`, {method:'POST', headers:{'X-CSRF-Token': csrf}, body: JSON.stringify({query:finalQuery, query_type: queryType, query_en: prepared.query_en, ocr_keywords: prepared.ocr_keywords, trake_preamble: prepared.trake_preamble, events:finalEvents, events_en:prepared.events_en, answer, auto_answer:autoAnswer, gemini_rerank:geminiRerank, top_k: topK, ...armConfig})});
+        await api(`/api/${scope}/run`, {method:'POST', headers:{'X-CSRF-Token': csrf}, body: JSON.stringify({query:finalQuery, query_type: queryType, query_en: prepared.query_en, ocr_keywords: prepared.ocr_keywords, trake_preamble: prepared.trake_preamble, events:finalEvents, events_en:prepared.events_en, answer, auto_answer:autoAnswer, gemini_rerank:geminiRerank, trammay_tier:prepared.trammay_tier, top_k: topK, ...armConfig})});
         showToast(`${queryType} · ${scope === 'shared' ? 'đã xếp luồng chung; mọi user sẽ thấy tiến trình.' : 'đã chạy luồng riêng của bạn.'}`);
       } catch (error) { notice.textContent = error.message; }
       finally { button.disabled = false; }

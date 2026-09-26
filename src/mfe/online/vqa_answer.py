@@ -223,6 +223,7 @@ def read_answer_hybrid(
     ask: Callable[[str, list[Path]], str] | None = None,
     window: int = 2,
     max_images: int = 15,
+    model: str | None = None,
 ) -> Answer:
     """Read QA with continuous context plus scattered ranked evidence.
 
@@ -255,10 +256,14 @@ def read_answer_hybrid(
             remaining -= 1
     evidence = [*continuous, *scattered]
     items = [(item.keyframe_id, images(item.keyframe_id)) for item in evidence]
+    answer_caller = ask
+    if answer_caller is None and model:
+        def answer_caller(prompt: str, paths: list[Path]) -> str:
+            return _ask_trammay(prompt, paths, model=model)
     return _read_answer_items(
         question,
         items,
-        ask=ask,
+        ask=answer_caller,
         evidence=evidence,
         continuous_count=len(continuous),
         scattered_count=len(scattered),
@@ -345,7 +350,7 @@ def parse_answer(text: str) -> dict | None:
     return parsed if isinstance(parsed, dict) else None
 
 
-def _ask_trammay(prompt: str, paths: list[Path]) -> str:
+def _ask_trammay(prompt: str, paths: list[Path], *, model: str | None = None) -> str:
     client = TrammayClient.from_env()
     if client is None:
         raise RuntimeError("thieu TRAMMAY_API_KEY trong .env")
@@ -358,7 +363,7 @@ def _ask_trammay(prompt: str, paths: list[Path]) -> str:
     return client.chat(
         prompt,
         images_b64=encoded,
-        model=client.model,
+        model=model or client.model,
         max_tokens=512,
         temperature=0.0,
     )

@@ -31,9 +31,9 @@ import sys
 import threading
 import time
 import uuid
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
-from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -113,6 +113,39 @@ logger = logging.getLogger("mfe-web")
 _USERNAME_RE = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 _VIDEO_RE = re.compile(r"^[A-Za-z0-9_.-]{1,160}$")
 
+# The browser only receives these three safe, named choices.  Keeping the
+# mapping server-side prevents a client from selecting an arbitrary upstream
+# model and makes QUEST/rerank cache keys unambiguous.
+TRAMMAY_MODEL_TIERS = {
+    "high": "ag/gemini-3.8-flash-high",
+    "medium": "ag/gemini-3.8-flash-medium",
+    "low": "ag/gemini-3.8-flash-low",
+}
+
+
+def _default_trammay_tier() -> str:
+    current = os.getenv("MFE_TRAMMAY_MODEL", TRAMMAY_MODEL_TIERS["high"]).strip()
+    return next(
+        (tier for tier, model in TRAMMAY_MODEL_TIERS.items() if model == current),
+        "high",
+    )
+
+
+def _resolve_trammay_tier(raw: Any) -> tuple[str, str]:
+    tier = str(raw or _default_trammay_tier()).strip().lower()
+    model = TRAMMAY_MODEL_TIERS.get(tier)
+    if model is None:
+        raise ValueError("trammay_tier phai la high, medium hoac low")
+    return tier, model
+
+
+def _tier_for_trammay_model(model: str | None) -> str:
+    selected = str(model or "").strip()
+    return next(
+        (tier for tier, tier_model in TRAMMAY_MODEL_TIERS.items() if tier_model == selected),
+        _default_trammay_tier(),
+    )
+
 
 def _safe_int_env(name: str, default: int) -> int:
     try:
@@ -137,6 +170,7 @@ def _search_cache_key(
     arm_weights: dict[str, float] | None,
     arm_enabled: dict[str, bool] | None,
     gemini_rerank: bool,
+    trammay_model: str | None,
 ) -> str:
     """Stable key for the RAM result cache.
 
@@ -158,6 +192,7 @@ def _search_cache_key(
         "arm_weights": arm_weights or {},
         "arm_enabled": arm_enabled or {},
         "gemini_rerank": bool(gemini_rerank),
+        "trammay_model": trammay_model or "",
     }
     return hashlib.sha256(
         json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
@@ -317,6 +352,7 @@ class Lane:
         arm_weights: dict[str, float] | None = None,
         arm_enabled: dict[str, bool] | None = None,
         gemini_rerank: bool = True,
+        trammay_model: str | None = None,
     ) -> dict[str, Any]:
         started = time.perf_counter()
         cache_key = _search_cache_key(
@@ -333,6 +369,7 @@ class Lane:
             arm_weights=arm_weights,
             arm_enabled=arm_enabled,
             gemini_rerank=gemini_rerank,
+            trammay_model=trammay_model,
         )
         cached = self.manager.cached_query(cache_key)
         if cached is not None:
@@ -390,6 +427,7 @@ class Lane:
                 self.manager.bundle,
                 query_en=text_en,
                 depth=_safe_int_env("MFE_GEMINI_RERANK_DEPTH", 30),
+                model=trammay_model,
             )
             rerank_metrics["ran"] = rerank_metrics["ran"] or outcome.ran
             rerank_metrics["cached"] = rerank_metrics["cached"] or outcome.cached
@@ -452,6 +490,7 @@ class Lane:
                             relational=self.manager.relational,
                             logic_question=query,
                             ocr_keywords=ocr_keywords or "",
+                            model=trammay_model,
                         )
                         answer_payload = {
                             "text": vqa.text,
@@ -479,6 +518,8 @@ class Lane:
             "duration_ms": round((time.perf_counter() - started) * 1000, 1),
             "cache_hit": False,
             "gemini_rerank": rerank_metrics,
+            "trammay_model": trammay_model or TRAMMAY_MODEL_TIERS[_default_trammay_tier()],
+            "trammay_tier": _tier_for_trammay_model(trammay_model),
         }
         self.manager.cache_query(cache_key, result)
         return result
@@ -543,6 +584,8 @@ class EngineManager:
             "finished_at": None,
             "duration_ms": None,
             "cache_hit": False,
+            "trammay_tier": _default_trammay_tier(),
+            "trammay_model": TRAMMAY_MODEL_TIERS[_default_trammay_tier()],
             "error": None,
             "results": [],
         }
@@ -963,6 +1006,7 @@ async def _execute_job(
     arm_weights: dict[str, float],
     arm_enabled: dict[str, bool],
     gemini_rerank: bool,
+    trammay_model: str,
 ) -> None:
     state = manager.shared_state if scope == "shared" else manager.private_states[owner or ""]
     state["status"] = "queued"
@@ -992,6 +1036,7 @@ async def _execute_job(
                 arm_weights,
                 arm_enabled,
                 gemini_rerank,
+                trammay_model,
             )
         state["status"] = "done"
         state["results"] = result["results"]
@@ -1000,6 +1045,8 @@ async def _execute_job(
         state["answer"] = result["answer"]
         state["duration_ms"] = result["duration_ms"]
         state["cache_hit"] = bool(result.get("cache_hit", False))
+        state["trammay_tier"] = result.get("trammay_tier", _tier_for_trammay_model(trammay_model))
+        state["trammay_model"] = result.get("trammay_model", trammay_model)
         state["gemini_rerank"] = result.get("gemini_rerank", state.get("gemini_rerank"))
         state["finished_at"] = time.time()
         state["error"] = None
@@ -1031,6 +1078,7 @@ async def _schedule_job(
     arm_weights: dict[str, float],
     arm_enabled: dict[str, bool],
     gemini_rerank: bool,
+    trammay_model: str,
 ) -> JSONResponse:
     if not manager.ready:
         return JSONResponse(
@@ -1063,6 +1111,8 @@ async def _schedule_job(
             "ocr_keywords": ocr_keywords,
             "arm_weights": arm_weights,
             "arm_enabled": arm_enabled,
+            "trammay_tier": _tier_for_trammay_model(trammay_model),
+            "trammay_model": trammay_model,
             "gemini_rerank": {
                 "enabled": bool(gemini_rerank),
                 "ran": False,
@@ -1101,6 +1151,7 @@ async def _schedule_job(
             arm_weights,
             arm_enabled,
             gemini_rerank,
+            trammay_model,
         )
     )
     await broadcast_state(manager, scope, owner)
@@ -1136,13 +1187,23 @@ async def config(request: Request) -> JSONResponse:
                 "provider": "llm-gateway.invalid / Gemini"
                 if os.getenv("TRAMMAY_API_KEY")
                 else "chua cau hinh Trammay",
-                "model": os.getenv("MFE_TRAMMAY_MODEL", "ag/gemini-3.8-flash"),
+                "model": TRAMMAY_MODEL_TIERS[_default_trammay_tier()],
+                "tier": _default_trammay_tier(),
             },
             "gemini_rerank": {
                 "available": bool(os.getenv("TRAMMAY_API_KEY", "").strip()),
-                "model": os.getenv("MFE_TRAMMAY_MODEL", "ag/gemini-3.8-flash"),
+                "model": TRAMMAY_MODEL_TIERS[_default_trammay_tier()],
+                "tier": _default_trammay_tier(),
                 "depth": _safe_int_env("MFE_GEMINI_RERANK_DEPTH", 30),
                 "default_enabled": _gemini_rerank_default(),
+            },
+            "trammay": {
+                "tiers": [
+                    {"value": tier, "model": model}
+                    for tier, model in TRAMMAY_MODEL_TIERS.items()
+                ],
+                "default_tier": _default_trammay_tier(),
+                "default_model": TRAMMAY_MODEL_TIERS[_default_trammay_tier()],
             },
             "dres": {
                 "configured": dres_configured(),
@@ -1173,7 +1234,7 @@ def _trake_input(query: str, events: list[str]) -> tuple[str, list[str]]:
 
 
 def _quest_analysis_sync(
-    query_type: str, query: str, events: list[str]
+    query_type: str, query: str, events: list[str], trammay_model: str
 ) -> dict[str, Any]:
     if query_type == "TRAKE":
         preamble, parsed_events = _trake_input(query, events)
@@ -1195,7 +1256,7 @@ def _quest_analysis_sync(
     else:
         source = query.strip()
 
-    client = QuestClient()
+    client = QuestClient(model_override=trammay_model)
     available, reason = client.available()
     if not available:
         raise RuntimeError(reason or "QUEST Trammay chua san sang")
@@ -1279,7 +1340,15 @@ async def quest(request: Request) -> JSONResponse:
     if len(source) > 8000 or any(len(item) > 4000 for item in events):
         return JSONResponse({"ok": False, "error": "query qua dai"}, status_code=400)
     try:
-        result = await asyncio.to_thread(_quest_analysis_sync, query_type, query, events)
+        _, trammay_model = _resolve_trammay_tier(
+            payload.get("trammay_tier") if payload else None
+        )
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    try:
+        result = await asyncio.to_thread(
+            _quest_analysis_sync, query_type, query, events, trammay_model
+        )
     except Exception as exc:  # noqa: BLE001 - report gateway errors to the operator
         logger.warning("QUEST failed for %s: %s: %s", username, type(exc).__name__, exc)
         return JSONResponse(
@@ -1910,6 +1979,10 @@ async def _run_request(request: Request, scope: str, username: str) -> JSONRespo
         if payload
         else _gemini_rerank_default()
     )
+    try:
+        _, trammay_model = _resolve_trammay_tier(payload.get("trammay_tier") if payload else None)
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     ocr_keywords = str(payload.get("ocr_keywords", "")).strip() if payload else ""
     try:
         arm_weights, arm_enabled = _parse_arm_config(request.app.state.manager, payload)
@@ -1960,6 +2033,7 @@ async def _run_request(request: Request, scope: str, username: str) -> JSONRespo
         arm_weights,
         arm_enabled,
         gemini_rerank,
+        trammay_model,
     )
 
 

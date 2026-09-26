@@ -104,6 +104,7 @@ def rerank_candidates(
     query_en: str | None = None,
     client: Any | None = None,
     depth: int = DEFAULT_DEPTH,
+    model: str | None = None,
 ) -> tuple[list[Candidate], CaptionRerankOutcome]:
     """Return a safe reordered copy and a diagnostic outcome.
 
@@ -124,8 +125,8 @@ def rerank_candidates(
     # Only cache the real gateway path. Tests and callers that inject a client
     # may intentionally change the answer between calls.
     use_cache = client is None
-    model = str(getattr(gateway, "model", ""))
-    cache_key = _cache_key(head, query, query_en, model, len(head)) if use_cache else ""
+    selected_model = (model or str(getattr(gateway, "model", ""))).strip()
+    cache_key = _cache_key(head, query, query_en, selected_model, len(head)) if use_cache else ""
     if use_cache:
         cached_order = _cache_get(cache_key)
         if cached_order is not None:
@@ -166,7 +167,12 @@ def rerank_candidates(
         f"CANDIDATES: {json.dumps(rows, ensure_ascii=False)}"
     )
     try:
-        raw = gateway.chat(prompt, max_tokens=max(256, len(head) * 18), temperature=0.0)
+        raw = gateway.chat(
+            prompt,
+            model=selected_model or None,
+            max_tokens=max(256, len(head) * 18),
+            temperature=0.0,
+        )
         order = _parse_ids(raw)
     except Exception as exc:  # noqa: BLE001 - retrieval must survive an optional remote tier
         logger.warning("caption rerank skipped: %s: %s", type(exc).__name__, exc)
