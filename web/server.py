@@ -994,7 +994,11 @@ async def _schedule_job(
 
 
 async def homepage(request: Request) -> FileResponse:
-    return FileResponse(INDEX_PATH, media_type="text/html; charset=utf-8")
+    return FileResponse(
+        INDEX_PATH,
+        media_type="text/html; charset=utf-8",
+        headers={"Cache-Control": "no-store, max-age=0"},
+    )
 
 
 async def favicon(request: Request) -> PlainTextResponse:

@@ -393,7 +393,7 @@
         </section>
 
         <section class="panel results-panel">
-          <div class="results-heading"><h2 id="resultsTitle">Kết quả</h2><div class="button-row"><select id="dresEvaluation" aria-label="Evaluation DRES"><option value="">DRES: đọc evaluation</option></select><button id="loadDresButton" class="ghost" type="button">↻</button><span id="resultsHint" class="muted small">Chọn một luồng để xem kết quả.</span></div></div>
+          <div class="results-heading"><h2 id="resultsTitle">Kết quả</h2><div class="button-row"><select id="dresEvaluation" aria-label="Evaluation DRES"><option value="">DRES: đọc evaluation</option></select><button id="loadDresButton" class="ghost" type="button">↻</button><button id="submitDresTopButton" class="primary" type="button" disabled>📤 Nộp bài DRES</button><span id="resultsHint" class="muted small">Chọn một luồng để xem kết quả.</span></div></div>
           <div id="resultsGrid" class="results-grid"><div class="result-empty">Kết quả sẽ xuất hiện ở đây.</div></div>
         </section>
         <div class="footer-note">Streamlit backend được giữ nguyên ở loopback :8502. Web HTML này phục vụ qua :8501.</div>
@@ -678,10 +678,26 @@
       document.querySelectorAll('.lane-card').forEach((panel) => {
         panel.classList.toggle('active', panel.id === `${scope}Panel`);
       });
-      if (scope === 'suggestions') { renderSuggestions(); return; }
+      if (scope === 'suggestions') { renderSuggestions(); updateDresControls(); return; }
       const state = states[scope];
       if (state && state.status === 'done') renderResults(scope, state);
       else renderEmptyResults(scope, state);
+      updateDresControls();
+    }
+    function updateDresControls() {
+      const button = $('submitDresTopButton');
+      if (!button) return;
+      const state = states[selectedScope];
+      const ready = selectedScope !== 'suggestions'
+        && state?.status === 'done'
+        && Array.isArray(state.results)
+        && state.results.length > 0
+        && Boolean($('dresEvaluation').value);
+      button.disabled = !ready;
+      button.textContent = ready ? `📤 Nộp ${state.query_type} hạng #1` : '📤 Nộp bài DRES';
+      button.title = ready
+        ? 'Nộp ứng viên hạng 1 của luồng đang xem'
+        : 'Chọn evaluation DRES và hoàn tất một truy vấn trước';
     }
     function renderState(scope, state) {
       states[scope] = state;
@@ -704,6 +720,7 @@
       if (scope === selectedScope) {
         if (state.status === 'done') renderResults(scope, state);
         else renderEmptyResults(scope, state);
+        updateDresControls();
       }
     }
     function videoButton(item, label = '▶ Xem video') {
@@ -784,6 +801,7 @@
         });
         if (data.default) select.value = data.default;
         if (!data.configured) $('resultsHint').textContent = 'DRES chưa có user/pass trong .env';
+        updateDresControls();
       } catch (error) {
         $('resultsHint').textContent = `DRES: ${error.message}`;
       }
@@ -940,6 +958,8 @@
     $('seekButton').addEventListener('click', seekVideo);
     $('videoPlayer').addEventListener('timeupdate', updateVideoTimeInfo);
     $('loadDresButton').addEventListener('click', loadDresEvaluations);
+    $('dresEvaluation').addEventListener('change', updateDresControls);
+    $('submitDresTopButton').addEventListener('click', () => submitDres(selectedScope, 0));
     $('refreshSuggestionsButton').addEventListener('click', async () => { try { const data = await api('/api/suggestions'); sharedSuggestions = data.suggestions || []; renderSuggestions(); } catch (error) { showToast(error.message); } });
     $('clearSuggestionsButton').addEventListener('click', async () => { if (!window.confirm('Xoá toàn bộ đề xuất dùng chung?')) return; try { await api('/api/suggestions/clear', {method:'POST', headers:{'X-CSRF-Token': csrf}}); } catch (error) { showToast(error.message); } });
     $('videoModal').addEventListener('click', (event) => { if (event.target === $('videoModal')) closeVideo(); });
