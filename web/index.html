@@ -879,7 +879,7 @@
       $('healthPill').innerHTML = `<span class="dot ${kind}"></span><span>${escapeHtml(label)}</span>`;
       if (health.hardware) {
         const h = health.hardware;
-        $('hardwareNote').textContent = `${h.physical_cpus} core vật lý · ${h.logical_cpus} CPU · ${h.torch_threads} torch threads · ${h.accelerator}`;
+        $('hardwareNote').textContent = `${h.physical_cpus} core vật lý · ${h.logical_cpus} CPU · ${h.max_parallel_lanes} lane song song · ${h.torch_threads} torch threads · ${h.accelerator}`;
       }
       if (health.status === 'error') showToast(health.error || 'Engine không khởi động được');
     }

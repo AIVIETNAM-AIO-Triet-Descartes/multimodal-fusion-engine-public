@@ -174,12 +174,15 @@ def detect_hardware() -> HardwareInfo:
     cpus = _visible_cpus()
     logical = max(1, len(cpus))
     physical = _physical_cpu_count(cpus)
-    # This host has 23 physical / 46 logical CPUs.  Sixteen intra-query
-    # threads and two simultaneous lanes use the machine without turning two
-    # BGE matmuls into a 46-thread oversubscribed queue.
+    # This host has 23 physical / 46 logical CPUs.  Eight independent lanes
+    # keep the shared lane and several private accounts responsive while the
+    # process-wide torch pool still bounds the actual numerical work.  The
+    # environment variable remains available for a smaller machine or a
+    # deliberate operator override.
     torch_threads = _safe_int_env("MFE_WEB_TORCH_THREADS", min(16, max(4, physical)))
     interop = _safe_int_env("MFE_WEB_TORCH_INTEROP_THREADS", min(4, max(1, physical // 8)))
-    parallel = _safe_int_env("MFE_WEB_MAX_PARALLEL_LANES", max(1, min(4, physical // 8)))
+    default_parallel = max(1, min(8, (physical + 2) // 3))
+    parallel = _safe_int_env("MFE_WEB_MAX_PARALLEL_LANES", default_parallel)
     accelerator = "cpu"
     try:
         import torch
