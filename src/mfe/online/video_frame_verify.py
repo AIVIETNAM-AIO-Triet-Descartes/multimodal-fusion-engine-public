@@ -168,14 +168,18 @@ def shortlist_video_keyframes(
     ]
     related = [by_id[key] for key in related_keyframe_ids if key in by_id]
 
-    # Dense caption semantics sees the whole video.  Lexical evidence catches
-    # exact OCR/subtitle words, while nearby frames protect fine moment timing.
+    # The video is already known to be correct at this point.  Spend most of
+    # the fixed image budget on the temporal ring around the current frame so
+    # Gemini can see the action phase immediately before/after it.  Keep a few
+    # semantic and lexical candidates as escape routes when retrieval's anchor
+    # landed away from the exact moment.  Reordering these pools changes
+    # neither the number of images nor the number of gateway calls.
     pools = (
-        dense_ranked[:6],
-        lexical[:2],
         nearby,
         related[:2],
-        dense_ranked[6:],
+        dense_ranked[:3],
+        lexical[:2],
+        dense_ranked[3:],
         lexical[2:],
     )
     selected: list[KeyframeRow] = []
