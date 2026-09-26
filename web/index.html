@@ -174,6 +174,10 @@
     .trake-event img, .trake-event .image-empty { width: 100%; height: 92px; object-fit: cover; }
     .trake-event .image-empty { display: grid; place-items: center; color: var(--muted); font-size: 11px; }
     .trake-event-label { padding: 6px 7px; color: var(--muted); font-size: 11px; }
+    .trake-frame-edit { display: flex; gap: 5px; align-items: end; margin-top: 8px; }
+    .trake-frame-edit label { flex: 1; color: var(--muted); font-size: 10px; }
+    .trake-frame-edit input { width: 100%; margin-top: 3px; padding: 5px 6px; font-size: 11px; }
+    .trake-frame-apply { padding: 6px 7px; font-size: 11px; }
     .trake-repair { grid-column: 1 / -1; display: grid; gap: 10px; padding: 13px; border: 1px solid rgba(246, 211, 101, .42); border-radius: 12px; background: rgba(73, 61, 20, .24); }
     .trake-repair-title { color: #f6d365; font-size: 13px; font-weight: 800; }
     .trake-repair-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 9px; }
@@ -851,7 +855,7 @@
       const events = trakeEventTextsForRepair(state);
       if (!events.length) return '';
       const fields = events.map((event, index) => `<label>E${index + 1} · sửa nội dung<textarea data-trake-edit="${scope}" data-event-index="${index + 1}">${escapeHtml(event)}</textarea></label>`).join('');
-      return `<section class="trake-repair"><div class="trake-repair-title">✏️ Sửa riêng từng event TRAKE</div><div class="trake-repair-note">Nếu một mệnh đề bị hiểu sai, sửa đúng ô E tương ứng rồi bấm chạy lại. Nếu chỉ sai frame, mở video ở event đó và bấm <strong>Chốt frame đang xem</strong>.</div><div class="trake-repair-grid">${fields}</div><div class="button-row"><button class="primary" type="button" data-trake-rerun="${scope}">Chạy lại TRAKE với event đã sửa</button><span class="notice" data-trake-repair-notice="${scope}"></span></div></section>`;
+      return `<section class="trake-repair"><div class="trake-repair-title">✏️ Sửa riêng từng event TRAKE</div><div class="trake-repair-note">Nếu một mệnh đề bị hiểu sai, sửa đúng ô E tương ứng rồi bấm chạy lại. Nếu chỉ sai frame, mở video ở event đó, nhập frame trực tiếp hoặc bấm <strong>Chốt frame đang xem</strong>.</div><div class="trake-repair-grid">${fields}</div><div class="button-row"><button class="primary" type="button" data-trake-rerun="${scope}">Chạy lại TRAKE với event đã sửa</button><span class="notice" data-trake-repair-notice="${scope}"></span></div></section>`;
     }
     function bindTrakeRepair(scope, state) {
       const rerun = document.querySelector(`[data-trake-rerun="${scope}"]`);
@@ -888,6 +892,48 @@
         } finally {
           rerun.disabled = false;
         }
+      });
+    }
+    function trakeFrameEditor(scope, resultIndex, event, selected) {
+      const frame = selected?.frame_idx ?? event.frame_idx ?? '';
+      return `<div class="trake-frame-edit"><label>Frame n<input type="number" min="0" step="1" value="${escapeHtml(frame)}" data-trake-frame-input="1" data-trake-frame-scope="${escapeHtml(scope)}" data-result-index="${resultIndex}" data-event-index="${escapeHtml(event.event_index)}"></label><button class="video-button trake-frame-apply" type="button" data-trake-frame-apply="1" data-trake-frame-scope="${escapeHtml(scope)}" data-result-index="${resultIndex}" data-event-index="${escapeHtml(event.event_index)}">Chốt</button></div>`;
+    }
+    function bindTrakeFrameEditors(scope, state) {
+      document.querySelectorAll(`[data-trake-frame-apply="1"][data-trake-frame-scope="${scope}"]`).forEach((button) => {
+        button.addEventListener('click', () => {
+          const resultIndex = Number(button.dataset.resultIndex);
+          const eventIndex = Number(button.dataset.eventIndex);
+          const input = document.querySelector(`[data-trake-frame-input="1"][data-trake-frame-scope="${scope}"][data-result-index="${resultIndex}"][data-event-index="${eventIndex}"]`);
+          const result = state.results?.[resultIndex];
+          const event = result?.events?.find((item) => Number(item.event_index) === eventIndex);
+          const frame = Number(input?.value);
+          if (!event || !Number.isInteger(frame) || frame < 0) { showToast('Frame TRAKE phải là số nguyên không âm.'); return; }
+          const selectedEvents = (result.events || []).map((item) => {
+            const selected = selectedFrameFor(scope, resultIndex, item.event_index);
+            return selected ? {...item, ...selected} : item;
+          });
+          const candidateFrames = selectedEvents.map((item) => Number(item.frame_idx));
+          const eventPosition = (result.events || []).findIndex((item) => Number(item.event_index) === eventIndex);
+          if (eventPosition < 0) { showToast('Không tìm thấy event TRAKE cần sửa.'); return; }
+          candidateFrames[eventPosition] = frame;
+          if (candidateFrames.some((value) => !Number.isFinite(value)) || candidateFrames.some((value, index) => index > 0 && candidateFrames[index - 1] >= value)) {
+            showToast('Frame TRAKE phải tăng nghiêm ngặt theo thứ tự E1, E2, E3…');
+            return;
+          }
+          const fps = Number(event.fps || 25);
+          const timestamp = Math.max(0, Math.round(frame * 1000 / (fps > 0 ? fps : 25)));
+          committedFrames[scope][frameSelectionKey(resultIndex, eventIndex)] = {
+            video_id: event.video_id,
+            keyframe_id: `${event.video_id}#${String(frame).padStart(6, '0')}`,
+            frame_idx: frame,
+            timestamp_ms: timestamp,
+            seconds: Number((timestamp / 1000).toFixed(3)),
+            fps,
+            video_url: event.video_url,
+          };
+          renderResults(scope, states[scope]);
+          showToast(`Đã chốt E${eventIndex} · frame ${frame}. Khi bấm Nộp DRES, frame này sẽ được gửi.`);
+        });
       });
     }
     function videoButton(item, label = '▶ Xem video', context = {}) {
@@ -1248,11 +1294,12 @@
           const selectedNote = selected ? `<div class="selected-frame-note">📌 Đã chốt frame ${escapeHtml(selected.frame_idx)} · ${escapeHtml(selected.timestamp_ms)} ms</div>` : '';
           const image = displayEvent.image_url ? `<img loading="lazy" tabindex="0" role="button" data-image-zoom="1" data-image-title="${escapeHtml(item.video_id)} · E${escapeHtml(event.event_index)} · frame ${escapeHtml(displayEvent.frame_idx)}" src="${escapeHtml(displayEvent.image_url)}" alt="${escapeHtml(item.video_id)} event ${escapeHtml(event.event_index)} frame ${escapeHtml(displayEvent.frame_idx)}" aria-label="Phóng to ảnh event ${escapeHtml(event.event_index)}">` : '<div class="image-empty">Ảnh chưa có</div>';
           const seconds = Number(displayEvent.seconds ?? Number(displayEvent.timestamp_ms || 0) / 1000);
-          return `<div class="trake-event">${image}<div class="trake-event-label">E${escapeHtml(event.event_index)} · ${seconds.toFixed(3)}s<br>frame ${escapeHtml(displayEvent.frame_idx)} · ${escapeHtml(displayEvent.keyframe_id || '')}${selectedNote}<div class="result-actions">${videoButton(videoItem, '▶ Mở video / chốt frame', {scope, resultIndex, eventIndex:event.event_index})}${verifyButton(scope, resultIndex, event.event_index, 'TRAKE', state.trammay_tier)}<button class="video-button" type="button" data-trake-focus="${scope}" data-event-index="${escapeHtml(event.event_index)}">✏️ Sửa E${escapeHtml(event.event_index)}</button>${suggestButton(resultIndex, event.event_index)}</div>${verificationPanel(scope, resultIndex, event.event_index)}</div></div>`;
+          return `<div class="trake-event">${image}<div class="trake-event-label">E${escapeHtml(event.event_index)} · ${seconds.toFixed(3)}s<br>frame ${escapeHtml(displayEvent.frame_idx)} · ${escapeHtml(displayEvent.keyframe_id || '')}${selectedNote}<div class="result-actions">${videoButton(videoItem, '▶ Mở video / chốt frame', {scope, resultIndex, eventIndex:event.event_index})}${verifyButton(scope, resultIndex, event.event_index, 'TRAKE', state.trammay_tier)}<button class="video-button" type="button" data-trake-focus="${scope}" data-event-index="${escapeHtml(event.event_index)}">✏️ Sửa E${escapeHtml(event.event_index)}</button>${suggestButton(resultIndex, event.event_index)}</div>${trakeFrameEditor(scope, resultIndex, event, selected)}${verificationPanel(scope, resultIndex, event.event_index)}</div></div>`;
         }).join('');
         return `<article class="result-card"><div class="result-body"><div class="result-top"><span class="rank">#${escapeHtml(item.rank)} · ${escapeHtml(item.video_id)}</span><span>score ${Number(item.score || 0).toFixed(2)}</span></div><div class="muted small" style="margin-top:6px">support ${escapeHtml(item.support)} · frames ${escapeHtml((item.frame_ids || []).join(', '))}</div><div class="result-actions">${suggestButton(resultIndex)}${dresButton(resultIndex)}</div><div class="trake-events">${events || '<div class="result-empty">Thiếu frame</div>'}</div></div></article>`;
       }).join('')}`;
       bindTrakeRepair(scope, state);
+      bindTrakeFrameEditors(scope, state);
       bindImageZoom();
       bindVideoButtons();
       bindVerifyButtons();
