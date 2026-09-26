@@ -165,8 +165,14 @@ def build_selected_payload(
     if not _ID_RE.fullmatch(video):
         raise DresError("video_id khong hop le")
     if kind == "KIS":
-        time_ms = int(item.get("timestamp_ms", 0))
-        entry = {"mediaItemName": video, "start": time_ms, "end": time_ms}
+        try:
+            start_ms = int(item.get("start_ms", item.get("timestamp_ms", 0)))
+            end_ms = int(item.get("end_ms", start_ms))
+        except (TypeError, ValueError):
+            raise DresError("KIS thoi diem phai la so nguyen") from None
+        if start_ms < 0 or end_ms < start_ms:
+            raise DresError("KIS canh thoi gian khong hop le")
+        entry = {"mediaItemName": video, "start": start_ms, "end": end_ms}
     elif kind == "QA":
         if not str(answer).strip():
             raise DresError("QA chua co dap an")

@@ -65,6 +65,7 @@
     button.ghost { color: var(--text); background: transparent; border-color: var(--line); }
     button:disabled { cursor: wait; opacity: .55; }
     .notice { min-height: 21px; color: var(--danger); font-size: 13px; }
+    .notice.ok { color: var(--accent-2); }
     header {
       display: flex; justify-content: space-between; align-items: center; gap: 18px;
       padding: 24px 0 20px; border-bottom: 1px solid rgba(42, 57, 88, .7);
@@ -122,6 +123,7 @@
     .quest-output { display: grid; gap: 10px; }
     .quest-output textarea { min-height: 68px; }
     .quest-output input { min-height: 42px; }
+    .input-mode-note { margin: -3px 0 -2px; color: var(--accent-2); font-size: 12px; }
     .run-meta { display: flex; flex-wrap: wrap; gap: 9px; color: var(--muted); font-size: 12px; }
     .run-meta strong { color: var(--text); }
     .state-line { min-height: 24px; margin: 12px 0; color: var(--muted); }
@@ -140,6 +142,9 @@
     .suggestion-item p { margin: 6px 0 0; white-space: pre-wrap; }
     .results-panel { margin-top: 18px; }
     .results-heading { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; margin-bottom: 14px; }
+    .manual-submit-box { margin-bottom: 16px; padding: 14px; border: 1px solid rgba(104, 211, 145, .4); border-radius: 13px; background: rgba(20, 55, 43, .28); }
+    .manual-submit-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+    .manual-submit-box textarea { min-height: 82px; }
     .results-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
     .result-card { overflow: hidden; background: var(--panel-2); border: 1px solid var(--line); border-radius: 13px; }
     .result-card img, .image-empty { width: 100%; height: 145px; display: block; object-fit: cover; background: #0a1120; }
@@ -287,6 +292,7 @@
                   </div>
                 </div>
               </div>
+              <p class="input-mode-note">Bạn có thể gõ và sửa truy vấn trực tiếp ở các ô bên dưới. QUEST chỉ là bước hỗ trợ, không bắt buộc.</p>
               <label id="sharedQueryLabel">Mô tả truy vấn<textarea id="sharedQuery" placeholder="Ví dụ: Một đàn sư tử đang nghỉ ngơi trên các bục gỗ..." ></textarea></label>
               <div id="sharedQaFields" class="query-extra hidden">
                 <label>Đáp án QA (tuỳ chọn, nhập tay)<input id="sharedAnswer" placeholder="Ví dụ: áo màu xanh lá"></label>
@@ -299,7 +305,7 @@
                     <div class="button-row"><button id="sharedAddEvent" class="ghost" type="button">➕ Thêm sự kiện</button></div>
                     <textarea id="sharedEvents" class="hidden" aria-hidden="true"></textarea>
                 <label>Bản tiếng Anh từng sự kiện (tuỳ chọn)<textarea id="sharedEventsEn" placeholder="Một dòng tương ứng cho mỗi sự kiện"></textarea></label>
-                <p class="hint">DANTE sẽ ghép các frame theo đúng thứ tự dòng và trả về một chuỗi cho mỗi video.</p>
+                <p class="hint">Gõ trực tiếp từng sự kiện vào các ô E1, E2… hoặc dán nội dung vào QUEST rồi sửa lại. DANTE sẽ giữ đúng thứ tự dòng.</p>
               </div>
               <div id="sharedAdvanced" class="advanced">
                 <details>
@@ -355,6 +361,7 @@
                   </div>
                 </div>
               </div>
+              <p class="input-mode-note">Bạn có thể gõ và sửa truy vấn trực tiếp ở các ô bên dưới. QUEST chỉ là bước hỗ trợ, không bắt buộc.</p>
               <label id="privateQueryLabel">Mô tả truy vấn<textarea id="privateQuery" placeholder="Truy vấn riêng của bạn..." ></textarea></label>
               <div id="privateQaFields" class="query-extra hidden">
                 <label>Đáp án QA (tuỳ chọn, nhập tay)<input id="privateAnswer" placeholder="Ví dụ: áo màu xanh lá"></label>
@@ -367,7 +374,7 @@
                     <div class="button-row"><button id="privateAddEvent" class="ghost" type="button">➕ Thêm sự kiện</button></div>
                     <textarea id="privateEvents" class="hidden" aria-hidden="true"></textarea>
                 <label>Bản tiếng Anh từng sự kiện (tuỳ chọn)<textarea id="privateEventsEn" placeholder="Một dòng tương ứng cho mỗi sự kiện"></textarea></label>
-                <p class="hint">DANTE sẽ ghép các frame theo đúng thứ tự dòng và trả về một chuỗi cho mỗi video.</p>
+                <p class="hint">Gõ trực tiếp từng sự kiện vào các ô E1, E2… hoặc dán nội dung vào QUEST rồi sửa lại. DANTE sẽ giữ đúng thứ tự dòng.</p>
               </div>
               <div id="privateAdvanced" class="advanced">
                 <details>
@@ -397,6 +404,39 @@
 
         <section class="panel results-panel">
           <div class="results-heading"><h2 id="resultsTitle">Kết quả</h2><div class="button-row"><select id="dresEvaluation" aria-label="Evaluation DRES"><option value="">DRES: đọc evaluation</option></select><button id="loadDresButton" class="ghost" type="button">↻</button><button id="submitDresTopButton" class="primary" type="button" disabled>📤 Nộp bài DRES</button><span id="resultsHint" class="muted small">Chọn một luồng để xem kết quả.</span></div></div>
+          <div class="manual-submit-box">
+            <div class="panel-heading">
+              <div>
+                <div class="mode-tag">NHẬP TAY · DRES</div>
+                <h2 style="margin-top:5px">📤 Nộp KIS / QA / TRAKE thủ công</h2>
+              </div>
+              <span class="pill small">không cần chạy QUEST</span>
+            </div>
+            <p class="hint" style="margin:0 0 12px">Chọn evaluation ở thanh trên, sau đó nhập trực tiếp mã video và frame/thời điểm. Dùng mục này khi không muốn chạy truy hồi hoặc cần sửa một đáp án trước khi nộp.</p>
+            <form id="manualSubmitForm" class="stack">
+              <div class="manual-submit-grid">
+                <label>Dạng nộp<select id="manualSubmitType"><option value="KIS">KIS · một khoảng thời gian</option><option value="QA">QA · câu trả lời</option><option value="TRAKE">TRAKE · chuỗi frame</option></select></label>
+                <label>Mã video<input id="manualVideoId" autocomplete="off" placeholder="Ví dụ: L21_V013" required></label>
+              </div>
+              <div id="manualKisFields" class="manual-submit-grid">
+                <label>Start ms (tuỳ chọn)<input id="manualStartMs" type="number" min="0" step="1" placeholder="Ví dụ: 22455"></label>
+                <label>End ms (tuỳ chọn)<input id="manualEndMs" type="number" min="0" step="1" placeholder="Để trống = Start"></label>
+                <label>Start frame (nếu không nhập ms)<input id="manualStartFrame" type="number" min="0" step="1" placeholder="Ví dụ: 22455"></label>
+                <label>End frame (tuỳ chọn)<input id="manualEndFrame" type="number" min="0" step="1" placeholder="Để trống = Start"></label>
+                <label>FPS<input id="manualFps" type="number" min="0.001" step="0.001" value="25"></label>
+              </div>
+              <div id="manualQaFields" class="manual-submit-grid hidden">
+                <label>Đáp án QA<input id="manualAnswer" autocomplete="off" placeholder="Ví dụ: áo màu xanh lá"></label>
+                <label>Thời điểm QA (ms)<input id="manualQaTimeMs" type="number" min="0" step="1" placeholder="Hoặc nhập frame bên dưới"></label>
+                <label>Frame QA<input id="manualQaFrame" type="number" min="0" step="1" placeholder="Ví dụ: 22455"></label>
+              </div>
+              <div id="manualTrakeFields" class="hidden">
+                <label>Frame từng sự kiện, mỗi dòng hoặc dấu phẩy một frame<textarea id="manualFrames" placeholder="Ví dụ:\n100\n240\n510"></textarea></label>
+                <p class="hint">Frame phải tăng nghiêm ngặt theo thứ tự sự kiện.</p>
+              </div>
+              <div class="button-row"><button class="primary" type="submit">📤 Nộp trực tiếp</button><span id="manualSubmitNotice" class="notice"></span></div>
+            </form>
+          </div>
           <div id="resultsGrid" class="results-grid"><div class="result-empty">Kết quả sẽ xuất hiện ở đây.</div></div>
         </section>
         <div class="footer-note">Streamlit backend được giữ nguyên ở loopback :8502. Web HTML này phục vụ qua :8501.</div>
@@ -872,6 +912,54 @@
         $('resultsHint').textContent = `DRES: ${error.message}`;
       }
     }
+    function updateManualSubmitType() {
+      const type = $('manualSubmitType').value;
+      $('manualKisFields').classList.toggle('hidden', type !== 'KIS');
+      $('manualQaFields').classList.toggle('hidden', type !== 'QA');
+      $('manualTrakeFields').classList.toggle('hidden', type !== 'TRAKE');
+    }
+    async function submitManualDres(event) {
+      event.preventDefault();
+      const notice = $('manualSubmitNotice');
+      notice.textContent = '';
+      const type = $('manualSubmitType').value;
+      const evaluationId = $('dresEvaluation').value;
+      const videoId = $('manualVideoId').value.trim();
+      if (!evaluationId) { notice.textContent = 'Hãy chọn evaluation DRES ở thanh trên.'; return; }
+      if (!videoId) { notice.textContent = 'Hãy nhập mã video.'; return; }
+      const payload = {
+        query_type: type,
+        evaluation_id: evaluationId,
+        video_id: videoId,
+        fps: $('manualFps').value,
+      };
+      if (type === 'KIS') {
+        payload.start_ms = $('manualStartMs').value;
+        payload.end_ms = $('manualEndMs').value;
+        payload.start_frame = $('manualStartFrame').value;
+        payload.end_frame = $('manualEndFrame').value;
+      } else if (type === 'QA') {
+        payload.answer = $('manualAnswer').value.trim();
+        payload.qa_time_ms = $('manualQaTimeMs').value;
+        payload.qa_frame = $('manualQaFrame').value;
+        if (!payload.answer) { notice.textContent = 'QA cần nhập đáp án.'; return; }
+      } else {
+        payload.frames = $('manualFrames').value;
+      }
+      const button = event.submitter;
+      if (button) button.disabled = true;
+      try {
+        const data = await api('/api/dres/submit-manual', {method:'POST', headers:{'X-CSRF-Token': csrf}, body: JSON.stringify(payload)});
+        const verdict = String(data.verdict || data.response?.submission || '').toUpperCase();
+        const description = data.description || data.response?.description || '';
+        notice.className = `notice ${verdict === 'CORRECT' ? 'ok' : verdict === 'WRONG' ? 'error' : ''}`;
+        notice.textContent = verdict ? `DRES: ${verdict}${description ? ` · ${description}` : ''}` : `DRES đã nhận bài${description ? ` · ${description}` : ''}`;
+        showToast(notice.textContent);
+      } catch (error) {
+        notice.className = 'notice';
+        notice.textContent = `Nộp thủ công lỗi: ${error.message}`;
+      } finally { if (button) button.disabled = false; }
+    }
     async function submitDres(scope, resultIndex) {
       const state = states[scope];
       if (!state || state.status !== 'done') { showToast('Chưa có kết quả hoàn tất để nộp.'); return; }
@@ -1044,6 +1132,8 @@
     $('loadDresButton').addEventListener('click', loadDresEvaluations);
     $('dresEvaluation').addEventListener('change', updateDresControls);
     $('submitDresTopButton').addEventListener('click', () => submitDres(selectedScope, 0));
+    $('manualSubmitType').addEventListener('change', updateManualSubmitType);
+    $('manualSubmitForm').addEventListener('submit', submitManualDres);
     $('refreshSuggestionsButton').addEventListener('click', async () => { try { const data = await api('/api/suggestions'); sharedSuggestions = data.suggestions || []; renderSuggestions(); } catch (error) { showToast(error.message); } });
     $('clearSuggestionsButton').addEventListener('click', async () => { if (!window.confirm('Xoá toàn bộ đề xuất dùng chung?')) return; try { await api('/api/suggestions/clear', {method:'POST', headers:{'X-CSRF-Token': csrf}}); } catch (error) { showToast(error.message); } });
     $('videoModal').addEventListener('click', (event) => { if (event.target === $('videoModal')) closeVideo(); });
@@ -1054,6 +1144,7 @@
     renderEventEditor('private');
     updateFormType('shared');
     updateFormType('private');
+    updateManualSubmitType();
     setActiveMode('shared');
     (async function boot() {
       startPolling();

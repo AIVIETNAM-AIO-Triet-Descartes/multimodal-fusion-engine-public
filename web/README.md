@@ -40,6 +40,11 @@ chọn evaluation mặc định, hoặc đọc danh sách evaluation ACTIVE bằ
 mới cạnh hộp chọn. Ghi chú được lưu ở `/home/ubuntu/web/suggestions.json` và
 được giới hạn 200 mục gần nhất.
 
+Khu vực **Nộp KIS / QA / TRAKE thủ công** cho phép nhập trực tiếp mã video,
+thời điểm hoặc frame, câu trả lời QA và danh sách frame TRAKE mà không cần chạy
+QUEST hay truy hồi trước. Các ô KIS, QA và TRAKE trong từng lane cũng nhận nhập
+tay; QUEST chỉ điền giá trị gợi ý để người dùng sửa lại.
+
 Với TRAKE, nút đề xuất ở đầu mỗi chuỗi lưu toàn bộ các event; các nút trong
 từng event vẫn cho phép đánh dấu riêng một frame để kiểm tra.
 

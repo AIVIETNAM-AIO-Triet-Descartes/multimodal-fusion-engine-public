@@ -1259,6 +1259,181 @@ async def dres_evaluations(request: Request) -> JSONResponse:
     )
 
 
+def _manual_optional_int(payload: dict[str, Any], key: str, label: str) -> int | None:
+    """Read a non-negative integer from the manual DRES form."""
+    raw = payload.get(key)
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        raise DresError(f"{label} phai la so nguyen khong am") from None
+    if value < 0:
+        raise DresError(f"{label} phai la so nguyen khong am")
+    return value
+
+
+def _manual_time_ms(
+    payload: dict[str, Any], *, time_key: str, frame_key: str, label: str
+) -> int:
+    """Use an explicitly entered millisecond value or convert a frame index."""
+    time_ms = _manual_optional_int(payload, time_key, f"{label} ms")
+    if time_ms is not None:
+        return time_ms
+    frame = _manual_optional_int(payload, frame_key, f"{label} frame")
+    if frame is None:
+        raise DresError(f"can nhap {label} ms hoac {label} frame")
+    try:
+        fps = float(payload.get("fps", 25))
+    except (TypeError, ValueError):
+        raise DresError("FPS phai la so duong") from None
+    if not math.isfinite(fps) or fps <= 0:
+        raise DresError("FPS phai la so duong")
+    return int(round(frame * 1000.0 / fps))
+
+
+def _manual_frames(payload: dict[str, Any]) -> list[dict[str, int]]:
+    """Parse TRAKE frame numbers pasted as lines, commas, or spaces."""
+    raw = payload.get("frames", "")
+    values = raw if isinstance(raw, list) else re.split(r"[,;\s]+", str(raw))
+    frames: list[dict[str, int]] = []
+    for index, value in enumerate(values, 1):
+        if value is None or not str(value).strip():
+            continue
+        try:
+            frame = int(value)
+        except (TypeError, ValueError):
+            raise DresError(f"TRAKE event {index} phai la frame so nguyen") from None
+        if frame < 0:
+            raise DresError("frame TRAKE phai khong am")
+        frames.append({"event_index": len(frames) + 1, "frame_idx": frame})
+    if not frames:
+        raise DresError("TRAKE can it nhat mot frame")
+    return frames
+
+
+def _manual_submission(payload: dict[str, Any]) -> tuple[str, dict[str, Any], dict[str, Any]]:
+    """Build a DRES payload and its synthetic state from direct operator input."""
+    kind = str(payload.get("query_type", "KIS")).strip().upper()
+    if kind not in {"KIS", "QA", "TRAKE"}:
+        raise DresError("query_type phai la KIS, QA hoac TRAKE")
+    video = str(payload.get("video_id", "")).strip()
+    if not video:
+        raise DresError("video_id khong duoc rong")
+
+    if kind == "KIS":
+        start_ms = _manual_time_ms(
+            payload, time_key="start_ms", frame_key="start_frame", label="start"
+        )
+        end_ms = start_ms
+        if payload.get("end_ms") not in (None, "") or payload.get("end_frame") not in (None, ""):
+            end_ms = _manual_time_ms(
+                payload, time_key="end_ms", frame_key="end_frame", label="end"
+            )
+        item = {
+            "video_id": video,
+            "timestamp_ms": start_ms,
+            "start_ms": start_ms,
+            "end_ms": end_ms,
+        }
+        events: list[str] = []
+    elif kind == "QA":
+        answer = str(payload.get("answer", "")).strip()
+        if not answer:
+            raise DresError("QA can nhap dap an")
+        timestamp_ms = _manual_time_ms(
+            payload, time_key="qa_time_ms", frame_key="qa_frame", label="QA"
+        )
+        item = {"video_id": video, "timestamp_ms": timestamp_ms}
+        events = []
+    else:
+        trake_events = _manual_frames(payload)
+        item = {"video_id": video, "events": trake_events}
+        events = [str(event["frame_idx"]) for event in trake_events]
+
+    submission = build_selected_payload(
+        kind,
+        item,
+        answer=str(payload.get("answer", "")).strip(),
+        events=item.get("events"),
+    )
+    state = {
+        "query_type": kind,
+        "query": f"manual:{kind}:{video}",
+        "events": events,
+    }
+    return kind, state, submission
+
+
+async def dres_submit_manual(request: Request) -> JSONResponse:
+    username = _session_user(request)
+    if username is None:
+        return JSONResponse({"ok": False, "error": "can dang nhap"}, status_code=401)
+    if not _csrf_ok(request):
+        return JSONResponse({"ok": False, "error": "csrf token khong dung"}, status_code=403)
+    payload = await _json_body(request)
+    if not payload:
+        return JSONResponse({"ok": False, "error": "payload rong"}, status_code=400)
+    try:
+        kind, state, submission = _manual_submission(payload)
+    except DresError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    evaluation_id = str(payload.get("evaluation_id", "")).strip() or os.getenv(
+        "MFE_DRES_EVALUATION_ID", ""
+    ).strip()
+    manager: EngineManager = request.app.state.manager
+    client = manager.dres()
+    if client is None:
+        return JSONResponse(
+            {"ok": False, "error": "thieu user/pass DRES trong .env"}, status_code=503
+        )
+    try:
+        with manager.dres_lock:
+            if not evaluation_id:
+                evaluations = await asyncio.to_thread(client.evaluations)
+                active = [
+                    item
+                    for item in evaluations
+                    if str(item.get("status", "")).upper() == "ACTIVE"
+                ]
+                if len(active) != 1:
+                    return JSONResponse(
+                        {
+                            "ok": False,
+                            "error": "can chon mot evaluation ACTIVE",
+                            "evaluations": _dres_evaluation_view(active),
+                        },
+                        status_code=409,
+                    )
+                evaluation_id = str(active[0]["id"])
+            duplicate_key = submission_key(evaluation_id, state, submission)
+            if duplicate_key in manager.dres_submissions:
+                return JSONResponse(
+                    {"ok": False, "error": "ket qua nay da bam nop"}, status_code=409
+                )
+            response = await asyncio.to_thread(client.submit, evaluation_id, submission)
+            manager.dres_submissions.add(duplicate_key)
+            manager._persist_dres_submissions()
+    except DresError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=502)
+    verdict = response.get("submission") if isinstance(response, dict) else None
+    description = response.get("description") if isinstance(response, dict) else None
+    return JSONResponse(
+        {
+            "ok": True,
+            "manual": True,
+            "evaluation_id": evaluation_id,
+            "query_type": kind,
+            "verdict": verdict,
+            "description": description,
+            "response": response
+            if isinstance(response, (dict, list, str, int, float, bool))
+            else {},
+        }
+    )
+
+
 async def dres_submit(request: Request) -> JSONResponse:
     username = _session_user(request)
     if username is None:
@@ -1727,6 +1902,7 @@ routes = [
     Route("/api/logout", logout, methods=["POST"]),
     Route("/api/state", state),
     Route("/api/dres/evaluations", dres_evaluations),
+    Route("/api/dres/submit-manual", dres_submit_manual, methods=["POST"]),
     Route("/api/dres/submit", dres_submit, methods=["POST"]),
     Route("/api/suggestions", suggestions, methods=["GET", "POST"]),
     Route("/api/suggestions/clear", clear_suggestions, methods=["POST"]),

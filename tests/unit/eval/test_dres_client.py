@@ -26,6 +26,17 @@ def test_dres_payload_matches_final_format_for_each_query_type():
     }
 
 
+def test_kis_payload_accepts_a_manual_time_range():
+    assert build_selected_payload(
+        "KIS",
+        {"video_id": "L21_V001", "start_ms": 1000, "end_ms": 2500},
+    ) == {
+        "answerSets": [
+            {"answers": [{"mediaItemName": "L21_V001", "start": 1000, "end": 2500}]}
+        ]
+    }
+
+
 def test_dres_credentials_accept_the_existing_aliases(monkeypatch):
     monkeypatch.delenv("user_dres", raising=False)
     monkeypatch.delenv("pass_dres", raising=False)
