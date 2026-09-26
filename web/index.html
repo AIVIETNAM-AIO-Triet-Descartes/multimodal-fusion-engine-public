@@ -161,6 +161,13 @@
     .result-actions { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 10px; }
     .video-button { border: 1px solid var(--accent); border-radius: 8px; padding: 6px 9px; color: var(--text); background: rgba(110, 168, 254, .12); font-size: 12px; font-weight: 700; }
     .video-button:hover { background: rgba(110, 168, 254, .25); }
+    .verify-panel { margin-top: 9px; padding: 9px; border: 1px solid rgba(110, 168, 254, .38); border-radius: 9px; background: rgba(19, 38, 70, .55); font-size: 11px; line-height: 1.42; }
+    .verify-panel.high { border-color: rgba(104, 211, 145, .62); background: rgba(20, 70, 51, .36); }
+    .verify-panel.low { border-color: rgba(246, 173, 85, .55); background: rgba(75, 50, 21, .32); }
+    .verify-title { display: flex; justify-content: space-between; gap: 7px; color: var(--text); font-weight: 800; }
+    .verify-reason { margin-top: 5px; color: var(--muted); }
+    .verify-metrics { margin-top: 5px; color: var(--muted); font-size: 10px; }
+    .verify-panel .verify-thumb { width: 100%; height: 92px; margin-top: 7px; border-radius: 7px; object-fit: cover; }
     .trake-events { display: grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); gap: 8px; margin-top: 10px; }
     .trake-event { overflow: hidden; border: 1px solid var(--line); border-radius: 9px; background: #0c1426; }
     .trake-event img, .trake-event .image-empty { width: 100%; height: 92px; object-fit: cover; }
@@ -508,6 +515,7 @@
     let armRows = [];
     let currentVideo = {scope: null, resultIndex: null, eventIndex: null, videoId: '', fps: 25, frame: 0, seconds: 0};
     const committedFrames = {shared: {}, private: {}};
+    const frameVerifications = {shared: {}, private: {}};
 
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>'"]/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
@@ -826,6 +834,9 @@
       if (!committedFrames[scope] || resultIndex == null || !Number.isFinite(Number(resultIndex))) return null;
       return committedFrames[scope][frameSelectionKey(resultIndex, eventIndex)] || null;
     }
+    function verificationFor(scope, resultIndex, eventIndex = null) {
+      return frameVerifications[scope]?.[frameSelectionKey(resultIndex, eventIndex)] || null;
+    }
     function selectedEventsFor(scope, resultIndex) {
       if (!committedFrames[scope] || resultIndex == null) return [];
       const prefix = `${Number(resultIndex)}:`;
@@ -889,6 +900,24 @@
     }
     function dresButton(resultIndex) {
       return `<button class="video-button" type="button" data-dres-submit="1" data-result-index="${resultIndex}">📤 Nộp DRES</button>`;
+    }
+    function verifyButton(scope, resultIndex, eventIndex = null) {
+      return `<button class="video-button" type="button" data-frame-verify="1" data-verify-scope="${escapeHtml(scope)}" data-result-index="${resultIndex}"${eventIndex == null ? '' : ` data-event-index="${eventIndex}"`}>✨ Gemini kiểm tra frame</button>`;
+    }
+    function verificationPanel(scope, resultIndex, eventIndex = null) {
+      const verification = verificationFor(scope, resultIndex, eventIndex);
+      if (!verification?.best) return '';
+      const confidence = Math.round(Number(verification.confidence || 0) * 100);
+      const level = confidence >= 80 ? 'high' : confidence < 55 ? 'low' : '';
+      const best = verification.best;
+      const metrics = verification.metrics || {};
+      const alternatives = (verification.alternatives || []).map((item) => item.keyframe_id).filter(Boolean);
+      const sources = (metrics.evidence_sources || []).join(' + ');
+      const image = best.image_url ? `<img class="verify-thumb" loading="lazy" tabindex="0" role="button" data-image-zoom="1" data-image-title="Gemini chọn · ${escapeHtml(best.keyframe_id)}" src="${escapeHtml(best.image_url)}" alt="Gemini chọn ${escapeHtml(best.keyframe_id)}">` : '';
+      const auto = verification.auto_selected ? '<div style="margin-top:5px;color:var(--accent-2);font-weight:800">✅ Độ tin cậy tốt: đã tự chốt frame này</div>' : '<div style="margin-top:5px;color:#f6ad55">Chưa tự chốt vì độ tin cậy dưới ngưỡng. Hãy xem rồi chọn nếu phù hợp.</div>';
+      const alternativeText = alternatives.length ? `<div class="verify-metrics">Frame dự phòng: ${escapeHtml(alternatives.join(', '))}</div>` : '';
+      const useButton = verification.auto_selected ? '' : `<button class="video-button" type="button" data-use-verified="1" data-use-scope="${escapeHtml(scope)}" data-result-index="${resultIndex}"${eventIndex == null ? '' : ` data-event-index="${eventIndex}"`}>📌 Dùng frame Gemini chọn</button>`;
+      return `<div class="verify-panel ${level}">${image}<div class="verify-title"><span>Gemini: ${escapeHtml(best.keyframe_id)}</span><span>${confidence}% · ${escapeHtml(verification.confidence_label || '')}</span></div><div class="verify-reason">${escapeHtml(verification.reason || '')}</div>${auto}${alternativeText}<div class="verify-metrics">Nguồn: ${escapeHtml(sources || 'caption + OCR + subtitle')}</div><div class="verify-metrics">Đã quét ${escapeHtml(metrics.total_keyframes_scanned || 0)} frame local · ${escapeHtml(metrics.images_sent || 0)} frame/${escapeHtml(metrics.image_parts_sent || 0)} bảng ảnh · ${escapeHtml(metrics.duration_ms || 0)} ms${metrics.cached ? ' · cache RAM' : ''}</div>${useButton ? `<div class="result-actions">${useButton}</div>` : ''}</div>`;
     }
     function bindVideoButtons() {
       document.querySelectorAll('[data-video-open="1"]').forEach((button) => {
@@ -1008,6 +1037,64 @@
         button.addEventListener('click', () => submitDres(selectedScope, Number(button.dataset.resultIndex)));
       });
     }
+    function selectVerifiedFrame(scope, resultIndex, eventIndex, verification) {
+      const best = verification?.best;
+      if (!best) return;
+      committedFrames[scope][frameSelectionKey(resultIndex, eventIndex)] = {
+        video_id: best.video_id,
+        keyframe_id: best.keyframe_id,
+        frame_idx: best.frame_idx,
+        timestamp_ms: best.timestamp_ms,
+        seconds: best.seconds,
+        fps: best.fps,
+        image_url: best.image_url,
+        video_url: best.video_url,
+        caption: best.caption,
+        ocr: best.ocr,
+      };
+    }
+    function bindVerifyButtons() {
+      document.querySelectorAll('[data-frame-verify="1"]').forEach((button) => {
+        button.addEventListener('click', async () => {
+          const scope = button.dataset.verifyScope || selectedScope;
+          const resultIndex = Number(button.dataset.resultIndex);
+          const eventIndex = button.dataset.eventIndex == null ? null : Number(button.dataset.eventIndex);
+          button.disabled = true;
+          const original = button.textContent;
+          button.textContent = '⏳ Đang quét video…';
+          try {
+            const verification = await api('/api/verify-video-frame', {
+              method: 'POST',
+              headers: {'X-CSRF-Token': csrf},
+              body: JSON.stringify({scope, result_index: resultIndex, event_index: eventIndex}),
+            });
+            frameVerifications[scope][frameSelectionKey(resultIndex, eventIndex)] = verification;
+            if (verification.auto_selected) selectVerifiedFrame(scope, resultIndex, eventIndex, verification);
+            if (states[scope]?.status === 'done') renderResults(scope, states[scope]);
+            const confidence = Math.round(Number(verification.confidence || 0) * 100);
+            showToast(verification.auto_selected
+              ? `Gemini tin cậy ${confidence}% · đã tự chốt frame ${verification.best.frame_idx}.`
+              : `Gemini tin cậy ${confidence}% · đang chờ bạn xác nhận frame ${verification.best.frame_idx}.`);
+          } catch (error) {
+            showToast(error.message);
+            button.disabled = false;
+            button.textContent = original;
+          }
+        });
+      });
+      document.querySelectorAll('[data-use-verified="1"]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const scope = button.dataset.useScope || selectedScope;
+          const resultIndex = Number(button.dataset.resultIndex);
+          const eventIndex = button.dataset.eventIndex == null ? null : Number(button.dataset.eventIndex);
+          const verification = verificationFor(scope, resultIndex, eventIndex);
+          if (!verification?.best) return;
+          selectVerifiedFrame(scope, resultIndex, eventIndex, verification);
+          renderResults(scope, states[scope]);
+          showToast(`Đã chốt frame ${verification.best.frame_idx} do Gemini đề xuất.`);
+        });
+      });
+    }
     async function loadDresEvaluations() {
       try {
         const data = await api('/api/dres/evaluations');
@@ -1121,15 +1208,17 @@
       $('resultsGrid').innerHTML = results.map((item, resultIndex) => {
         const selected = selectedFrameFor(scope, resultIndex);
         const videoItem = selected ? {...item, ...selected} : item;
+        const displayItem = selected?.image_url ? videoItem : item;
         const selectedNote = selected ? `<div class="selected-frame-note">📌 Đã chốt frame ${escapeHtml(selected.frame_idx)} · ${escapeHtml(selected.timestamp_ms)} ms</div>` : '';
-        const image = item.image_url ? `<img loading="lazy" tabindex="0" role="button" data-image-zoom="1" data-image-title="${escapeHtml(item.video_id)} · frame ${escapeHtml(item.frame_idx)}" src="${escapeHtml(item.image_url)}" alt="${escapeHtml(item.video_id)} frame ${escapeHtml(item.frame_idx)}" aria-label="Phóng to ảnh ${escapeHtml(item.video_id)} frame ${escapeHtml(item.frame_idx)}">` : '<div class="image-empty">Ảnh chưa có trong cache</div>';
-        const caption = item.caption ? `<details class="caption-details"><summary>Xem Dense Caption</summary><div class="result-caption">${escapeHtml(item.caption)}</div></details>` : '<div class="muted small">Không có caption</div>';
-        const ocr = item.ocr ? `<div class="result-ocr">OCR: ${escapeHtml(item.ocr)}</div>` : '';
-        const seconds = Number(item.seconds ?? Number(item.timestamp_ms || 0) / 1000);
-        return `<article class="result-card">${image}<div class="result-body"><div class="result-top"><span class="rank">#${escapeHtml(item.rank)}</span><span>${escapeHtml(item.batch || '')} · ${escapeHtml(item.video_id)}</span></div><div class="muted small" style="margin-top:5px">${seconds.toFixed(3)}s · frame ${escapeHtml(item.frame_idx)} · ${escapeHtml(item.keyframe_id || '')}</div>${selectedNote}${caption}${ocr}<div class="muted small" style="margin-top:8px">score ${Number(item.score || 0).toFixed(2)}</div><div class="result-actions">${videoButton(videoItem, '▶ Xem video', {scope, resultIndex})}${suggestButton(resultIndex)}${dresButton(resultIndex)}</div></div></article>`;
+        const image = displayItem.image_url ? `<img loading="lazy" tabindex="0" role="button" data-image-zoom="1" data-image-title="${escapeHtml(displayItem.video_id)} · frame ${escapeHtml(displayItem.frame_idx)}" src="${escapeHtml(displayItem.image_url)}" alt="${escapeHtml(displayItem.video_id)} frame ${escapeHtml(displayItem.frame_idx)}" aria-label="Phóng to ảnh ${escapeHtml(displayItem.video_id)} frame ${escapeHtml(displayItem.frame_idx)}">` : '<div class="image-empty">Ảnh chưa có trong cache</div>';
+        const caption = displayItem.caption ? `<details class="caption-details"><summary>Xem Dense Caption</summary><div class="result-caption">${escapeHtml(displayItem.caption)}</div></details>` : '<div class="muted small">Không có caption</div>';
+        const ocr = displayItem.ocr ? `<div class="result-ocr">OCR: ${escapeHtml(displayItem.ocr)}</div>` : '';
+        const seconds = Number(displayItem.seconds ?? Number(displayItem.timestamp_ms || 0) / 1000);
+        return `<article class="result-card">${image}<div class="result-body"><div class="result-top"><span class="rank">#${escapeHtml(item.rank)}</span><span>${escapeHtml(item.batch || '')} · ${escapeHtml(item.video_id)}</span></div><div class="muted small" style="margin-top:5px">${seconds.toFixed(3)}s · frame ${escapeHtml(displayItem.frame_idx)} · ${escapeHtml(displayItem.keyframe_id || '')}</div>${selectedNote}${caption}${ocr}<div class="muted small" style="margin-top:8px">score ${Number(item.score || 0).toFixed(2)}</div><div class="result-actions">${videoButton(videoItem, '▶ Xem video', {scope, resultIndex})}${verifyButton(scope, resultIndex)}${suggestButton(resultIndex)}${dresButton(resultIndex)}</div>${verificationPanel(scope, resultIndex)}</div></article>`;
       }).join('');
       bindImageZoom();
       bindVideoButtons();
+      bindVerifyButtons();
       bindSuggestButtons();
       bindDresButtons();
     }
@@ -1141,16 +1230,18 @@
         const events = (item.events || []).map((event) => {
           const selected = selectedFrameFor(scope, resultIndex, event.event_index);
           const videoItem = selected ? {...event, ...selected} : event;
+          const displayEvent = selected?.image_url ? videoItem : event;
           const selectedNote = selected ? `<div class="selected-frame-note">📌 Đã chốt frame ${escapeHtml(selected.frame_idx)} · ${escapeHtml(selected.timestamp_ms)} ms</div>` : '';
-          const image = event.image_url ? `<img loading="lazy" tabindex="0" role="button" data-image-zoom="1" data-image-title="${escapeHtml(item.video_id)} · E${escapeHtml(event.event_index)} · frame ${escapeHtml(event.frame_idx)}" src="${escapeHtml(event.image_url)}" alt="${escapeHtml(item.video_id)} event ${escapeHtml(event.event_index)} frame ${escapeHtml(event.frame_idx)}" aria-label="Phóng to ảnh event ${escapeHtml(event.event_index)}">` : '<div class="image-empty">Ảnh chưa có</div>';
-          const seconds = Number(event.seconds ?? Number(event.timestamp_ms || 0) / 1000);
-          return `<div class="trake-event">${image}<div class="trake-event-label">E${escapeHtml(event.event_index)} · ${seconds.toFixed(3)}s<br>frame ${escapeHtml(event.frame_idx)} · ${escapeHtml(event.keyframe_id || '')}${selectedNote}<div class="result-actions">${videoButton(videoItem, '▶ Mở video / chốt frame', {scope, resultIndex, eventIndex:event.event_index})}<button class="video-button" type="button" data-trake-focus="${scope}" data-event-index="${escapeHtml(event.event_index)}">✏️ Sửa E${escapeHtml(event.event_index)}</button>${suggestButton(resultIndex, event.event_index)}</div></div></div>`;
+          const image = displayEvent.image_url ? `<img loading="lazy" tabindex="0" role="button" data-image-zoom="1" data-image-title="${escapeHtml(item.video_id)} · E${escapeHtml(event.event_index)} · frame ${escapeHtml(displayEvent.frame_idx)}" src="${escapeHtml(displayEvent.image_url)}" alt="${escapeHtml(item.video_id)} event ${escapeHtml(event.event_index)} frame ${escapeHtml(displayEvent.frame_idx)}" aria-label="Phóng to ảnh event ${escapeHtml(event.event_index)}">` : '<div class="image-empty">Ảnh chưa có</div>';
+          const seconds = Number(displayEvent.seconds ?? Number(displayEvent.timestamp_ms || 0) / 1000);
+          return `<div class="trake-event">${image}<div class="trake-event-label">E${escapeHtml(event.event_index)} · ${seconds.toFixed(3)}s<br>frame ${escapeHtml(displayEvent.frame_idx)} · ${escapeHtml(displayEvent.keyframe_id || '')}${selectedNote}<div class="result-actions">${videoButton(videoItem, '▶ Mở video / chốt frame', {scope, resultIndex, eventIndex:event.event_index})}${verifyButton(scope, resultIndex, event.event_index)}<button class="video-button" type="button" data-trake-focus="${scope}" data-event-index="${escapeHtml(event.event_index)}">✏️ Sửa E${escapeHtml(event.event_index)}</button>${suggestButton(resultIndex, event.event_index)}</div>${verificationPanel(scope, resultIndex, event.event_index)}</div></div>`;
         }).join('');
         return `<article class="result-card"><div class="result-body"><div class="result-top"><span class="rank">#${escapeHtml(item.rank)} · ${escapeHtml(item.video_id)}</span><span>score ${Number(item.score || 0).toFixed(2)}</span></div><div class="muted small" style="margin-top:6px">support ${escapeHtml(item.support)} · frames ${escapeHtml((item.frame_ids || []).join(', '))}</div><div class="result-actions">${suggestButton(resultIndex)}${dresButton(resultIndex)}</div><div class="trake-events">${events || '<div class="result-empty">Thiếu frame</div>'}</div></div></article>`;
       }).join('')}`;
       bindTrakeRepair(scope, state);
       bindImageZoom();
       bindVideoButtons();
+      bindVerifyButtons();
       bindSuggestButtons();
       bindDresButtons();
     }
@@ -1219,6 +1310,7 @@
       if (queryType === 'TRAKE' && prepared.events_en.length && finalEvents.length && prepared.events_en.length !== finalEvents.length) { notice.textContent = 'Số dòng tiếng Anh phải bằng số sự kiện.'; return; }
       const geminiRerank = $(`${scope}GeminiRerank`).checked;
       committedFrames[scope] = {};
+      frameVerifications[scope] = {};
       await api(`/api/${scope}/run`, {method:'POST', headers:{'X-CSRF-Token': csrf}, body: JSON.stringify({query:finalQuery, query_type: queryType, query_en: prepared.query_en, ocr_keywords: prepared.ocr_keywords, trake_preamble: prepared.trake_preamble, events:finalEvents, events_en:prepared.events_en, answer, auto_answer:autoAnswer, gemini_rerank:geminiRerank, trammay_tier:prepared.trammay_tier, top_k: topK, ...armConfig})});
         showToast(`${queryType} · ${scope === 'shared' ? 'đã xếp luồng chung; mọi user sẽ thấy tiến trình.' : 'đã chạy luồng riêng của bạn.'}`);
       } catch (error) { notice.textContent = error.message; }

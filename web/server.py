@@ -94,6 +94,7 @@ from mfe.online.quest import (  # noqa: E402
     quest_expand,
     split_trake_events,
 )
+from mfe.online.video_frame_verify import verify_video_keyframe  # noqa: E402
 from mfe.online.video_source import resolve_video  # noqa: E402
 from mfe.online.vqa_answer import read_answer_hybrid  # noqa: E402
 
@@ -153,6 +154,14 @@ def _safe_int_env(name: str, default: int) -> int:
     except ValueError:
         return default
     return value if value > 0 else default
+
+
+def _safe_float_env(name: str, default: float) -> float:
+    try:
+        value = float(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+    return value if math.isfinite(value) else default
 
 
 def _search_cache_key(
@@ -537,6 +546,7 @@ class EngineManager:
         self.relational: RelationalMap | None = None
         self.images: KeyframeImages | None = None
         self.text_store: FlatTextStore | None = None
+        self.dense_key_index: dict[str, int] = {}
         self.batch2_video_ids: set[str] = set()
         self.ready = False
         self.initializing = False
@@ -544,6 +554,7 @@ class EngineManager:
         self.init_started = time.time()
         self.init_task: asyncio.Task[None] | None = None
         self.cpu_gate: asyncio.Semaphore | None = None
+        self.verify_gate: asyncio.Semaphore | None = None
         self.query_cache_max = _safe_int_env("MFE_WEB_QUERY_CACHE_SIZE", 128)
         self.query_cache: OrderedDict[str, dict[str, Any]] = OrderedDict()
         self.query_cache_lock = threading.RLock()
@@ -593,6 +604,7 @@ class EngineManager:
     def start(self) -> None:
         self.shared_lane = Lane(self, "shared")
         self.cpu_gate = asyncio.Semaphore(self.hardware.max_parallel_lanes)
+        self.verify_gate = asyncio.Semaphore(_safe_int_env("MFE_WEB_VERIFY_PARALLEL", 4))
         self.initializing = True
         self.init_task = asyncio.create_task(asyncio.to_thread(self._initialize_sync))
         self.init_task.add_done_callback(self._initialization_done)
@@ -642,6 +654,12 @@ class EngineManager:
         self.relational = relational
         self.images = images
         self.text_store = FlatTextStore(bundle)
+        # One shared key -> row table makes a within-video BGE scan a small
+        # matrix multiply instead of a 446k-key Python scan on every click.
+        self.dense_key_index = {
+            keyframe_id: index
+            for index, keyframe_id in enumerate(bundle.vector_keys.get("bge_m3", ()))
+        }
         self.batch2_video_ids = batch2_video_ids
         logger.info("engine san sang; active arms=%s; %s", active, bundle.report())
 
@@ -1424,6 +1442,186 @@ async def state(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, **request.app.state.manager.state_for(username)})
 
 
+def _verification_target(
+    selected_state: dict[str, Any], result_index: int, event_index: int | None
+) -> tuple[dict[str, Any], str, list[str]]:
+    results = selected_state.get("results") or []
+    if result_index < 0 or result_index >= len(results):
+        raise ValueError("ket qua da chon khong ton tai")
+    result = results[result_index]
+    query_type = str(selected_state.get("query_type", "KIS")).upper()
+    target = result
+    if query_type == "TRAKE":
+        if event_index is None or event_index < 1:
+            raise ValueError("TRAKE can event_index")
+        target = next(
+            (
+                event
+                for event in result.get("events", [])
+                if int(event.get("event_index", -1)) == event_index
+            ),
+            None,
+        )
+        if not isinstance(target, dict):
+            raise ValueError("event TRAKE da chon khong ton tai")
+        events = selected_state.get("events") or []
+        event_query = str(events[event_index - 1]).strip() if event_index <= len(events) else ""
+        preamble = str(selected_state.get("query") or "").strip()
+        query = "\n".join(part for part in (preamble, event_query) if part)
+    else:
+        query = str(selected_state.get("query") or "").strip()
+        if query_type == "QA" and isinstance(selected_state.get("answer"), dict):
+            answer = str(selected_state["answer"].get("text") or "").strip()
+            if answer:
+                query = f"{query}\nDap an dang doc: {answer}"
+    if not query:
+        raise ValueError("truy van rong")
+
+    video_id = str(target.get("video_id") or result.get("video_id") or "").strip()
+    keyframe_id = str(target.get("keyframe_id") or "").strip()
+    if not _VIDEO_RE.fullmatch(video_id) or not keyframe_id.startswith(f"{video_id}#"):
+        raise ValueError("ket qua thieu video_id/keyframe_id hop le")
+
+    related: list[str] = []
+    for candidate in results:
+        candidates = candidate.get("events", []) if query_type == "TRAKE" else [candidate]
+        for event in candidates:
+            if str(event.get("video_id") or candidate.get("video_id") or "") != video_id:
+                continue
+            candidate_id = str(event.get("keyframe_id") or "")
+            if candidate_id:
+                related.append(candidate_id)
+    return target, query, related
+
+
+def _verify_video_frame_sync(
+    manager: EngineManager,
+    target: dict[str, Any],
+    query: str,
+    related: list[str],
+    model: str,
+) -> Any:
+    if manager.relational is None or manager.bundle is None or manager.images is None:
+        raise RuntimeError("engine chua nap xong mapping/bundle/anh")
+    video_id = str(target["video_id"])
+    keyframe_id = str(target["keyframe_id"])
+    rows = manager.relational.get_video_keyframes(video_id)
+    if not rows:
+        raise RuntimeError(f"khong co keyframe nao cho {video_id}")
+    return verify_video_keyframe(
+        query,
+        video_id,
+        keyframe_id,
+        rows,
+        manager.bundle,
+        manager.images.cached,
+        dense_key_index=manager.dense_key_index,
+        related_keyframe_ids=related,
+        model=model,
+        max_images=min(20, _safe_int_env("MFE_VIDEO_VERIFY_IMAGES", 12)),
+        auto_threshold=min(
+            1.0,
+            max(0.0, _safe_float_env("MFE_VIDEO_VERIFY_AUTO_THRESHOLD", 0.8)),
+        ),
+    )
+
+
+async def verify_video_frame(request: Request) -> JSONResponse:
+    """Confirm and, when confidence is high, automatically select a frame."""
+    username = _session_user(request)
+    if username is None:
+        return JSONResponse({"ok": False, "error": "can dang nhap"}, status_code=401)
+    if not _csrf_ok(request):
+        return JSONResponse({"ok": False, "error": "csrf token khong dung"}, status_code=403)
+    payload = await _json_body(request)
+    if not payload:
+        return JSONResponse({"ok": False, "error": "payload rong"}, status_code=400)
+    scope = str(payload.get("scope") or "").strip()
+    if scope not in {"shared", "private"}:
+        return JSONResponse({"ok": False, "error": "scope khong hop le"}, status_code=400)
+    manager: EngineManager = request.app.state.manager
+    if not manager.ready:
+        return JSONResponse(
+            {"ok": False, "error": manager.init_error or "engine dang khoi dong"},
+            status_code=503,
+        )
+    selected_state = (
+        manager.shared_state if scope == "shared" else manager.private_states.get(username)
+    )
+    if not selected_state or selected_state.get("status") != "done":
+        return JSONResponse({"ok": False, "error": "chua co ket qua de xac nhan"}, status_code=409)
+    try:
+        result_index = int(payload.get("result_index", -1))
+        raw_event_index = payload.get("event_index")
+        event_index = int(raw_event_index) if raw_event_index is not None else None
+        target, query, related = _verification_target(selected_state, result_index, event_index)
+    except (TypeError, ValueError) as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    model = str(selected_state.get("trammay_model") or TRAMMAY_MODEL_TIERS["high"])
+    try:
+        assert manager.verify_gate is not None
+        async with manager.verify_gate:
+            outcome = await asyncio.to_thread(
+                _verify_video_frame_sync, manager, target, query, related, model
+            )
+    except Exception as exc:  # noqa: BLE001 - optional verifier reports its own failure
+        logger.warning(
+            "video frame verification failed for %s: %s: %s",
+            username,
+            type(exc).__name__,
+            exc,
+        )
+        return JSONResponse(
+            {"ok": False, "error": f"Gemini xac nhan loi: {type(exc).__name__}: {exc}"},
+            status_code=502,
+        )
+
+    best = manager._keyframe_payload(
+        outcome.best_keyframe_id,
+        str(target["video_id"]),
+        float(target.get("score") or 0.0),
+        int(target.get("rank") or 1),
+    )
+    if best is None:
+        return JSONResponse(
+            {"ok": False, "error": "keyframe Gemini chon khong con trong mapping"},
+            status_code=409,
+        )
+    alternatives = [
+        item
+        for index, keyframe_id in enumerate(outcome.alternatives, 1)
+        for item in [manager._keyframe_payload(keyframe_id, best["video_id"], 0.0, index)]
+        if item is not None
+    ]
+    threshold = min(
+        1.0,
+        max(0.0, _safe_float_env("MFE_VIDEO_VERIFY_AUTO_THRESHOLD", 0.8)),
+    )
+    return JSONResponse(
+        {
+            "ok": True,
+            "best": best,
+            "alternatives": alternatives,
+            "confidence": outcome.confidence,
+            "confidence_label": outcome.confidence_label,
+            "reason": outcome.reason,
+            "auto_selected": outcome.auto_selected,
+            "threshold": threshold,
+            "model": model,
+            "metrics": {
+                "total_keyframes_scanned": outcome.total_keyframes_scanned,
+                "shortlisted": outcome.shortlisted,
+                "images_sent": outcome.images_sent,
+                "image_parts_sent": outcome.image_parts_sent,
+                "evidence_sources": list(outcome.evidence_sources),
+                "duration_ms": outcome.duration_ms,
+                "cached": outcome.cached,
+            },
+        }
+    )
+
+
 def _dres_evaluation_view(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [
         {
@@ -2130,6 +2328,7 @@ routes = [
     Route("/api/login", login, methods=["POST"]),
     Route("/api/logout", logout, methods=["POST"]),
     Route("/api/state", state),
+    Route("/api/verify-video-frame", verify_video_frame, methods=["POST"]),
     Route("/api/dres/evaluations", dres_evaluations),
     Route("/api/dres/submit-manual", dres_submit_manual, methods=["POST"]),
     Route("/api/dres/submit", dres_submit, methods=["POST"]),

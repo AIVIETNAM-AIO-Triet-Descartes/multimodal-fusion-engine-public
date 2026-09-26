@@ -226,6 +226,23 @@ class RelationalMap:
         
         return [KeyframeRow(**dict(r)) for r in rows]
 
+    def get_video_keyframes(self, video_id: str) -> list[KeyframeRow]:
+        """Return every catalogue keyframe of one video in temporal order.
+
+        Frame verification needs to reconsider the whole known-correct video,
+        while keeping the remote VLM request small.  This indexed lookup is
+        cheap and lets the caller shortlist locally before loading any pixels.
+        """
+        rows = self._conn.execute(
+            """
+            SELECT * FROM keyframes
+            WHERE video_id = ?
+            ORDER BY keyframe_index ASC
+            """,
+            (video_id,),
+        ).fetchall()
+        return [KeyframeRow(**dict(row)) for row in rows]
+
     def find_bracketing_keyframes(
         self, video_id: str, pts_time: float
     ) -> tuple[KeyframeRow | None, KeyframeRow | None]:

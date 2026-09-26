@@ -51,6 +51,12 @@ def test_relational_map(db):
     assert db.count_keyframes() == 2
 
 
+def test_get_video_keyframes_is_temporally_ordered(db):
+    rows = db.get_video_keyframes("L21_V001")
+    assert [row.keyframe_index for row in rows] == [1, 2]
+    assert db.get_video_keyframes("missing") == []
+
+
 def test_verify_mapping(db):
     problems = db.verify_mapping()
     assert len(problems) >= 2 # out of bounds frame, out of bounds timestamp
