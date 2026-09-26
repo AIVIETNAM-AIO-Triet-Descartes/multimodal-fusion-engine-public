@@ -65,6 +65,9 @@ frame đang xem**. Frame được giữ theo đúng lane và kết quả/event �
 thị lại bằng dấu `📌`, được dùng khi tạo đề xuất và được gửi cùng payload DRES
 nếu người vận hành nộp kết quả đó.
 
+Bấm trực tiếp vào ảnh kết quả để mở ảnh phóng to; có thể đóng bằng nút **Đóng**,
+bấm ra nền tối hoặc nhấn `Esc`.
+
 Sau khi DRES nhận một đáp án, backend ghi fingerprint của **đúng payload đáp án**
 vào `/home/ubuntu/web/dres_submissions.json` (mode 600). Vì vậy một đáp án khác
 cho cùng truy vấn vẫn có thể được nộp lại để sửa lượt sai, còn payload giống hệt

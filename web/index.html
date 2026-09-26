@@ -148,6 +148,8 @@
     .results-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
     .result-card { overflow: hidden; background: var(--panel-2); border: 1px solid var(--line); border-radius: 13px; }
     .result-card img, .image-empty { width: 100%; height: 145px; display: block; object-fit: cover; background: #0a1120; }
+    .result-card img, .trake-event img { cursor: zoom-in; }
+    .result-card img:focus, .trake-event img:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
     .image-empty { display: grid; place-items: center; color: var(--muted); font-size: 12px; }
     .result-body { padding: 11px; }
     .result-top { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 11px; }
@@ -171,6 +173,8 @@
     .modal-card { width: min(960px, 100%); padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); box-shadow: var(--shadow); }
     .modal-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 11px; }
     #videoPlayer { width: 100%; max-height: 76vh; background: #02050b; border-radius: 10px; }
+    #imageModal .modal-card { width: min(1400px, 100%); }
+    #imageZoom { display: block; width: 100%; max-height: 82vh; object-fit: contain; border-radius: 10px; background: #02050b; }
     .seek-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin-top: 10px; }
     .seek-row label { min-width: 130px; }
     .seek-row select { color: var(--text); background: #0c1426; border: 1px solid var(--line); border-radius: 9px; padding: 9px 10px; }
@@ -472,6 +476,13 @@
         <button id="commitFrameButton" class="primary" type="button">📌 Chốt frame đang xem</button>
         <span id="committedFrameInfo" class="frame-commit-note"></span>
       </div>
+    </div>
+  </div>
+  <div id="imageModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="imageModalTitle">
+    <div class="modal-card">
+      <div class="modal-heading"><h2 id="imageModalTitle">Ảnh kết quả</h2><button id="closeImageButton" class="ghost" type="button">Đóng</button></div>
+      <img id="imageZoom" alt="Ảnh kết quả phóng to">
+      <div id="imageModalInfo" class="muted small" style="margin-top:8px"></div>
     </div>
   </div>
   <div id="toast" class="toast hidden"></div>
@@ -852,6 +863,32 @@
         });
       });
     }
+    function closeImage() {
+      $('imageZoom').removeAttribute('src');
+      $('imageModalInfo').textContent = '';
+      $('imageModal').classList.add('hidden');
+    }
+    function openImage(image) {
+      const source = image.currentSrc || image.src;
+      if (!source) return;
+      $('imageModalTitle').textContent = image.dataset.imageTitle || 'Ảnh kết quả';
+      $('imageZoom').src = source;
+      $('imageZoom').alt = image.alt || 'Ảnh kết quả phóng to';
+      $('imageModalInfo').textContent = image.alt || '';
+      $('imageModal').classList.remove('hidden');
+    }
+    function bindImageZoom() {
+      document.querySelectorAll('[data-image-zoom="1"]').forEach((image) => {
+        const activate = () => openImage(image);
+        image.addEventListener('click', activate);
+        image.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            activate();
+          }
+        });
+      });
+    }
     function updateVideoTimeInfo() {
       const player = $('videoPlayer');
       const seconds = Number(player.currentTime || 0);
@@ -1029,12 +1066,13 @@
         const selected = selectedFrameFor(scope, resultIndex);
         const videoItem = selected ? {...item, ...selected} : item;
         const selectedNote = selected ? `<div class="selected-frame-note">📌 Đã chốt frame ${escapeHtml(selected.frame_idx)} · ${escapeHtml(selected.timestamp_ms)} ms</div>` : '';
-        const image = item.image_url ? `<img loading="lazy" src="${escapeHtml(item.image_url)}" alt="${escapeHtml(item.video_id)} frame ${escapeHtml(item.frame_idx)}">` : '<div class="image-empty">Ảnh chưa có trong cache</div>';
+        const image = item.image_url ? `<img loading="lazy" tabindex="0" role="button" data-image-zoom="1" data-image-title="${escapeHtml(item.video_id)} · frame ${escapeHtml(item.frame_idx)}" src="${escapeHtml(item.image_url)}" alt="${escapeHtml(item.video_id)} frame ${escapeHtml(item.frame_idx)}" aria-label="Phóng to ảnh ${escapeHtml(item.video_id)} frame ${escapeHtml(item.frame_idx)}">` : '<div class="image-empty">Ảnh chưa có trong cache</div>';
         const caption = item.caption ? `<details class="caption-details"><summary>Xem Dense Caption</summary><div class="result-caption">${escapeHtml(item.caption)}</div></details>` : '<div class="muted small">Không có caption</div>';
         const ocr = item.ocr ? `<div class="result-ocr">OCR: ${escapeHtml(item.ocr)}</div>` : '';
         const seconds = Number(item.seconds ?? Number(item.timestamp_ms || 0) / 1000);
         return `<article class="result-card">${image}<div class="result-body"><div class="result-top"><span class="rank">#${escapeHtml(item.rank)}</span><span>${escapeHtml(item.batch || '')} · ${escapeHtml(item.video_id)}</span></div><div class="muted small" style="margin-top:5px">${seconds.toFixed(3)}s · frame ${escapeHtml(item.frame_idx)} · ${escapeHtml(item.keyframe_id || '')}</div>${selectedNote}${caption}${ocr}<div class="muted small" style="margin-top:8px">score ${Number(item.score || 0).toFixed(2)}</div><div class="result-actions">${videoButton(videoItem, '▶ Xem video', {scope, resultIndex})}${suggestButton(resultIndex)}${dresButton(resultIndex)}</div></div></article>`;
       }).join('');
+      bindImageZoom();
       bindVideoButtons();
       bindSuggestButtons();
       bindDresButtons();
@@ -1048,12 +1086,13 @@
           const selected = selectedFrameFor(scope, resultIndex, event.event_index);
           const videoItem = selected ? {...event, ...selected} : event;
           const selectedNote = selected ? `<div class="selected-frame-note">📌 Đã chốt frame ${escapeHtml(selected.frame_idx)} · ${escapeHtml(selected.timestamp_ms)} ms</div>` : '';
-          const image = event.image_url ? `<img loading="lazy" src="${escapeHtml(event.image_url)}" alt="event ${escapeHtml(event.event_index)}">` : '<div class="image-empty">Ảnh chưa có</div>';
+          const image = event.image_url ? `<img loading="lazy" tabindex="0" role="button" data-image-zoom="1" data-image-title="${escapeHtml(item.video_id)} · E${escapeHtml(event.event_index)} · frame ${escapeHtml(event.frame_idx)}" src="${escapeHtml(event.image_url)}" alt="${escapeHtml(item.video_id)} event ${escapeHtml(event.event_index)} frame ${escapeHtml(event.frame_idx)}" aria-label="Phóng to ảnh event ${escapeHtml(event.event_index)}">` : '<div class="image-empty">Ảnh chưa có</div>';
           const seconds = Number(event.seconds ?? Number(event.timestamp_ms || 0) / 1000);
           return `<div class="trake-event">${image}<div class="trake-event-label">E${escapeHtml(event.event_index)} · ${seconds.toFixed(3)}s<br>frame ${escapeHtml(event.frame_idx)} · ${escapeHtml(event.keyframe_id || '')}${selectedNote}<div class="result-actions">${videoButton(videoItem, '▶ Mở video', {scope, resultIndex, eventIndex:event.event_index})}${suggestButton(resultIndex, event.event_index)}</div></div></div>`;
         }).join('');
         return `<article class="result-card"><div class="result-body"><div class="result-top"><span class="rank">#${escapeHtml(item.rank)} · ${escapeHtml(item.video_id)}</span><span>score ${Number(item.score || 0).toFixed(2)}</span></div><div class="muted small" style="margin-top:6px">support ${escapeHtml(item.support)} · frames ${escapeHtml((item.frame_ids || []).join(', '))}</div><div class="result-actions">${suggestButton(resultIndex)}${dresButton(resultIndex)}</div><div class="trake-events">${events || '<div class="result-empty">Thiếu frame</div>'}</div></div></article>`;
       }).join('');
+      bindImageZoom();
       bindVideoButtons();
       bindSuggestButtons();
       bindDresButtons();
@@ -1147,6 +1186,7 @@
     $('sharedType').addEventListener('change', () => updateFormType('shared'));
     $('privateType').addEventListener('change', () => updateFormType('private'));
     $('closeVideoButton').addEventListener('click', closeVideo);
+    $('closeImageButton').addEventListener('click', closeImage);
     $('seekButton').addEventListener('click', seekVideo);
     $('commitFrameButton').addEventListener('click', commitCurrentFrame);
     $('videoPlayer').addEventListener('timeupdate', updateVideoTimeInfo);
@@ -1158,6 +1198,8 @@
     $('refreshSuggestionsButton').addEventListener('click', async () => { try { const data = await api('/api/suggestions'); sharedSuggestions = data.suggestions || []; renderSuggestions(); } catch (error) { showToast(error.message); } });
     $('clearSuggestionsButton').addEventListener('click', async () => { if (!window.confirm('Xoá toàn bộ đề xuất dùng chung?')) return; try { await api('/api/suggestions/clear', {method:'POST', headers:{'X-CSRF-Token': csrf}}); } catch (error) { showToast(error.message); } });
     $('videoModal').addEventListener('click', (event) => { if (event.target === $('videoModal')) closeVideo(); });
+    $('imageModal').addEventListener('click', (event) => { if (event.target === $('imageModal')) closeImage(); });
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape') { closeVideo(); closeImage(); } });
     document.querySelectorAll('.switch-button').forEach((button) => {
       button.addEventListener('click', () => setActiveMode(button.dataset.scope));
     });
