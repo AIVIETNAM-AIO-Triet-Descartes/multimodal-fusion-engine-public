@@ -10,7 +10,9 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading
 import time
+from collections import OrderedDict
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -22,15 +24,52 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_DEPTH = 30
 _ID_RE = re.compile(r"^[A-Za-z0-9_.-]+#[0-9]+$")
+_RERANK_CACHE_MAX = 128
+_RERANK_CACHE: OrderedDict[str, tuple[str, ...]] = OrderedDict()
+_RERANK_CACHE_LOCK = threading.RLock()
 
 
 @dataclass(frozen=True)
 class CaptionRerankOutcome:
     enabled: bool
     ran: bool
+    cached: bool = False
     moved: int = 0
     duration_ms: float = 0.0
     reason: str | None = None
+
+
+def _cache_key(
+    candidates: Sequence[Candidate],
+    query: str,
+    query_en: str | None,
+    model: str,
+    depth: int,
+) -> str:
+    payload = {
+        "model": model,
+        "depth": depth,
+        "query": query.strip(),
+        "query_en": (query_en or "").strip(),
+        "ids": [item.keyframe_id for item in candidates[:depth]],
+    }
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _cache_get(key: str) -> tuple[str, ...] | None:
+    with _RERANK_CACHE_LOCK:
+        value = _RERANK_CACHE.get(key)
+        if value is not None:
+            _RERANK_CACHE.move_to_end(key)
+        return value
+
+
+def _cache_put(key: str, value: Sequence[str]) -> None:
+    with _RERANK_CACHE_LOCK:
+        _RERANK_CACHE[key] = tuple(value)
+        _RERANK_CACHE.move_to_end(key)
+        while len(_RERANK_CACHE) > _RERANK_CACHE_MAX:
+            _RERANK_CACHE.popitem(last=False)
 
 
 def _parse_ids(raw: str) -> list[str]:
@@ -82,6 +121,33 @@ def rerank_candidates(
             True, False, duration_ms=_elapsed(started), reason="thieu TRAMMAY_API_KEY"
         )
 
+    # Only cache the real gateway path. Tests and callers that inject a client
+    # may intentionally change the answer between calls.
+    use_cache = client is None
+    model = str(getattr(gateway, "model", ""))
+    cache_key = _cache_key(head, query, query_en, model, len(head)) if use_cache else ""
+    if use_cache:
+        cached_order = _cache_get(cache_key)
+        if cached_order is not None:
+            by_id = {item.keyframe_id: item for item in head}
+            reordered = [by_id[keyframe_id] for keyframe_id in cached_order if keyframe_id in by_id]
+            if len(reordered) == len(head):
+                moved = sum(
+                    a.keyframe_id != b.keyframe_id
+                    for a, b in zip(head, reordered, strict=True)
+                )
+                return (
+                    reordered + list(candidates[len(head):]),
+                    CaptionRerankOutcome(
+                        True,
+                        True,
+                        cached=True,
+                        moved=moved,
+                        duration_ms=_elapsed(started),
+                        reason="cache",
+                    ),
+                )
+
     rows = [
         {"id": item.keyframe_id, "text": _text_for(
             bundle,
@@ -119,6 +185,8 @@ def rerank_candidates(
         return list(candidates), CaptionRerankOutcome(
             True, False, duration_ms=_elapsed(started), reason="Gemini tra ve thu tu khong day du"
         )
+    if use_cache:
+        _cache_put(cache_key, [item.keyframe_id for item in reordered])
     output = reordered + list(candidates[len(head):])
     moved = sum(a.keyframe_id != b.keyframe_id for a, b in zip(head, reordered, strict=True))
     return output, CaptionRerankOutcome(True, True, moved=moved, duration_ms=_elapsed(started))

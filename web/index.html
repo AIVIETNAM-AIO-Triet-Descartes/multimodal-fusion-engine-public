@@ -765,7 +765,8 @@
       if (state.owner) bits.push(`<span>người chạy: <strong>${escapeHtml(state.owner)}</strong></span>`);
       if (state.query) bits.push(`<span>query: <strong>${escapeHtml(state.query.slice(0, 110))}${state.query.length > 110 ? '…' : ''}</strong></span>`);
       if (state.duration_ms != null) bits.push(`<span>thời gian: <strong>${escapeHtml(state.duration_ms)} ms</strong></span>`);
-      if (state.gemini_rerank?.enabled) bits.push(`<span>Gemini rerank: <strong>${state.gemini_rerank.ran ? `đã chạy, đổi ${state.gemini_rerank.moved} vị trí` : 'bật nhưng không chạy'}</strong></span>`);
+      if (state.cache_hit) bits.push('<span class="ok">kết quả từ cache RAM</span>');
+      if (state.gemini_rerank?.enabled) bits.push(`<span>Gemini rerank: <strong>${state.gemini_rerank.cached ? `cache RAM, đổi ${state.gemini_rerank.moved} vị trí` : state.gemini_rerank.ran ? `đã chạy, đổi ${state.gemini_rerank.moved} vị trí` : 'bật nhưng không chạy'}</strong></span>`);
       if (state.answer && state.answer.text) bits.push(`<span>đáp án QA: <strong>${escapeHtml(state.answer.text)}</strong></span>`);
       if (state.answer && state.answer.reason && state.query_type === 'QA') bits.push(`<span style="color:var(--danger)">${escapeHtml(state.answer.reason)}</span>`);
       if (state.error) bits.push(`<span style="color:var(--danger)">${escapeHtml(state.error)}</span>`);

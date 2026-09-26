@@ -33,6 +33,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
+from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -119,6 +120,48 @@ def _safe_int_env(name: str, default: int) -> int:
     except ValueError:
         return default
     return value if value > 0 else default
+
+
+def _search_cache_key(
+    *,
+    query: str,
+    query_en: str | None,
+    top_k: int,
+    query_type: str,
+    events: list[str],
+    events_en: list[str],
+    answer: str,
+    auto_answer: bool,
+    penalty: float,
+    ocr_keywords: str | None,
+    arm_weights: dict[str, float] | None,
+    arm_enabled: dict[str, bool] | None,
+    gemini_rerank: bool,
+) -> str:
+    """Stable key for the RAM result cache.
+
+    A result is only reusable when all inputs that can change ranking or the QA
+    answer are identical. The process clears this cache on restart, so a new
+    bundle or config can never reuse stale results.
+    """
+    payload = {
+        "query": query,
+        "query_en": query_en or "",
+        "top_k": int(top_k),
+        "query_type": query_type,
+        "events": events,
+        "events_en": events_en,
+        "answer": answer,
+        "auto_answer": bool(auto_answer),
+        "penalty": float(penalty),
+        "ocr_keywords": ocr_keywords or "",
+        "arm_weights": arm_weights or {},
+        "arm_enabled": arm_enabled or {},
+        "gemini_rerank": bool(gemini_rerank),
+    }
+    return hashlib.sha256(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
 
 
 def _gemini_rerank_default() -> bool:
@@ -275,11 +318,34 @@ class Lane:
         arm_enabled: dict[str, bool] | None = None,
         gemini_rerank: bool = True,
     ) -> dict[str, Any]:
-        cascade = self._ensure_cascade()
         started = time.perf_counter()
+        cache_key = _search_cache_key(
+            query=query,
+            query_en=query_en,
+            top_k=top_k,
+            query_type=query_type,
+            events=events or [],
+            events_en=events_en or [],
+            answer=answer,
+            auto_answer=auto_answer,
+            penalty=penalty,
+            ocr_keywords=ocr_keywords,
+            arm_weights=arm_weights,
+            arm_enabled=arm_enabled,
+            gemini_rerank=gemini_rerank,
+        )
+        cached = self.manager.cached_query(cache_key)
+        if cached is not None:
+            cached["duration_ms"] = round((time.perf_counter() - started) * 1000, 1)
+            cached["cache_hit"] = True
+            logger.info("query cache hit (%s/%s)", self.name, query_type)
+            return cached
+
+        cascade = self._ensure_cascade()
         rerank_metrics: dict[str, Any] = {
             "enabled": bool(gemini_rerank),
             "ran": False,
+            "cached": False,
             "moved": 0,
             "duration_ms": 0.0,
             "reason": None,
@@ -326,6 +392,7 @@ class Lane:
                 depth=_safe_int_env("MFE_GEMINI_RERANK_DEPTH", 30),
             )
             rerank_metrics["ran"] = rerank_metrics["ran"] or outcome.ran
+            rerank_metrics["cached"] = rerank_metrics["cached"] or outcome.cached
             rerank_metrics["moved"] += outcome.moved
             rerank_metrics["duration_ms"] = round(
                 float(rerank_metrics["duration_ms"]) + outcome.duration_ms, 1
@@ -404,14 +471,17 @@ class Lane:
                         "ok": False,
                         "reason": "QA chua co dap an; nhap dap an hoac bat VLM",
                     }
-        return {
+        result = {
             "results": results,
             "query_type": query_type,
             "answer": answer_payload,
             "events": events or [],
             "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+            "cache_hit": False,
             "gemini_rerank": rerank_metrics,
         }
+        self.manager.cache_query(cache_key, result)
+        return result
 
     def close(self) -> None:
         self.executor.shutdown(wait=False, cancel_futures=True)
@@ -433,6 +503,9 @@ class EngineManager:
         self.init_started = time.time()
         self.init_task: asyncio.Task[None] | None = None
         self.cpu_gate: asyncio.Semaphore | None = None
+        self.query_cache_max = _safe_int_env("MFE_WEB_QUERY_CACHE_SIZE", 128)
+        self.query_cache: OrderedDict[str, dict[str, Any]] = OrderedDict()
+        self.query_cache_lock = threading.RLock()
         self.translation_lock = threading.RLock()
         self.dres_lock = threading.RLock()
         self.dres_client: DresClient | None = None
@@ -460,6 +533,7 @@ class EngineManager:
             "gemini_rerank": {
                 "enabled": False,
                 "ran": False,
+                "cached": False,
                 "moved": 0,
                 "duration_ms": 0.0,
                 "reason": None,
@@ -468,6 +542,7 @@ class EngineManager:
             "started_at": None,
             "finished_at": None,
             "duration_ms": None,
+            "cache_hit": False,
             "error": None,
             "results": [],
         }
@@ -602,6 +677,26 @@ class EngineManager:
     def suggestions_snapshot(self) -> list[dict[str, Any]]:
         with self.suggestions_lock:
             return _copy_state(self.suggestions)
+
+    def cached_query(self, key: str) -> dict[str, Any] | None:
+        """Return a deep copy of a completed search held in RAM."""
+        with self.query_cache_lock:
+            value = self.query_cache.get(key)
+            if value is None:
+                return None
+            self.query_cache.move_to_end(key)
+            return _copy_state(value)
+
+    def cache_query(self, key: str, value: dict[str, Any]) -> None:
+        with self.query_cache_lock:
+            self.query_cache[key] = _copy_state(value)
+            self.query_cache.move_to_end(key)
+            while len(self.query_cache) > self.query_cache_max:
+                self.query_cache.popitem(last=False)
+
+    def cache_stats(self) -> dict[str, int]:
+        with self.query_cache_lock:
+            return {"query_entries": len(self.query_cache), "query_capacity": self.query_cache_max}
 
     def add_suggestion(self, suggestion: dict[str, Any]) -> dict[str, Any]:
         with self.suggestions_lock:
@@ -743,6 +838,7 @@ class EngineManager:
             "active_arms": [arm.name for arm in self.base_cascade.arms.active()]
             if self.base_cascade is not None
             else [],
+            "cache": self.cache_stats(),
             "video_source_configured": bool(os.getenv("MFE_VIDEO_BASE_URL", "").strip()),
             "error": self.init_error,
             "uptime_s": round(max(0.0, time.time() - self.init_started), 1),
@@ -903,6 +999,7 @@ async def _execute_job(
         state["events"] = result["events"]
         state["answer"] = result["answer"]
         state["duration_ms"] = result["duration_ms"]
+        state["cache_hit"] = bool(result.get("cache_hit", False))
         state["gemini_rerank"] = result.get("gemini_rerank", state.get("gemini_rerank"))
         state["finished_at"] = time.time()
         state["error"] = None
@@ -969,6 +1066,7 @@ async def _schedule_job(
             "gemini_rerank": {
                 "enabled": bool(gemini_rerank),
                 "ran": False,
+                "cached": False,
                 "moved": 0,
                 "duration_ms": 0.0,
                 "reason": None,
@@ -977,6 +1075,7 @@ async def _schedule_job(
             "started_at": None,
             "finished_at": None,
             "duration_ms": None,
+            "cache_hit": False,
             "error": None,
             "results": [],
         }
@@ -1105,8 +1204,14 @@ def _quest_analysis_sync(
     if query_type == "KIS":
         kis = QuestKIS()
         kis.client = client
-        text_en = kis.translate(query).strip()
-        terms = quest_expand(query, client=client)
+        # Translation and implicit-term expansion are independent requests.
+        # Run them together so KIS pays for the slower gateway response once,
+        # rather than waiting for two serial Trammay round trips.
+        with ThreadPoolExecutor(max_workers=2, thread_name_prefix="mfe-quest") as pool:
+            translation_future = pool.submit(kis.translate, query)
+            expansion_future = pool.submit(quest_expand, query, client)
+            text_en = translation_future.result().strip()
+            terms = expansion_future.result()
         expanded_vi = " ".join(term.vi for term in terms if term.vi).strip()
         expanded_en = " ".join(term.en for term in terms if term.en).strip()
         return {

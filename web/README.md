@@ -32,6 +32,12 @@ mỗi lane mặc định bật để ưu tiên độ chính xác; có thể tắ
 Khi bật, caption/OCR/phụ đề của top ứng viên được gửi qua Trammay rồi ghi lại
 trạng thái rerank trong kết quả.
 
+Runtime giữ cache kết quả truy hồi trong RAM (mặc định 128 truy vấn), cùng cache
+phản hồi QUEST và thứ tự rerank Trammay. Hai nhánh dịch và mở rộng của KIS được
+gọi song song. `MFE_TRAMMAY_MODEL=ag/gemini-3.8-flash-low` là lựa chọn mặc định
+cho giao diện tương tác; có thể đổi sang model mạnh hơn khi cần ưu tiên chất
+lượng.
+
 Tab **Đề xuất** lưu ghi chú dùng chung cho mọi tài khoản đang đăng nhập. Nút
 **Nộp DRES** chỉ xuất hiện trên kết quả đã chạy; backend đọc `user_dres` /
 `pass_dres`, đồng thời chấp nhận tên biến cũ `user_dress` / `pass_dress`. Session

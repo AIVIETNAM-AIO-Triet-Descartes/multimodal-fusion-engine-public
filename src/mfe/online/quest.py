@@ -43,6 +43,8 @@ import json
 import logging
 import os
 import re
+import threading
+from collections import OrderedDict
 from dataclasses import dataclass
 
 from mfe.online.trammay import TrammayClient
@@ -67,6 +69,30 @@ logger = logging.getLogger(__name__)
 #: ăn trần 20/ngày. Đo trên 243 lượt gọi ngày 04-09: `gemini-flash-lite-latest`
 #: **0 lỗi 429**; chế độ hỏng thật của nó là `503 UNAVAILABLE` ngẫu nhiên.
 GEMINI_MODEL = os.getenv("MFE_GEMINI_QUEST_MODEL", "gemini-flash-lite-latest")
+
+
+# QUEST prompts are deterministic for a fixed model/configuration. Keep recent
+# answers in RAM so clicking "Phân tích" again, or two users pasting the same
+# query, does not pay for another gateway round trip.
+_QUEST_CACHE_MAX = 256
+_QUEST_CACHE: OrderedDict[tuple[str, str, str, int, float, str], str] = OrderedDict()
+_QUEST_CACHE_LOCK = threading.RLock()
+
+
+def _quest_cache_get(key: tuple[str, str, str, int, float, str]) -> str | None:
+    with _QUEST_CACHE_LOCK:
+        value = _QUEST_CACHE.get(key)
+        if value is not None:
+            _QUEST_CACHE.move_to_end(key)
+        return value
+
+
+def _quest_cache_put(key: tuple[str, str, str, int, float, str], value: str) -> None:
+    with _QUEST_CACHE_LOCK:
+        _QUEST_CACHE[key] = value
+        _QUEST_CACHE.move_to_end(key)
+        while len(_QUEST_CACHE) > _QUEST_CACHE_MAX:
+            _QUEST_CACHE.popitem(last=False)
 
 QUEST_EXPAND_PROMPT = """You are a query analyst for a Vietnamese news-video search engine.
 
@@ -253,12 +279,27 @@ class QuestClient:
     def generate(self, prompt: str, max_tokens: int = 500) -> str:
         """Gửi prompt tới Gemini qua Trammay khi gateway đã được cấu hình."""
         if self.trammay_client is not None:
-            return self.trammay_client.chat(
+            model = os.getenv("MFE_TRAMMAY_QUEST_MODEL") or self.trammay_client.model
+            cache_key = (
+                "trammay",
+                self.trammay_client.base_url,
+                model,
+                int(max_tokens),
+                0.0,
                 prompt,
-                model=self.trammay_client.model,
+            )
+            cached = _quest_cache_get(cache_key)
+            if cached is not None:
+                logger.info("QUEST cache hit (model=%s)", model)
+                return cached
+            result = self.trammay_client.chat(
+                prompt,
+                model=model,
                 max_tokens=max_tokens,
                 temperature=0.0,
             ).strip()
+            _quest_cache_put(cache_key, result)
+            return result
 
         # Thử OpenRouter / NVIDIA NIM (Llama 3.1 / 3.3)
         clients = []
