@@ -57,6 +57,11 @@ TRAKE cũng tự tách ở backend khi dán nguyên văn các dòng `E1: ...`, `
 Câu mô tả đứng trước các dòng được dùng làm ngữ cảnh chung cho từng event;
 thứ tự dòng được giữ nguyên khi gửi sang DANTE.
 
+Sau khi TRAKE có kết quả, khu vực **Sửa riêng từng event TRAKE** cho phép sửa
+một mệnh đề rồi chạy lại cả chuỗi với các event còn lại được giữ nguyên. Nếu
+mệnh đề đúng nhưng frame được chọn sai, mở video ngay tại event đó và bấm
+**Chốt frame đang xem**; frame đã chốt sẽ được dùng trong payload DRES của chuỗi.
+
 Với TRAKE, nút đề xuất ở đầu mỗi chuỗi lưu toàn bộ các event; các nút trong
 từng event vẫn cho phép đánh dấu riêng một frame để kiểm tra.
 
