@@ -1,4 +1,4 @@
-from mfe.eval.dres_client import build_selected_payload, dres_credentials
+from mfe.eval.dres_client import build_selected_payload, dres_credentials, submission_key
 
 
 def test_dres_payload_matches_final_format_for_each_query_type():
@@ -24,3 +24,12 @@ def test_dres_credentials_accept_the_existing_aliases(monkeypatch):
     monkeypatch.setenv("user_dress", "operator")
     monkeypatch.setenv("pass_dress", "secret")
     assert dres_credentials() == ("operator", "secret")
+
+
+def test_dres_submission_key_ignores_lane_and_result_rank():
+    state = {"query_type": "KIS", "query": "một cảnh", "events": []}
+    same_query = {**state, "scope": "private", "rank": 9}
+    other_query = {**state, "query": "cảnh khác"}
+    assert submission_key("eval-1", state) == submission_key("eval-1", same_query)
+    assert submission_key("eval-1", state) != submission_key("eval-1", other_query)
+    assert submission_key("eval-1", state) != submission_key("eval-2", state)

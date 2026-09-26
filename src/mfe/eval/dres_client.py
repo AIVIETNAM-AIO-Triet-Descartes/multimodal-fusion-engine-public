@@ -6,6 +6,7 @@ reads them from ``.env`` and keeps the short lived session in this process.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -39,6 +40,20 @@ def dres_credentials() -> tuple[str | None, str | None]:
 def configured() -> bool:
     username, password = dres_credentials()
     return bool(username and password)
+
+
+def submission_key(evaluation_id: str, state: dict[str, Any]) -> str:
+    """Stable per-query key used to prevent duplicate DRES submissions."""
+    identity = {
+        "evaluation_id": evaluation_id,
+        "query_type": str(state.get("query_type", "")).upper(),
+        "query": str(state.get("query", "")),
+        "events": [str(item) for item in state.get("events", [])]
+        if isinstance(state.get("events"), list)
+        else [],
+    }
+    encoded = json.dumps(identity, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 @dataclass

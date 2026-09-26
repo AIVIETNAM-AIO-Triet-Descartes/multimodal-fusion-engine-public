@@ -39,6 +39,13 @@ chọn evaluation mặc định, hoặc đọc danh sách evaluation ACTIVE bằ
 mới cạnh hộp chọn. Ghi chú được lưu ở `/home/ubuntu/web/suggestions.json` và
 được giới hạn 200 mục gần nhất.
 
+Với TRAKE, nút đề xuất ở đầu mỗi chuỗi lưu toàn bộ các event; các nút trong
+từng event vẫn cho phép đánh dấu riêng một frame để kiểm tra.
+
+Sau khi DRES nhận một truy vấn, backend ghi fingerprint truy vấn vào
+`/home/ubuntu/web/dres_submissions.json` (mode 600). Restart web vẫn giữ được
+hàng rào chống nộp trùng theo quy định cuộc thi.
+
 Để bật player video, đặt `MFE_VIDEO_BASE_URL` trong `.env` thành URL container
 Azure có SAS, ví dụ `https://...blob.core.windows.net/video?sp=...&sig=...`.
 Backend sẽ nối `{video_id}.mp4` trước phần query SAS, yêu cầu đăng nhập ở

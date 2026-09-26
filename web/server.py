@@ -52,6 +52,7 @@ INDEX_PATH = WEB_ROOT / "index.html"
 ACCOUNTS_PATH = WEB_ROOT / "accounts.json"
 SESSION_SECRET_PATH = WEB_ROOT / ".session_secret"
 SUGGESTIONS_PATH = WEB_ROOT / "suggestions.json"
+DRES_SUBMISSIONS_PATH = WEB_ROOT / "dres_submissions.json"
 RUNTIME_ROOT = Path("/data/multimodal-fusion-engine/runtime/btc_b12")
 CONFIG_PATH = REPO_ROOT / "config" / "btc_b12.yaml"
 FLAT_ROOT = RUNTIME_ROOT / "flat"
@@ -72,6 +73,7 @@ from mfe.eval.dres_client import (  # noqa: E402
     DresError,
     build_selected_payload,
     configured,
+    submission_key,
 )
 from mfe.eval.official import to_event_hits  # noqa: E402
 from mfe.mapping.relational import RelationalMap  # noqa: E402
@@ -419,7 +421,7 @@ class EngineManager:
         self.translation_lock = threading.RLock()
         self.dres_lock = threading.RLock()
         self.dres_client: DresClient | None = None
-        self.dres_submissions: set[tuple[Any, ...]] = set()
+        self.dres_submissions: set[str] = self._load_dres_submissions()
         self.suggestions_lock = threading.RLock()
         self.suggestions: list[dict[str, Any]] = self._load_suggestions()
         self.shared_lane: Lane | None = None
@@ -556,6 +558,31 @@ class EngineManager:
             if self.dres_client is None:
                 self.dres_client = DresClient.from_env()
             return self.dres_client
+
+    @staticmethod
+    def _load_dres_submissions() -> set[str]:
+        if not DRES_SUBMISSIONS_PATH.is_file():
+            return set()
+        try:
+            payload = json.loads(DRES_SUBMISSIONS_PATH.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            logger.warning("khong doc duoc %s; bat dau khoa DRES rong", DRES_SUBMISSIONS_PATH)
+            return set()
+        if not isinstance(payload, list):
+            return set()
+        return {str(item) for item in payload if isinstance(item, str) and item}
+
+    def _persist_dres_submissions(self) -> None:
+        temporary = DRES_SUBMISSIONS_PATH.with_suffix(".tmp")
+        try:
+            temporary.write_text(
+                json.dumps(sorted(self.dres_submissions), ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            temporary.replace(DRES_SUBMISSIONS_PATH)
+            DRES_SUBMISSIONS_PATH.chmod(0o600)
+        except OSError:
+            logger.warning("khong ghi duoc khoa DRES %s", DRES_SUBMISSIONS_PATH)
 
     def suggestions_snapshot(self) -> list[dict[str, Any]]:
         with self.suggestions_lock:
@@ -1282,19 +1309,14 @@ async def dres_submit(request: Request) -> JSONResponse:
                         status_code=409,
                     )
                 evaluation_id = str(active[0]["id"])
-            duplicate_key = (
-                username,
-                evaluation_id,
-                scope,
-                selected_state.get("finished_at"),
-                result_index,
-            )
+            duplicate_key = submission_key(evaluation_id, selected_state)
             if duplicate_key in manager.dres_submissions:
                 return JSONResponse(
                     {"ok": False, "error": "ket qua nay da bam nop"}, status_code=409
                 )
             response = await asyncio.to_thread(client.submit, evaluation_id, submission)
             manager.dres_submissions.add(duplicate_key)
+            manager._persist_dres_submissions()
     except DresError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=502)
     return JSONResponse(
@@ -1337,6 +1359,30 @@ def _suggestion_source(
         if selected is None:
             return None
     return state, selected
+
+
+def _suggestion_events(result: dict[str, Any]) -> list[dict[str, Any]]:
+    """Keep the complete TRAKE chain in a shared suggestion safely."""
+    fields = (
+        "event_index",
+        "video_id",
+        "keyframe_id",
+        "frame_id",
+        "frame_idx",
+        "timestamp_ms",
+        "seconds",
+        "fps",
+        "video_url",
+        "image_url",
+    )
+    events = result.get("events")
+    if not isinstance(events, list):
+        return []
+    return [
+        {field: event.get(field) for field in fields if field in event}
+        for event in events
+        if isinstance(event, dict)
+    ]
 
 
 async def suggestions(request: Request) -> JSONResponse:
@@ -1384,6 +1430,8 @@ async def suggestions(request: Request) -> JSONResponse:
         "score": item.get("score"),
         "event_index": event_index,
     }
+    if event_index is None and str(state.get("query_type", "")).upper() == "TRAKE":
+        suggestion["events"] = _suggestion_events(item)
     manager.add_suggestion(suggestion)
     await broadcast_suggestions(manager)
     return JSONResponse({"ok": True, "suggestion": suggestion}, status_code=201)

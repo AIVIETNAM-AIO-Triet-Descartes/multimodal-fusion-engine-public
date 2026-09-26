@@ -651,8 +651,16 @@
       const html = sharedSuggestions.map((item) => {
         const when = item.created_at ? new Date(Number(item.created_at) * 1000).toLocaleString('vi-VN') : '';
         const seconds = Number(item.timestamp_ms || 0) / 1000;
-        const meta = `${item.query_type || ''} · ${item.video_id || ''} · ${seconds.toFixed(3)}s · frame ${item.frame_idx ?? ''}`;
-        const video = item.video_url ? videoButton(item, '▶ Mở video') : '';
+        const chain = Array.isArray(item.events) ? item.events : [];
+        const meta = chain.length
+          ? `${item.query_type || ''} · ${item.video_id || ''} · ${chain.length} sự kiện`
+          : `${item.query_type || ''} · ${item.video_id || ''} · ${seconds.toFixed(3)}s · frame ${item.frame_idx ?? ''}`;
+        const video = chain.length
+          ? `<div class="trake-events">${chain.map((event) => {
+              const eventSeconds = Number(event.seconds ?? Number(event.timestamp_ms || 0) / 1000);
+              return `<div class="trake-event"><div class="trake-event-label">E${escapeHtml(event.event_index ?? '')} · ${eventSeconds.toFixed(3)}s<br>frame ${escapeHtml(event.frame_idx ?? '')} · ${escapeHtml(event.keyframe_id || '')}<div class="result-actions">${videoButton(event, '▶ Mở video')}</div></div></div>`;
+            }).join('')}</div>`
+          : (item.video_url ? videoButton(item, '▶ Mở video') : '');
         return `<article class="suggestion-item"><div class="result-top"><strong>${escapeHtml(item.user || '')}</strong><span>${escapeHtml(when)}</span></div><div class="muted small" style="margin-top:5px">${escapeHtml(meta)} · query: ${escapeHtml(item.query || '')}</div><p>${escapeHtml(item.note || '')}</p><div class="result-actions">${video}</div></article>`;
       }).join('');
       $('suggestionsList').innerHTML = html;
@@ -834,7 +842,7 @@
           const seconds = Number(event.seconds ?? Number(event.timestamp_ms || 0) / 1000);
           return `<div class="trake-event">${image}<div class="trake-event-label">E${escapeHtml(event.event_index)} · ${seconds.toFixed(3)}s<br>frame ${escapeHtml(event.frame_idx)} · ${escapeHtml(event.keyframe_id || '')}<div class="result-actions">${videoButton(event, '▶ Mở video')}${suggestButton(resultIndex, event.event_index)}</div></div></div>`;
         }).join('');
-        return `<article class="result-card"><div class="result-body"><div class="result-top"><span class="rank">#${escapeHtml(item.rank)} · ${escapeHtml(item.video_id)}</span><span>score ${Number(item.score || 0).toFixed(2)}</span></div><div class="muted small" style="margin-top:6px">support ${escapeHtml(item.support)} · frames ${escapeHtml((item.frame_ids || []).join(', '))}</div><div class="trake-events">${events || '<div class="result-empty">Thiếu frame</div>'}</div><div class="result-actions">${dresButton(resultIndex)}</div></div></article>`;
+        return `<article class="result-card"><div class="result-body"><div class="result-top"><span class="rank">#${escapeHtml(item.rank)} · ${escapeHtml(item.video_id)}</span><span>score ${Number(item.score || 0).toFixed(2)}</span></div><div class="muted small" style="margin-top:6px">support ${escapeHtml(item.support)} · frames ${escapeHtml((item.frame_ids || []).join(', '))}</div><div class="result-actions">${suggestButton(resultIndex)}${dresButton(resultIndex)}</div><div class="trake-events">${events || '<div class="result-empty">Thiếu frame</div>'}</div></div></article>`;
       }).join('');
       bindVideoButtons();
       bindSuggestButtons();
