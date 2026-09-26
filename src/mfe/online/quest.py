@@ -338,6 +338,37 @@ class ExpansionTerm:
     why: str = ""
 
 
+_TRAKE_EVENT_LINE = re.compile(
+    r"^\s*E\s*(\d+)\s*(?:(?:[:.)-])\s*|\s+)(.+?)\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def split_trake_events(text: str) -> tuple[str, list[str]]:
+    """Split a TRAKE paste into its preamble and ordered event descriptions.
+
+    The interactive web form accepts the same text people receive from the
+    organisers, for example ``E1: ...`` through ``E4: ...``. The line order is
+    authoritative, so a mistyped label cannot silently reorder DANTE's events.
+    An empty event list means the input was ordinary prose and can still be
+    sent to QUEST for analysis.
+    """
+    source = str(text or "").strip()
+    matches = list(_TRAKE_EVENT_LINE.finditer(source))
+    if not matches:
+        return source, []
+
+    numbers = [int(match.group(1)) for match in matches]
+    expected = list(range(1, len(numbers) + 1))
+    if numbers != expected:
+        logger.warning(
+            "TRAKE nhan su kien khong lien tuc (%s); dung thu tu dong", numbers
+        )
+    preamble = " ".join(source[: matches[0].start()].split())
+    events = [" ".join(match.group(2).split()) for match in matches]
+    return preamble, events
+
+
 def quest_expand(query: str, client: QuestClient | None = None) -> list[ExpansionTerm]:
     """Gọi tên thứ câu truy vấn nhắc tới mà không nêu tên. Rỗng là câu trả lời ĐÚNG.
 

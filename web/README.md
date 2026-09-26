@@ -45,6 +45,10 @@ thời điểm hoặc frame, câu trả lời QA và danh sách frame TRAKE mà 
 QUEST hay truy hồi trước. Các ô KIS, QA và TRAKE trong từng lane cũng nhận nhập
 tay; QUEST chỉ điền giá trị gợi ý để người dùng sửa lại.
 
+TRAKE cũng tự tách ở backend khi dán nguyên văn các dòng `E1: ...`, `E2: ...`.
+Câu mô tả đứng trước các dòng được dùng làm ngữ cảnh chung cho từng event;
+thứ tự dòng được giữ nguyên khi gửi sang DANTE.
+
 Với TRAKE, nút đề xuất ở đầu mỗi chuỗi lưu toàn bộ các event; các nút trong
 từng event vẫn cho phép đánh dấu riêng một frame để kiểm tra.
 

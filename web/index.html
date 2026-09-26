@@ -654,6 +654,7 @@
       let ocrKeywords = '';
       let events = type === 'TRAKE' ? splitEventLines($(`${scope}Events`).value) : [];
       const eventsEn = type === 'TRAKE' ? splitEventLines($(`${scope}EventsEn`).value) : [];
+      let trakePreamble = '';
       const quest = questStates[scope];
       if (quest && quest.query_type === type) {
         if (type === 'KIS') {
@@ -670,10 +671,11 @@
           ocrKeywords = $(`${scope}QuestOcrKeywords`).value.trim();
         } else {
           const clauses = splitEventLines($(`${scope}QuestClauses`).value);
-          if (clauses.length) { events = clauses; query = clauses.join(' '); }
+          trakePreamble = String(quest.trake_preamble || '').trim();
+          if (clauses.length) events = clauses;
         }
       }
-      return {query, query_en: queryEn, ocr_keywords: ocrKeywords, events, events_en: eventsEn};
+      return {query, query_en: queryEn, ocr_keywords: ocrKeywords, events, events_en: eventsEn, trake_preamble: trakePreamble};
     }
     function updateFormType(scope) {
       syncEvents(scope);
@@ -1097,11 +1099,11 @@
         const armConfig = readArmConfig();
         const finalQuery = prepared.query;
         const finalEvents = prepared.events;
-        if (queryType === 'TRAKE' && !finalEvents.length) { notice.textContent = 'Hãy nhập ít nhất một sự kiện TRAKE.'; return; }
+        if (queryType === 'TRAKE' && !finalEvents.length && !finalQuery) { notice.textContent = 'Hãy nhập ít nhất một sự kiện TRAKE hoặc dán các dòng E1:, E2:… vào ô mô tả.'; return; }
         if (queryType !== 'TRAKE' && !finalQuery) { notice.textContent = 'Hãy nhập mô tả truy vấn.'; return; }
-        if (queryType === 'TRAKE' && prepared.events_en.length && prepared.events_en.length !== finalEvents.length) { notice.textContent = 'Số dòng tiếng Anh phải bằng số sự kiện.'; return; }
+        if (queryType === 'TRAKE' && prepared.events_en.length && finalEvents.length && prepared.events_en.length !== finalEvents.length) { notice.textContent = 'Số dòng tiếng Anh phải bằng số sự kiện.'; return; }
         const geminiRerank = $(`${scope}GeminiRerank`).checked;
-        await api(`/api/${scope}/run`, {method:'POST', headers:{'X-CSRF-Token': csrf}, body: JSON.stringify({query:finalQuery, query_type: queryType, query_en: prepared.query_en, ocr_keywords: prepared.ocr_keywords, events:finalEvents, events_en:prepared.events_en, answer, auto_answer:autoAnswer, gemini_rerank:geminiRerank, top_k: topK, ...armConfig})});
+        await api(`/api/${scope}/run`, {method:'POST', headers:{'X-CSRF-Token': csrf}, body: JSON.stringify({query:finalQuery, query_type: queryType, query_en: prepared.query_en, ocr_keywords: prepared.ocr_keywords, trake_preamble: prepared.trake_preamble, events:finalEvents, events_en:prepared.events_en, answer, auto_answer:autoAnswer, gemini_rerank:geminiRerank, top_k: topK, ...armConfig})});
         showToast(`${queryType} · ${scope === 'shared' ? 'đã xếp luồng chung; mọi user sẽ thấy tiến trình.' : 'đã chạy luồng riêng của bạn.'}`);
       } catch (error) { notice.textContent = error.message; }
       finally { button.disabled = false; }

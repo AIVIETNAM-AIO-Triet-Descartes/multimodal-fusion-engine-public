@@ -22,6 +22,7 @@ from mfe.online.quest import (
     expanded_queries,
     quest_clauses,
     quest_expand,
+    split_trake_events,
 )
 
 
@@ -203,6 +204,25 @@ class TestTachMenhDe:
             '{"clauses": [{"text": "một", "order": "x"}, {"text": "hai", "order": 2}]}'
         )
         assert set(quest_clauses("x", client)) == {"một", "hai"}
+
+
+def test_split_trake_paste_keeps_preamble_and_event_order():
+    preamble, events = split_trake_events(
+        "Một món ăn làm từ tôm và các loại gia vị.\n"
+        "E1: Khoảnh khắc người đầu bếp bắt đầu trộn hỗn hợp nước xốt.\n"
+        "E2: Khoảnh khắc người đầu bếp bắt đầu cắt bỏ đầu tôm.\n"
+        "E3: Người đầu bếp cho tôm ra dĩa.\n"
+        "E4: Khoảnh khắc tép cam thứ 4 được xếp lên dĩa."
+    )
+    assert preamble == "Một món ăn làm từ tôm và các loại gia vị."
+    assert len(events) == 4
+    assert events[0].startswith("Khoảnh khắc người đầu bếp bắt đầu trộn")
+    assert events[3].startswith("Khoảnh khắc tép cam thứ 4")
+
+
+def test_split_trake_paste_uses_line_order_when_labels_are_wrong():
+    _, events = split_trake_events("E1: một\nE3: hai\nE2: ba")
+    assert events == ["một", "hai", "ba"]
 
 
 def test_prompt_tach_menh_de_noi_ro_ba_luat_dat_gia():

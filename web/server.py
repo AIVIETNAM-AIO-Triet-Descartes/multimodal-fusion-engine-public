@@ -91,6 +91,7 @@ from mfe.online.quest import (  # noqa: E402
     quest_clauses,
     quest_decompose,
     quest_expand,
+    split_trake_events,
 )
 from mfe.online.video_source import resolve_video  # noqa: E402
 from mfe.online.vqa_answer import read_answer_hybrid  # noqa: E402
@@ -1063,9 +1064,38 @@ def _payload_lines(value: Any) -> list[str]:
     return [line.strip() for line in str(value or "").splitlines() if line.strip()]
 
 
+def _trake_input(query: str, events: list[str]) -> tuple[str, list[str]]:
+    """Return a preamble and ordered TRAKE events from either UI input form."""
+    source = query.strip()
+    preamble, parsed = split_trake_events(source)
+    if parsed:
+        return preamble, parsed
+    return source, [item.strip() for item in events if item.strip()]
+
+
 def _quest_analysis_sync(
     query_type: str, query: str, events: list[str]
 ) -> dict[str, Any]:
+    if query_type == "TRAKE":
+        preamble, parsed_events = _trake_input(query, events)
+        if parsed_events:
+            return {
+                "ok": True,
+                "query_type": query_type,
+                "provider": "backend parser",
+                "query": query,
+                "trake_preamble": preamble,
+                "clauses": parsed_events,
+                "parsed_format": True,
+                "fallback": False,
+            }
+        source = "\n".join(
+            ([preamble] if preamble else [])
+            + [f"E{index}: {event}" for index, event in enumerate(parsed_events, 1)]
+        )
+    else:
+        source = query.strip()
+
     client = QuestClient()
     available, reason = client.available()
     if not available:
@@ -1111,7 +1141,8 @@ def _quest_analysis_sync(
             "fallback": fallback,
         }
 
-    source = query.strip() or "\n".join(events)
+    if query_type == "TRAKE" and not source:
+        source = "\n".join(events)
     clauses = quest_clauses(source, client=client) if source else []
     return {
         "ok": True,
@@ -1119,6 +1150,8 @@ def _quest_analysis_sync(
         "provider": provider,
         "source": source,
         "clauses": clauses,
+        "trake_preamble": "",
+        "parsed_format": False,
         "fallback": not bool(clauses),
     }
 
@@ -1752,6 +1785,19 @@ async def _run_request(request: Request, scope: str, username: str) -> JSONRespo
         if isinstance(events_en_raw, list)
         else [line.strip() for line in str(events_en_raw).splitlines() if line.strip()]
     )
+    trake_preamble = str(payload.get("trake_preamble", "")).strip() if payload else ""
+    if query_type == "TRAKE":
+        # When QUEST fields were edited, the explicit `events` list is newer
+        # than the original pasted query. Otherwise parse the E<n> lines from
+        # the query itself so a full organiser-style paste also works.
+        if not (trake_preamble and events):
+            parsed_preamble, parsed_events = _trake_input(query, events)
+            if parsed_events:
+                trake_preamble = trake_preamble or parsed_preamble
+                events = parsed_events
+        if trake_preamble:
+            events = [f"{trake_preamble} {event}".strip() for event in events]
+            query = trake_preamble
     answer = str(payload.get("answer", "")).strip() if payload else ""
     auto_answer = bool(payload.get("auto_answer", False)) if payload else False
     gemini_rerank = (
@@ -1770,7 +1816,11 @@ async def _run_request(request: Request, scope: str, username: str) -> JSONRespo
         top_k = 50
     if query_type == "TRAKE" and not events:
         return JSONResponse(
-            {"ok": False, "error": "TRAKE can it nhat mot su kien moi dong"}, status_code=400
+            {
+                "ok": False,
+                "error": "TRAKE can it nhat mot su kien; dung dang E1: ..., E2: ...",
+            },
+            status_code=400,
         )
     if query_type != "TRAKE" and not query:
         return JSONResponse({"ok": False, "error": "query khong duoc rong"}, status_code=400)
