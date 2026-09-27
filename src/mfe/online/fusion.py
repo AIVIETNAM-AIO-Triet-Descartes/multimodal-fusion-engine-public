@@ -165,6 +165,7 @@ def weighted_fusion(
                 score=combined_scores[kf_id],
                 evidence_id=ev_id,
                 matched_terms=sorted(list(meta["matched_terms"])),
+                frame_idx=int(kf_id.split("#")[1]) if "#" in kf_id else None,
             )
         )
 

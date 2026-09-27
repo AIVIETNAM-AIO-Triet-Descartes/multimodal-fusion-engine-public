@@ -192,12 +192,18 @@ class RelationalMap:
 
     def get_keyframe(self, keyframe_id: str) -> KeyframeRow:
         """Look up one keyframe. Raise ContractError(KEYFRAME_NOT_FOUND) on a miss."""
+        if not hasattr(self, '_kf_cache'):
+            self._kf_cache = {}
+        if keyframe_id in self._kf_cache:
+            return self._kf_cache[keyframe_id]
         row = self._conn.execute(
             "SELECT * FROM keyframes WHERE keyframe_id = ?", (keyframe_id,)
         ).fetchone()
         if row is None:
             raise ContractError(ErrorCode.KEYFRAME_NOT_FOUND, f"Keyframe {keyframe_id} not found")
-        return KeyframeRow(**dict(row))
+        res = KeyframeRow(**dict(row))
+        self._kf_cache[keyframe_id] = res
+        return res
 
     def get_video(self, video_id: str) -> VideoRow:
         """Raise ContractError(VIDEO_NOT_FOUND) on a miss."""

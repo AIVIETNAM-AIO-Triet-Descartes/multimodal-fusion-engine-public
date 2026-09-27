@@ -580,58 +580,85 @@ def _window_candidates(
     arm_name: str,
     run_id: str,
     top_k: int,
+    *,
+    conservative: bool = True,
 ) -> list[Candidate]:
-    """Expand ranked windows into ranked keyframes.
+    """Expand ranked windows into ranked keyframes with mass conservation.
 
-    The first request is `top_k // 6` windows, as a 15-second window contains
-    roughly 5.6--7.5 keyframes in the current batches.  If that estimate does
-    not fill the requested frame depth, the already-ranked window list is
-    expanded until `top_k`; this keeps the arm's contract at the same frame
-    depth as every other arm without making a window source dominate fusion.
+    Under conservative evidence transfer (the default), each window's evidence
+    mass is conserved: S_W(f_i) = S_W / |W|. This eliminates multiplicity bias
+    and rank-mass inflation under Reciprocal Rank Fusion.
     """
-    if top_k <= 0:
+    if top_k <= 0 or not pairs:
         return []
-    initial_windows = max(1, top_k // 6)
-    limit = min(len(pairs), initial_windows)
-    output: list[Candidate] = []
-    rank = 0
-    seen: set[str] = set()
 
-    def add_window(window_id: str, score: float) -> None:
-        nonlocal rank
-        for keyframe_id in bundle.window_keyframes.get(window_id, ()):
-            if keyframe_id in seen:
-                continue
-            # This also enforces the downstream Candidate contract and makes a
-            # regression to returning `#w0000` fail at the arm boundary.
-            video_id, _ = parse_keyframe_id(keyframe_id)
-            seen.add(keyframe_id)
-            rank += 1
-            output.append(
-                Candidate(
-                    keyframe_id=keyframe_id,
-                    video_id=video_id,
-                    score=float(score),
-                    evidence_id=create_evidence_id(arm_name, run_id, rank),
+    if not conservative:
+        output: list[Candidate] = []
+        rank = 0
+        seen: set[str] = set()
+        limit = min(len(pairs), max(1, top_k // 6))
+        for window_id, score in pairs[:limit]:
+            for keyframe_id in bundle.window_keyframes.get(window_id, ()):
+                if keyframe_id in seen:
+                    continue
+                video_id, _ = parse_keyframe_id(keyframe_id)
+                seen.add(keyframe_id)
+                rank += 1
+                output.append(
+                    Candidate(
+                        keyframe_id=keyframe_id,
+                        video_id=video_id,
+                        score=float(score),
+                        evidence_id=create_evidence_id(arm_name, run_id, rank),
+                        frame_idx=int(keyframe_id.split("#")[1]),
+                    )
                 )
+                if len(output) >= top_k:
+                    return output
+        for window_id, score in pairs[limit:]:
+            for keyframe_id in bundle.window_keyframes.get(window_id, ()):
+                if keyframe_id in seen:
+                    continue
+                video_id, _ = parse_keyframe_id(keyframe_id)
+                seen.add(keyframe_id)
+                rank += 1
+                output.append(
+                    Candidate(
+                        keyframe_id=keyframe_id,
+                        video_id=video_id,
+                        score=float(score),
+                        evidence_id=create_evidence_id(arm_name, run_id, rank),
+                        frame_idx=int(keyframe_id.split("#")[1]),
+                    )
+                )
+                if len(output) >= top_k:
+                    break
+        return output[:top_k]
+
+    frame_scores: dict[str, float] = {}
+    for window_id, score in pairs[:top_k]:
+        kfs = bundle.window_keyframes.get(window_id, ())
+        if not kfs:
+            continue
+        w_score = float(score) / len(kfs)
+        for kf in kfs:
+            if kf not in frame_scores or w_score > frame_scores[kf]:
+                frame_scores[kf] = w_score
+
+    sorted_frames = sorted(frame_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
+    output = []
+    for rank, (kf, s) in enumerate(sorted_frames, start=1):
+        video_id, _ = parse_keyframe_id(kf)
+        output.append(
+            Candidate(
+                keyframe_id=kf,
+                video_id=video_id,
+                score=s,
+                evidence_id=create_evidence_id(arm_name, run_id, rank),
+                frame_idx=int(kf.split("#")[1]),
             )
-            if len(output) >= top_k:
-                return
-
-    for window_id, score in pairs[:limit]:
-        add_window(window_id, score)
-        if len(output) >= top_k:
-            return output[:top_k]
-
-    # B1 averages fewer than six frames per window.  Continue through the
-    # already-ranked window candidates only when the initial estimate did not
-    # fill the requested frame depth.
-    for window_id, score in pairs[limit:]:
-        add_window(window_id, score)
-        if len(output) >= top_k:
-            break
-    return output[:top_k]
-
+        )
+    return output
 
 def build_flat_text_arms(bundle: FlatBundle, weights=None, enabled=None) -> list[Arm]:
     """Một `Arm` mỗi mục `TEXT_ARM_SPECS`, đọc từ `bundle`."""
