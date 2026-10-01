@@ -11,6 +11,12 @@ from streamlit.testing.v1 import AppTest
 from mfe.contracts.tools import Candidate
 from mfe.eval.query_package import PackagedQuery
 
+# `ArmRegistry()` rỗng chứ KHÔNG phải `[]`: `submit_lab` gọi `cascade.arms.active()`
+# và `.set_enabled()`, mà một `list` không có hai thứ đó. Bản giả lệch hợp đồng
+# làm bốn test này đỏ bằng `'list' object has no attribute 'active'` — một lỗi
+# chẳng liên quan gì tới thứ chúng định kiểm (xuất DRES).
+from mfe.online.arms import ArmRegistry
+
 APP = Path(__file__).resolve().parents[3] / 'app' / 'submit_lab.py'
 
 
@@ -37,13 +43,9 @@ def test_render_and_download_bytes(kind):
         return original_download(*args, **kwargs)
 
     st.cache_resource.clear()
-    class EmptyRegistry(list):
-        def active(self):
-            return []
-
-    fake_registry = EmptyRegistry()
     with patch('mfe.online.flat_arms.load_flat_bundle', return_value=None), \
-         patch('mfe.online.flat_arms.build_flat_cascade', return_value=NS(arms=fake_registry)), \
+         patch('mfe.online.flat_arms.build_flat_cascade',
+               return_value=NS(arms=ArmRegistry())), \
          patch('mfe.mapping.relational.RelationalMap', return_value=db), \
          patch('mfe.online.keyframe_images.KeyframeImages') as images, \
          patch('mfe.online.video_source.resolve_video', return_value=None), \

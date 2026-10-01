@@ -55,11 +55,18 @@ FLAT_FILES = (
     "qwen_ocr.json",         # ocr_qwen25    (BM25 trên OCR Qwen2.5-VL)
     "dense_vectors.npz",     # bge_m3        (nhúng CAPTION, 1024 chiều)
     "subtitles_dense.npz",   # subtitle_bge_m3 (nhúng PHỤ ĐỀ, 1024 chiều)
-    # Gemini mới nhất và hai arm bản ghi cửa sổ của kho BTC B1+B2.
-    "gemini_captions.json",  # caption_gemini
-    "gemini_ocr.json",       # ocr_gemini
+    # Lượt Gemini batch 2 + hai arm bản ghi cửa sổ (25-09 → 01-10-2026).
+    # `ARTIFACTS` đã khai cả bốn, nên test đối chiếu hai bảng đỏ cho tới khi
+    # chúng có mặt ở đây.
+    #
+    # ⚠ `gemini_*` là bản batch 2 CHƯA gộp vào kho chung. Khi gộp, nội dung của
+    # chúng đổ vào `qwen_captions.json` / `qwen_ocr.json` — một file, hai nửa,
+    # một arm (CLAUDE.md §4). Giữ tên riêng ở đây là để gói chia sẻ mang được
+    # bản chưa gộp; đừng tạo khoá nguồn mới cho chúng trong `flat_arms`.
+    "gemini_captions.json",  # caption_gemini (nửa caption của batch 2)
+    "gemini_ocr.json",       # ocr_gemini     (nửa OCR của batch 2)
     "window_text.json",      # window_bm25
-    "window_dense.npz",      # window_bge_m3 (1024 chiều)
+    "window_dense.npz",      # window_bge_m3  (1024 chiều)
 )
 
 
