@@ -287,7 +287,10 @@
               <div class="query-type-row">
                 <label for="sharedType">Dạng truy vấn</label>
                 <select id="sharedType">
-                  <option value="KIS">KIS · tìm cảnh</option>
+                  <option value="KIS">KIS-T · tìm cảnh</option>
+                  <option value="KIS-C">KIS-C · oracle clues</option>
+                  <option value="AVS">AVS · selected segments</option>
+                  <option value="VQA">VBS VQA · plain answer</option>
                   <option value="QA">QA · hỏi đáp</option>
                   <option value="TRAKE">TRAKE · chuỗi sự kiện</option>
                 </select>
@@ -314,6 +317,18 @@
                 </div>
               </div>
               <p class="input-mode-note">Bạn có thể gõ và sửa truy vấn trực tiếp ở các ô bên dưới. QUEST chỉ là bước hỗ trợ, không bắt buộc.</p>
+              <div id="sharedCluePanel" class="query-extra hidden">
+                <strong>KIS-C · oracle conversation notes</strong>
+                <p class="hint">Nhập câu trả lời từ oracle/panel bên ngoài. Lịch sử được giữ trong phiên server; chưa kết nối chat của ban tổ chức.</p>
+                <div id="sharedClueList"></div>
+                <label>Clue mới<textarea id="sharedClueText"></textarea></label>
+                <div class="button-row"><button type="button" onclick="mutateClue('shared', 'append', {text:$('sharedClueText').value})">Thêm clue</button><button type="button" onclick="loadClues('shared')">Tải lại</button><button type="button" onclick="resetClues('shared')">Task mới / xoá clues</button></div>
+                <div id="sharedClueRevision" class="hint"></div>
+              </div>
+              <div id="sharedAvsPanel" class="query-extra hidden">
+                <strong>AVS · các đoạn đã chọn</strong><div id="sharedAvsList"></div>
+                <button type="button" onclick="submitAvs('shared')">Nộp bộ đoạn AVS lên DRES</button>
+              </div>
               <label id="sharedQueryLabel">Mô tả truy vấn<textarea id="sharedQuery" placeholder="Ví dụ: Một đàn sư tử đang nghỉ ngơi trên các bục gỗ..." ></textarea></label>
               <div id="sharedQaFields" class="query-extra hidden">
                 <label>Đáp án QA (tuỳ chọn, nhập tay)<input id="sharedAnswer" placeholder="Ví dụ: áo màu xanh lá"></label>
@@ -363,7 +378,10 @@
               <div class="query-type-row">
                 <label for="privateType">Dạng truy vấn</label>
                 <select id="privateType">
-                  <option value="KIS">KIS · tìm cảnh</option>
+                  <option value="KIS">KIS-T · tìm cảnh</option>
+                  <option value="KIS-C">KIS-C · oracle clues</option>
+                  <option value="AVS">AVS · selected segments</option>
+                  <option value="VQA">VBS VQA · plain answer</option>
                   <option value="QA">QA · hỏi đáp</option>
                   <option value="TRAKE">TRAKE · chuỗi sự kiện</option>
                 </select>
@@ -390,6 +408,18 @@
                 </div>
               </div>
               <p class="input-mode-note">Bạn có thể gõ và sửa truy vấn trực tiếp ở các ô bên dưới. QUEST chỉ là bước hỗ trợ, không bắt buộc.</p>
+              <div id="privateCluePanel" class="query-extra hidden">
+                <strong>KIS-C · oracle conversation notes</strong>
+                <p class="hint">Nhập câu trả lời từ oracle/panel bên ngoài. Lịch sử được giữ trong phiên server; chưa kết nối chat của ban tổ chức.</p>
+                <div id="privateClueList"></div>
+                <label>Clue mới<textarea id="privateClueText"></textarea></label>
+                <div class="button-row"><button type="button" onclick="mutateClue('private', 'append', {text:$('privateClueText').value})">Thêm clue</button><button type="button" onclick="loadClues('private')">Tải lại</button><button type="button" onclick="resetClues('private')">Task mới / xoá clues</button></div>
+                <div id="privateClueRevision" class="hint"></div>
+              </div>
+              <div id="privateAvsPanel" class="query-extra hidden">
+                <strong>AVS · các đoạn đã chọn</strong><div id="privateAvsList"></div>
+                <button type="button" onclick="submitAvs('private')">Nộp bộ đoạn AVS lên DRES</button>
+              </div>
               <label id="privateQueryLabel">Mô tả truy vấn<textarea id="privateQuery" placeholder="Truy vấn riêng của bạn..." ></textarea></label>
               <div id="privateQaFields" class="query-extra hidden">
                 <label>Đáp án QA (tuỳ chọn, nhập tay)<input id="privateAnswer" placeholder="Ví dụ: áo màu xanh lá"></label>
@@ -515,6 +545,8 @@
     let selectedScope = 'shared';
     const states = { shared: null, private: null };
     const questStates = { shared: null, private: null };
+    const cluePanels = {shared:null, private:null};
+    const avsSelections = {shared:[], private:[]};
     let sharedSuggestions = [];
     const eventInputs = { shared: [''], private: [''] };
     let armRows = [];
@@ -644,7 +676,7 @@
         const defaultTier = data.trammay?.default_tier || data.quest?.tier || 'high';
         $('sharedTrammayTier').value = defaultTier;
         $('privateTrammayTier').value = defaultTier;
-        $('armConfigStatus').textContent = `${(data.arms || []).length} arm · QUEST: ${data.quest?.provider || '—'} · Trammay: ${defaultTier} · video: ${data.video?.configured ? 'Azure sẵn sàng' : 'chưa cấu hình'} · DRES: ${data.dres?.configured ? 'đã cấu hình' : 'chưa cấu hình'}`;
+        $('armConfigStatus').textContent = `${(data.arms || []).length} arm · QUEST: ${data.quest?.provider || '—'} · Trammay: ${defaultTier} · video: ${data.video?.configured ? 'đã cấu hình nguồn video' : 'chưa cấu hình'} · DRES: ${data.dres?.configured ? 'đã cấu hình' : 'chưa cấu hình'}`;
       } catch (error) {
         $('armConfigStatus').textContent = error.message;
       }
@@ -735,6 +767,11 @@
     function updateFormType(scope) {
       syncEvents(scope);
       const type = $(`${scope}Type`).value;
+      $(`${scope}CluePanel`).classList.toggle('hidden', type !== 'KIS-C');
+      $(`${scope}AvsPanel`).classList.toggle('hidden', type !== 'AVS');
+      $(`${scope}Query`).readOnly = type === 'KIS-C';
+      $(`${scope}QuestButton`).disabled = ['KIS-C','AVS','VQA'].includes(type);
+      if (type === 'KIS-C') loadClues(scope);
       $(`${scope}QaFields`).classList.toggle('hidden', type !== 'QA');
       $(`${scope}TrakeFields`).classList.toggle('hidden', type !== 'TRAKE');
       const label = $(`${scope}QueryLabel`);
@@ -817,6 +854,7 @@
         .catch((error) => { $('resultsHint').textContent = `DRES log: ${error.message}`; });
     }
     function renderState(scope, state) {
+      if (states[scope]?.run_id !== state.run_id && avsSelections[scope].length) { avsSelections[scope]=[];renderAvs(scope); }
       states[scope] = state;
       const logKey = `${scope}:${state.finished_at}`;
       if (state.status === 'done' && state.query_type !== 'TRAKE'
@@ -963,7 +1001,7 @@
       return `<button class="video-button" type="button" data-suggest="1" data-result-index="${resultIndex}"${eventIndex == null ? '' : ` data-event-index="${eventIndex}"`}>💡 Đề xuất</button>`;
     }
     function dresButton(resultIndex) {
-      return `<button class="video-button" type="button" data-dres-submit="1" data-result-index="${resultIndex}">📤 Nộp DRES</button>`;
+      return `<button class="video-button" type="button" data-dres-submit="1" data-result-index="${resultIndex}">${states[selectedScope]?.query_type === 'AVS' ? 'Thêm đoạn AVS' : 'Nộp DRES'}</button>`;
     }
     function verifyButton(scope, resultIndex, eventIndex = null, taskType = 'KIS', defaultTier = 'high') {
       const labels = {KIS:'✨ Kiểm tra khoảnh khắc KIS', QA:'✨ Kiểm tra bằng chứng QA', TRAKE:`✨ Kiểm tra E${eventIndex || ''}`};
@@ -1241,16 +1279,66 @@
         notice.textContent = `Nộp thủ công lỗi: ${error.message}`;
       } finally { if (button) button.disabled = false; }
     }
+    function renderClues(scope) {
+      const panel = cluePanels[scope]; if (!panel) return;
+      $(`${scope}Query`).value = panel.query;
+      $(`${scope}ClueRevision`).textContent = `Task: ${panel.task || '(chưa đặt tên)'} · revision ${panel.revision}`;
+      $(`${scope}ClueList`).innerHTML = panel.clues.map(c => `<div class="hint"><label><input type="checkbox" ${c.enabled ? 'checked' : ''} onchange="mutateClue('${scope}','toggle',{id:${c.id},enabled:this.checked})"> ${escapeHtml(c.text)}</label><button type="button" onclick="editClue('${scope}',${c.id})">Sửa</button><button type="button" onclick="mutateClue('${scope}','delete',{id:${c.id}})">Xoá</button></div>`).join('');
+    }
+    async function loadClues(scope) {
+      try { cluePanels[scope] = (await api(`/api/${scope}/clues`)).panel; renderClues(scope); }
+      catch (e) { showToast(e.message); }
+    }
+    async function mutateClue(scope, op, fields={}) {
+      if (!cluePanels[scope]) await loadClues(scope);
+      try {
+        cluePanels[scope] = (await api(`/api/${scope}/clues`, {method:'POST',headers:{'X-CSRF-Token':csrf},body:JSON.stringify({op,revision:cluePanels[scope].revision,...fields})})).panel;
+        renderClues(scope); if (op === 'append') $(`${scope}ClueText`).value = '';
+        logDresEvent(scope,'TEXT',`clue-${op}`,JSON.stringify({revision:cluePanels[scope].revision,task:cluePanels[scope].task,clues:cluePanels[scope].clues}));
+      } catch (e) { showToast(e.message); await loadClues(scope); }
+    }
+    function editClue(scope, id) {
+      const c = cluePanels[scope].clues.find(c => c.id === id); const text = window.prompt('Sửa clue', c.text);
+      if (text !== null) mutateClue(scope,'edit',{id,text});
+    }
+    function resetClues(scope) {
+      const task = window.prompt('Tên task mới (xoá các clue hiện tại):','');
+      if (task !== null) mutateClue(scope,'reset',{task});
+    }
+    function renderAvs(scope) {
+      $(`${scope}AvsList`).innerHTML = avsSelections[scope].map((s,i) => `<div>${escapeHtml(s.video)} · ${s.start_ms}–${s.end_ms} ms <button type="button" onclick="avsSelections['${scope}'].splice(${i},1);renderAvs('${scope}')">Bỏ</button></div>`).join('') || '<span class="hint">Chọn Nộp DRES trên thẻ để thêm đoạn, sau đó nộp cả bộ.</span>';
+    }
+    function addAvs(scope, resultIndex) {
+      const state = states[scope]; const item = state.results[resultIndex];
+      const selected = selectedFrameFor(scope, resultIndex);
+      const start = window.prompt('AVS start (integer milliseconds)', String(selected?.timestamp_ms ?? item.timestamp_ms)); if (start === null) return;
+      const end = window.prompt('AVS end (integer milliseconds)', start); if (end === null) return;
+      const startMs=Number(start), endMs=Number(end);
+      if (!start.trim() || !end.trim() || !Number.isSafeInteger(startMs) || !Number.isSafeInteger(endMs) || startMs < 0 || endMs < startMs) {showToast('Đoạn thời gian không hợp lệ');return;}
+      if (avsSelections[scope].some(s => s.video === item.video_id && s.start_ms === startMs && s.end_ms === endMs)) {showToast('Đoạn này đã được chọn');return;}
+      avsSelections[scope].push({result_index:resultIndex,start_ms:startMs,end_ms:endMs,video:item.video_id,run_id:state.run_id}); renderAvs(scope);
+    }
+    async function submitAvs(scope) {
+      const state = states[scope]; const selections = avsSelections[scope]; const evaluation_id=$('dresEvaluation').value;
+      if (state?.query_type !== 'AVS' || state.status !== 'done' || !selections.length || !evaluation_id) {showToast('Cần kết quả AVS, đoạn đã chọn và evaluation DRES');return;}
+      if (selections.some(s => s.run_id !== state.run_id)) {avsSelections[scope]=[];renderAvs(scope);showToast('Kết quả đã thay đổi; chọn lại đoạn');return;}
+      if (!window.confirm(`Nộp ${selections.length} đoạn AVS lên DRES?`)) return;
+      try {
+        const data=await api('/api/dres/submit',{method:'POST',headers:{'X-CSRF-Token':csrf},body:JSON.stringify({scope,evaluation_id,run_id:state.run_id,result_index:selections[0].result_index,selections})});
+        showToast(`DRES AVS: ${data.verdict || data.description || 'received; judging pending'}`);
+      } catch(e) {showToast(e.message);}
+    }
     async function submitDres(scope, resultIndex) {
       const state = states[scope];
       if (!state || state.status !== 'done') { showToast('Chưa có kết quả hoàn tất để nộp.'); return; }
+      if (state.query_type === 'AVS') { addAvs(scope, resultIndex); return; }
       const evaluationId = $('dresEvaluation').value;
       if (!evaluationId) { showToast('Hãy chọn evaluation DRES trước.'); return; }
       let answer = '';
-      if (state.query_type === 'QA') answer = window.prompt('Đáp án QA để nộp:', state.answer?.text || '') || '';
+      if (['QA','VQA'].includes(state.query_type)) answer = window.prompt(state.query_type === 'VQA' ? 'Câu trả lời VBS VQA (văn bản thuần):' : 'Đáp án QA để nộp:', state.answer?.text || '') || '';
       if (!window.confirm('DRES có thể áp dụng luật không nộp trùng và điểm sai. Bạn chắc chắn muốn nộp kết quả này?')) return;
       try {
-        const payload = {scope, result_index:resultIndex, evaluation_id:evaluationId, answer};
+        const payload = {scope, result_index:resultIndex, evaluation_id:evaluationId, answer, run_id:state.run_id};
         const selected = selectedFrameFor(scope, resultIndex);
         const selectedEvents = state.query_type === 'TRAKE' ? selectedEventsFor(scope, resultIndex) : [];
         if (selected) payload.selected_frame = selected;
@@ -1383,6 +1471,7 @@
       button.disabled = true;
       try {
         const prepared = buildRunPayload(scope);
+        if (['KIS-C','AVS','VQA'].includes(queryType)) { prepared.query = query; prepared.query_en = queryEn; prepared.events = []; prepared.events_en = []; prepared.ocr_keywords = ''; }
         const armConfig = readArmConfig();
         const finalQuery = prepared.query;
         const finalEvents = prepared.events;
@@ -1391,9 +1480,10 @@
       if (queryType === 'TRAKE' && prepared.events_en.length && finalEvents.length && prepared.events_en.length !== finalEvents.length) { notice.textContent = 'Số dòng tiếng Anh phải bằng số sự kiện.'; return; }
       const geminiRerank = $(`${scope}GeminiRerank`).checked;
       committedFrames[scope] = {};
+      avsSelections[scope] = []; renderAvs(scope);
       frameVerifications[scope] = {};
       verificationTiers[scope] = {};
-      await api(`/api/${scope}/run`, {method:'POST', headers:{'X-CSRF-Token': csrf}, body: JSON.stringify({query:finalQuery, query_type: queryType, query_en: prepared.query_en, ocr_keywords: prepared.ocr_keywords, trake_preamble: prepared.trake_preamble, events:finalEvents, events_en:prepared.events_en, answer, auto_answer:autoAnswer, gemini_rerank:geminiRerank, trammay_tier:prepared.trammay_tier, top_k: topK, ...armConfig})});
+      await api(`/api/${scope}/run`, {method:'POST', headers:{'X-CSRF-Token': csrf}, body: JSON.stringify({query:finalQuery, query_type: queryType, clue_revision:cluePanels[scope]?.revision, query_en: prepared.query_en, ocr_keywords: prepared.ocr_keywords, trake_preamble: prepared.trake_preamble, events:finalEvents, events_en:prepared.events_en, answer, auto_answer:autoAnswer, gemini_rerank:geminiRerank, trammay_tier:prepared.trammay_tier, top_k: topK, ...armConfig})});
         logDresEvent(scope, 'TEXT', 'query', finalQuery || finalEvents.join('\n'));
         logDresEvent(scope, 'FILTER', 'arm-configuration', JSON.stringify(armConfig));
         showToast(`${queryType} · ${scope === 'shared' ? 'đã xếp luồng chung; mọi user sẽ thấy tiến trình.' : 'đã chạy luồng riêng của bạn.'}`);

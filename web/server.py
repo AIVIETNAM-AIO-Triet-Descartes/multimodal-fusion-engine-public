@@ -74,6 +74,7 @@ from mfe.eval.dres_client import (  # noqa: E402
     DresError,
     apply_selected_frame,
     build_selected_payload,
+    build_avs_payload,
     build_query_log,
     build_result_log,
     configured,
@@ -83,6 +84,7 @@ from mfe.eval.official import to_event_hits  # noqa: E402
 from mfe.mapping.relational import RelationalMap  # noqa: E402
 from mfe.offline.transport import load_dotenv  # noqa: E402
 from mfe.online import dante  # noqa: E402
+from mfe.online.clue_panel import CluePanels, ClueConflict  # noqa: E402
 from mfe.online.dense_arms import preload_query_encoders  # noqa: E402
 from mfe.online.flat_arms import build_flat_cascade, load_flat_bundle  # noqa: E402
 from mfe.online.flat_evidence import FlatTextStore  # noqa: E402
@@ -574,6 +576,7 @@ class EngineManager:
         self.clients: dict[WebSocket, str] = {}
         self.shared_state: dict[str, Any] = self._idle_state("shared", None)
         self.private_states: dict[str, dict[str, Any]] = {}
+        self.clue_panels = CluePanels()
 
     @staticmethod
     def _idle_state(scope: str, owner: str | None) -> dict[str, Any]:
@@ -1113,6 +1116,7 @@ async def _schedule_job(
     arm_enabled: dict[str, bool],
     gemini_rerank: bool,
     trammay_model: str,
+    clue_snapshot: dict[str, Any] | None = None,
 ) -> JSONResponse:
     if not manager.ready:
         return JSONResponse(
@@ -1165,6 +1169,8 @@ async def _schedule_job(
         }
     )
     run_id = f"web_{scope}_{uuid.uuid4().hex}"
+    state["run_id"] = run_id
+    state["clue_snapshot"] = clue_snapshot
     asyncio.create_task(
         _execute_job(
             manager,
@@ -1973,6 +1979,9 @@ async def dres_submit(request: Request) -> JSONResponse:
         selected_state = manager.private_states.get(username)
     if not selected_state or selected_state.get("status") != "done":
         return JSONResponse({"ok": False, "error": "chua co ket qua de nop"}, status_code=409)
+    task_kind = str(selected_state.get("query_type", "KIS")).upper()
+    if task_kind in {"KIS-C", "AVS", "VQA"} and payload.get("run_id") != selected_state.get("run_id"):
+        return JSONResponse({"ok": False, "error": "Results changed; select from the current run"}, status_code=409)
     try:
         result_index = int(payload.get("result_index", 0))
     except (TypeError, ValueError):
@@ -2016,11 +2025,28 @@ async def dres_submit(request: Request) -> JSONResponse:
                         else event
                     )
         submission = build_selected_payload(
-            str(selected_state.get("query_type", "KIS")),
+            task_kind if task_kind != "AVS" else "KIS",
             item,
             answer=answer,
             events=selected_events,
         )
+        if task_kind == "AVS":
+            selections = payload.get("selections")
+            if not isinstance(selections, list) or not 1 <= len(selections) <= 100:
+                raise DresError("AVS requires 1-100 selections from the current run")
+            chosen = []
+            for selection in selections:
+                if not isinstance(selection, dict) or type(selection.get("result_index")) is not int:
+                    raise DresError("Invalid AVS result index")
+                index = selection["result_index"]
+                if not 0 <= index < len(results):
+                    raise DresError("AVS result no longer exists")
+                candidate = dict(results[index])
+                for key in ("start_ms", "end_ms"):
+                    if key in selection:
+                        candidate[key] = selection[key]
+                chosen.append(candidate)
+            submission = build_avs_payload(chosen)
     except (DresError, TypeError, ValueError) as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
 
@@ -2254,12 +2280,20 @@ def _parse_arm_config(
 async def _run_request(request: Request, scope: str, username: str) -> JSONResponse:
     payload = await _json_body(request)
     query_type = str(payload.get("query_type", "KIS")).strip().upper() if payload else "KIS"
-    if query_type not in {"KIS", "QA", "TRAKE"}:
+    if query_type not in {"KIS", "QA", "TRAKE", "KIS-C", "AVS", "VQA"}:
         return JSONResponse(
-            {"ok": False, "error": "query_type phai la KIS, QA hoac TRAKE"}, status_code=400
+            {"ok": False, "error": "Unsupported task type"}, status_code=400
         )
     query = str(payload.get("query", "")).strip() if payload else ""
     query_en = str(payload.get("query_en", "")).strip() if payload else ""
+    clue_snapshot = None
+    if query_type == "KIS-C":
+        clue_snapshot = request.app.state.manager.clue_panels.snapshot(scope, username)
+        if type(payload.get("clue_revision")) is not int or payload["clue_revision"] != clue_snapshot["revision"]:
+            return JSONResponse({"ok": False, "error": "Clues changed; reload before searching"}, status_code=409)
+        query = clue_snapshot["query"]
+        # English overrides and expansion must not resurrect disabled/deleted clues.
+        query_en = ""
     events_raw = payload.get("events", []) if payload else []
     events = (
         [str(item).strip() for item in events_raw if str(item).strip()]
@@ -2347,7 +2381,32 @@ async def _run_request(request: Request, scope: str, username: str) -> JSONRespo
         arm_enabled,
         gemini_rerank,
         trammay_model,
+        clue_snapshot,
     )
+
+
+async def clues(request: Request) -> JSONResponse:
+    username = _session_user(request)
+    if username is None:
+        return JSONResponse({"ok": False, "error": "Login required"}, status_code=401)
+    scope = request.path_params["scope"]
+    if scope not in {"shared", "private"}:
+        return JSONResponse({"ok": False, "error": "Invalid scope"}, status_code=400)
+    panels = request.app.state.manager.clue_panels
+    if request.method == "GET":
+        return JSONResponse({"ok": True, "panel": panels.snapshot(scope, username)})
+    if not _csrf_ok(request):
+        return JSONResponse({"ok": False, "error": "CSRF token required"}, status_code=403)
+    payload = await _json_body(request)
+    try:
+        if not payload:
+            raise ValueError("Object payload required")
+        panel = panels.mutate(scope, username, payload)
+        return JSONResponse({"ok": True, "panel": panel})
+    except ClueConflict as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=409)
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
 
 
 async def media(request: Request) -> FileResponse | JSONResponse:
@@ -2456,6 +2515,7 @@ routes = [
     Route("/api/suggestions/clear", clear_suggestions, methods=["POST"]),
     Route("/api/shared/run", run_shared, methods=["POST"]),
     Route("/api/private/run", run_private, methods=["POST"]),
+    Route("/api/{scope}/clues", clues, methods=["GET", "POST"]),
     Route("/media/{video_id}/{frame_idx:int}", media),
     Route("/video/{video_id}", video),
     WebSocketRoute("/ws", websocket_endpoint),

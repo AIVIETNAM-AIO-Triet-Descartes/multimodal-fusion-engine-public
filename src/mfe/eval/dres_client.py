@@ -222,7 +222,7 @@ def build_selected_payload(
     video = str(item.get("video_id", ""))
     if not _ID_RE.fullmatch(video):
         raise DresError("video_id khong hop le")
-    if kind == "KIS":
+    if kind in {"KIS", "KIS-C"}:
         try:
             start_ms = int(item.get("start_ms", item.get("timestamp_ms", 0)))
             end_ms = int(item.get("end_ms", start_ms))
@@ -236,6 +236,10 @@ def build_selected_payload(
             if not isinstance(collection, str) or len(collection) > 200:
                 raise DresError("collection_name khong hop le")
             entry["mediaItemCollectionName"] = collection
+    elif kind == "VQA":
+        if not isinstance(answer, str) or not answer.strip() or len(answer) > 1000:
+            raise DresError("VQA requires a nonempty plain answer of at most 1000 characters")
+        entry = {"text": answer.strip()}
     elif kind == "QA":
         if not str(answer).strip():
             raise DresError("QA chua co dap an")
@@ -252,6 +256,30 @@ def build_selected_payload(
     else:
         raise DresError("query_type khong ho tro")
     return {"answerSets": [{"answers": [entry]}]}
+
+
+def build_avs_payload(items: list[dict[str, Any]]) -> dict[str, Any]:
+    """One independent answer set per explicitly selected temporal segment.
+
+    Several answers inside one set would express a joint answer, not separate
+    AVS candidates. Exact repeated intervals are rejected before transmission.
+    """
+    if not isinstance(items, list) or not 1 <= len(items) <= 100:
+        raise DresError("AVS requires 1-100 selected segments")
+    sets, seen = [], set()
+    for item in items:
+        if not isinstance(item, dict) or not any(k in item for k in ("start_ms", "timestamp_ms")):
+            raise DresError("AVS requires explicit temporal coordinates")
+        for key in ("start_ms", "end_ms", "timestamp_ms"):
+            if key in item and (type(item[key]) is not int or item[key] < 0):
+                raise DresError("AVS coordinates must be nonnegative integer milliseconds")
+        entry = build_selected_payload("KIS", item)["answerSets"][0]["answers"][0]
+        identity = json.dumps(entry, sort_keys=True)
+        if identity in seen:
+            raise DresError("AVS contains a duplicate segment")
+        seen.add(identity)
+        sets.append({"answers": [entry]})
+    return {"answerSets": sets}
 
 
 def apply_selected_frame(item: dict[str, Any], selected: Any) -> dict[str, Any]:
