@@ -74,6 +74,8 @@ from mfe.eval.dres_client import (  # noqa: E402
     DresError,
     apply_selected_frame,
     build_selected_payload,
+    build_query_log,
+    build_result_log,
     configured,
     submission_key,
 )
@@ -95,7 +97,7 @@ from mfe.online.quest import (  # noqa: E402
     split_trake_events,
 )
 from mfe.online.video_frame_verify import verify_video_keyframe  # noqa: E402
-from mfe.online.video_source import resolve_video  # noqa: E402
+from mfe.online.video_source import resolve_local_video, resolve_video  # noqa: E402
 from mfe.online.vqa_answer import read_answer_hybrid  # noqa: E402
 
 dres_configured = configured
@@ -764,7 +766,10 @@ class EngineManager:
 
     def cache_stats(self) -> dict[str, int]:
         with self.query_cache_lock:
-            return {"query_entries": len(self.query_cache), "query_capacity": self.query_cache_max}
+            stats = {"query_entries": len(self.query_cache), "query_capacity": self.query_cache_max}
+        if self.relational is not None:
+            stats.update(self.relational.keyframe_cache_stats())
+        return stats
 
     def add_suggestion(self, suggestion: dict[str, Any]) -> dict[str, Any]:
         with self.suggestions_lock:
@@ -822,7 +827,9 @@ class EngineManager:
         if image is not None and _VIDEO_RE.fullmatch(resolved_video_id):
             image_url = f"/media/{quote(resolved_video_id, safe='')}/{row.frame_idx}"
         video_url = None
-        if os.getenv("MFE_VIDEO_BASE_URL", "").strip() and _VIDEO_RE.fullmatch(resolved_video_id):
+        if _VIDEO_RE.fullmatch(resolved_video_id) and (
+            os.getenv("MFE_VIDEO_BASE_URL", "").strip() or resolve_local_video(resolved_video_id)
+        ):
             # The actual SAS URL stays server-side in `.env`; the browser follows
             # this authenticated redirect when the operator opens a result.
             video_url = f"/video/{quote(resolved_video_id, safe='')}"
@@ -908,7 +915,8 @@ class EngineManager:
             if self.base_cascade is not None
             else [],
             "cache": self.cache_stats(),
-            "video_source_configured": bool(os.getenv("MFE_VIDEO_BASE_URL", "").strip()),
+            "video_source_configured": bool(os.getenv("MFE_VIDEO_BASE_URL", "").strip()
+                                            or os.getenv("MFE_VIDEO_DIR", "").strip()),
             "error": self.init_error,
             "uptime_s": round(max(0.0, time.time() - self.init_started), 1),
         }
@@ -1237,7 +1245,8 @@ async def config(request: Request) -> JSONResponse:
                 "evaluation_id": os.getenv("MFE_DRES_EVALUATION_ID", "").strip() or None,
             },
             "video": {
-                "configured": bool(os.getenv("MFE_VIDEO_BASE_URL", "").strip()),
+                "configured": bool(os.getenv("MFE_VIDEO_BASE_URL", "").strip()
+                                   or os.getenv("MFE_VIDEO_DIR", "").strip()),
                 "proxy": "/video/{video_id}",
             },
         }
@@ -1730,6 +1739,44 @@ async def dres_evaluations(request: Request) -> JSONResponse:
             "default": os.getenv("MFE_DRES_EVALUATION_ID", "").strip() or None,
         }
     )
+
+
+async def dres_log(request: Request) -> JSONResponse:
+    """Forward authenticated operator events and server-held temporal results."""
+    user = _session_user(request)
+    if user is None:
+        return JSONResponse({"ok": False, "error": "can dang nhap"}, status_code=401)
+    if not _csrf_ok(request):
+        return JSONResponse({"ok": False, "error": "CSRF khong hop le"}, status_code=403)
+    manager: EngineManager = request.app.state.manager
+    payload = await _json_body(request)
+    if payload is None:
+        return JSONResponse({"ok": False, "error": "JSON khong hop le"}, status_code=400)
+    evaluation_id = str(payload.get("evaluation_id", ""))
+    scope = payload.get("scope", "shared")
+    if not isinstance(scope, str) or scope not in ("shared", "private"):
+        return JSONResponse({"ok": False, "error": "scope khong hop le"}, status_code=400)
+    try:
+        query_log = build_query_log(payload.get("events", []))
+        result_log = None
+        if payload.get("include_results") is True:
+            current = manager.shared_state if scope == "shared" else manager.private_states.get(user, {})
+            if current.get("status") != "done" or current.get("query_type") == "TRAKE":
+                raise DresError("log ranked frames can ket qua KIS/QA da hoan tat")
+            result_log = build_result_log(current.get("results", []), payload["events"],
+                                          timestamp_ms=query_log["timestamp"])
+        client = manager.dres()
+        if client is None:
+            raise DresError("DRES chua cau hinh")
+        def send_logs():
+            with manager.dres_lock:
+                query_response = client.log_query(evaluation_id, query_log)
+                result_response = client.log_results(evaluation_id, result_log) if result_log else None
+                return query_response, result_response
+        query_response, result_response = await asyncio.to_thread(send_logs)
+    except DresError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    return JSONResponse({"ok": True, "query_response": query_response, "result_response": result_response})
 
 
 def _manual_optional_int(payload: dict[str, Any], key: str, label: str) -> int | None:
@@ -2326,13 +2373,17 @@ async def media(request: Request) -> FileResponse | JSONResponse:
     )
 
 
-async def video(request: Request) -> RedirectResponse | JSONResponse:
-    """Authenticate a result click, then redirect the browser to Azure Blob."""
+async def video(request: Request) -> FileResponse | RedirectResponse | JSONResponse:
+    """Serve a configured local source, otherwise redirect to remote storage."""
     if _session_user(request) is None:
         return JSONResponse({"error": "can dang nhap"}, status_code=401)
     video_id = request.path_params["video_id"]
     if not _VIDEO_RE.fullmatch(video_id):
         return JSONResponse({"error": "invalid video path"}, status_code=404)
+    local_source = resolve_local_video(video_id)
+    if local_source is not None:
+        return FileResponse(local_source.location, media_type="video/mp4",
+                            headers={"Cache-Control": "private, no-store"})
     source = resolve_video(video_id)
     if source is None:
         return JSONResponse({"error": "video source not configured"}, status_code=404)
@@ -2398,6 +2449,7 @@ routes = [
     Route("/api/state", state),
     Route("/api/verify-video-frame", verify_video_frame, methods=["POST"]),
     Route("/api/dres/evaluations", dres_evaluations),
+    Route("/api/dres/log", dres_log, methods=["POST"]),
     Route("/api/dres/submit-manual", dres_submit_manual, methods=["POST"]),
     Route("/api/dres/submit", dres_submit, methods=["POST"]),
     Route("/api/suggestions", suggestions, methods=["GET", "POST"]),

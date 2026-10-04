@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -151,6 +152,63 @@ class DresClient:
             payload=payload,
         )
 
+    def log_query(self, evaluation_id: str, payload: dict[str, Any]) -> Any:
+        return self._log("query", evaluation_id, payload)
+
+    def log_results(self, evaluation_id: str, payload: dict[str, Any]) -> Any:
+        return self._log("result", evaluation_id, payload)
+
+    def _log(self, kind: str, evaluation_id: str, payload: dict[str, Any]) -> Any:
+        if not _ID_RE.fullmatch(evaluation_id):
+            raise DresError("evaluation_id khong hop le")
+        return self._request(
+            "POST", f"/api/v2/log/{kind}/{urllib.parse.quote(evaluation_id, safe='')}",
+            query={"session": self._session()}, payload=payload,
+        )
+
+
+QUERY_EVENT_CATEGORIES = {"TEXT", "IMAGE", "SKETCH", "FILTER", "BROWSING", "COOPERATION", "OTHER"}
+
+
+def build_query_log(events: list[dict[str, Any]], *, timestamp_ms: int | None = None) -> dict[str, Any]:
+    """DRES QueryEventLog; timestamps use Unix milliseconds, never frame indices."""
+    timestamp = time.time_ns() // 1_000_000 if timestamp_ms is None else timestamp_ms
+    if not isinstance(timestamp, int) or isinstance(timestamp, bool) or timestamp < 0:
+        raise DresError("log timestamp khong hop le")
+    if not isinstance(events, list) or not events or len(events) > 24:
+        raise DresError("log can tu 1 den 24 events")
+    sanitized = []
+    for event in events:
+        if not isinstance(event, dict):
+            raise DresError("log event khong hop le")
+        category = event.get("category")
+        kind = event.get("type")
+        value = event.get("value")
+        if not isinstance(category, str) or category not in QUERY_EVENT_CATEGORIES:
+            raise DresError("log category khong hop le")
+        if not isinstance(kind, str) or not kind or len(kind) > 128:
+            raise DresError("log type khong hop le")
+        if not isinstance(value, str) or len(value) > 16384:
+            raise DresError("log value khong hop le")
+        sanitized.append({"timestamp": timestamp, "category": category, "type": kind, "value": value})
+    return {"timestamp": timestamp, "events": sanitized}
+
+
+def build_result_log(items: list[dict[str, Any]], events: list[dict[str, Any]],
+                     *, timestamp_ms: int | None = None) -> dict[str, Any]:
+    """Log ranked temporal evidence; excludes QA answer text and AIC TRAKE encoding."""
+    query_log = build_query_log(events, timestamp_ms=timestamp_ms)
+    results = []
+    for rank, item in enumerate(items[:100], 1):
+        if not isinstance(item, dict) or "timestamp_ms" not in item:
+            raise DresError("log result thieu toa do thoi gian")
+        answer = build_selected_payload("KIS", item)["answerSets"][0]["answers"][0]
+        results.append({"rank": rank, "answer": answer})
+    # Group promotion can reorder RRF scores: describe the supplied rank order.
+    return {"timestamp": query_log["timestamp"], "sortType": "retrieval-order",
+            "resultSetAvailability": f"top-{len(results)}", "results": results,
+            "events": query_log["events"]}
+
 
 def build_selected_payload(
     query_type: str,
@@ -173,6 +231,11 @@ def build_selected_payload(
         if start_ms < 0 or end_ms < start_ms:
             raise DresError("KIS canh thoi gian khong hop le")
         entry = {"mediaItemName": video, "start": start_ms, "end": end_ms}
+        collection = item.get("collection_name") or os.getenv("MFE_DRES_COLLECTION", "").strip()
+        if collection:
+            if not isinstance(collection, str) or len(collection) > 200:
+                raise DresError("collection_name khong hop le")
+            entry["mediaItemCollectionName"] = collection
     elif kind == "QA":
         if not str(answer).strip():
             raise DresError("QA chua co dap an")

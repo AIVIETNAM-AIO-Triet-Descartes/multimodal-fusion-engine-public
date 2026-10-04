@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+from collections import OrderedDict
 from pathlib import Path
 
 from mfe.contracts.errors import ContractError, ErrorCode
@@ -30,7 +31,7 @@ class RelationalMap:
     #: `database is locked`. Mặc định của sqlite3 là **0** — hỏng ngay lập tức.
     BUSY_TIMEOUT_MS = 5_000
 
-    def __init__(self, db_path: str) -> None:
+    def __init__(self, db_path: str, *, keyframe_cache_max: int = 8192) -> None:
         """MỘT connection cho MỖI LUỒNG, tạo lười.
 
         Bản trước dùng **một** connection dùng chung với `check_same_thread=False`,
@@ -58,6 +59,11 @@ class RelationalMap:
         chỉ đọc) không bị ảnh hưởng.
         """
         self.db_path = db_path
+        if keyframe_cache_max < 0:
+            raise ValueError("keyframe_cache_max must be nonnegative")
+        self.keyframe_cache_max = keyframe_cache_max
+        self._kf_cache: OrderedDict[str, KeyframeRow] = OrderedDict()
+        self._kf_cache_lock = threading.RLock()
         self._local = threading.local()
         self._da_mo: list[sqlite3.Connection] = []
         self._khoa = threading.Lock()
@@ -112,6 +118,8 @@ class RelationalMap:
             self._da_mo.clear()
             self._chung = None
         self._local = threading.local()
+        with self._kf_cache_lock:
+            self._kf_cache.clear()
 
     def __enter__(self) -> RelationalMap:
         return self
@@ -170,7 +178,7 @@ class RelationalMap:
                 timestamp_ms=excluded.timestamp_ms,
                 shot_id=excluded.shot_id
         """
-        with self._conn:
+        with self._kf_cache_lock, self._conn:
             self._conn.executemany(
                 sql,
                 [
@@ -186,24 +194,34 @@ class RelationalMap:
                     for r in rows
                 ],
             )
+            for r in rows:
+                self._kf_cache.pop(r.keyframe_id, None)
         return len(rows)
 
     # --- read side: validator only, NOT retrieval -------------------------
 
     def get_keyframe(self, keyframe_id: str) -> KeyframeRow:
         """Look up one keyframe. Raise ContractError(KEYFRAME_NOT_FOUND) on a miss."""
-        if not hasattr(self, '_kf_cache'):
-            self._kf_cache = {}
-        if keyframe_id in self._kf_cache:
-            return self._kf_cache[keyframe_id]
-        row = self._conn.execute(
-            "SELECT * FROM keyframes WHERE keyframe_id = ?", (keyframe_id,)
-        ).fetchone()
-        if row is None:
-            raise ContractError(ErrorCode.KEYFRAME_NOT_FOUND, f"Keyframe {keyframe_id} not found")
-        res = KeyframeRow(**dict(row))
-        self._kf_cache[keyframe_id] = res
-        return res
+        with self._kf_cache_lock:
+            if keyframe_id in self._kf_cache:
+                self._kf_cache.move_to_end(keyframe_id)
+                return self._kf_cache[keyframe_id]
+            row = self._conn.execute(
+                "SELECT * FROM keyframes WHERE keyframe_id = ?", (keyframe_id,)
+            ).fetchone()
+            if row is None:
+                raise ContractError(ErrorCode.KEYFRAME_NOT_FOUND, f"Keyframe {keyframe_id} not found")
+            res = KeyframeRow(**dict(row))
+            if self.keyframe_cache_max:
+                self._kf_cache[keyframe_id] = res
+                while len(self._kf_cache) > self.keyframe_cache_max:
+                    self._kf_cache.popitem(last=False)
+            return res
+
+    def keyframe_cache_stats(self) -> dict[str, int]:
+        with self._kf_cache_lock:
+            return {"keyframe_entries": len(self._kf_cache),
+                    "keyframe_capacity": self.keyframe_cache_max}
 
     def get_video(self, video_id: str) -> VideoRow:
         """Raise ContractError(VIDEO_NOT_FOUND) on a miss."""

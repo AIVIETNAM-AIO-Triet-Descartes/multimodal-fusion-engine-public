@@ -807,8 +807,24 @@
         ? 'Nộp ứng viên hạng 1 của luồng đang xem'
         : 'Chọn evaluation DRES và hoàn tất một truy vấn trước';
     }
+    const loggedResultStates = new Set();
+    function logDresEvent(scope, category, type, value, includeResults = false) {
+      const evaluationId = $('dresEvaluation').value;
+      if (!evaluationId) return;
+      void api('/api/dres/log', {method: 'POST', headers: {'X-CSRF-Token': csrf},
+        body: JSON.stringify({evaluation_id: evaluationId, scope, include_results: includeResults,
+          events: [{category, type, value: String(value)}]})})
+        .catch((error) => { $('resultsHint').textContent = `DRES log: ${error.message}`; });
+    }
     function renderState(scope, state) {
       states[scope] = state;
+      const logKey = `${scope}:${state.finished_at}`;
+      if (state.status === 'done' && state.query_type !== 'TRAKE'
+          && $('dresEvaluation').value && !loggedResultStates.has(logKey)) {
+        loggedResultStates.add(logKey);
+        if (loggedResultStates.size > 256) loggedResultStates.delete(loggedResultStates.values().next().value);
+        logDresEvent(scope, 'BROWSING', 'ranked-frames', state.query || '', true);
+      }
       const prefix = scope === 'shared' ? 'shared' : 'private';
       const line = $(`${prefix}State`);
       line.textContent = statusText(state);
@@ -982,6 +998,8 @@
           const player = $('videoPlayer');
           const url = button.dataset.videoUrl;
           if (!url) return;
+          logDresEvent(button.dataset.videoScope || selectedScope, 'BROWSING', 'video-open',
+            button.dataset.videoId || '');
           $('videoModalTitle').textContent = `Video · ${button.dataset.videoLabel || ''}`;
           const resultIndex = button.dataset.videoResultIndex === '' ? null : Number(button.dataset.videoResultIndex);
           const eventIndex = button.dataset.videoEventIndex === '' ? null : Number(button.dataset.videoEventIndex);
@@ -1013,6 +1031,7 @@
     function openImage(image) {
       const source = image.currentSrc || image.src;
       if (!source) return;
+      logDresEvent(selectedScope, 'BROWSING', 'image-inspect', image.alt || '');
       $('imageModalTitle').textContent = image.dataset.imageTitle || 'Ảnh kết quả';
       $('imageZoom').src = source;
       $('imageZoom').alt = image.alt || 'Ảnh kết quả phóng to';
@@ -1084,6 +1103,7 @@
             const selected = selectedFrameFor(selectedScope, resultIndex, eventIndex);
             if (selected) payload.selected_frame = selected;
             await api('/api/suggestions', {method:'POST', headers:{'X-CSRF-Token': csrf}, body: JSON.stringify(payload)});
+            logDresEvent(selectedScope, 'COOPERATION', 'candidate-suggestion', note.trim());
             showToast('Đã thêm đề xuất dùng chung.');
           } catch (error) { showToast(error.message); }
         });
@@ -1374,6 +1394,8 @@
       frameVerifications[scope] = {};
       verificationTiers[scope] = {};
       await api(`/api/${scope}/run`, {method:'POST', headers:{'X-CSRF-Token': csrf}, body: JSON.stringify({query:finalQuery, query_type: queryType, query_en: prepared.query_en, ocr_keywords: prepared.ocr_keywords, trake_preamble: prepared.trake_preamble, events:finalEvents, events_en:prepared.events_en, answer, auto_answer:autoAnswer, gemini_rerank:geminiRerank, trammay_tier:prepared.trammay_tier, top_k: topK, ...armConfig})});
+        logDresEvent(scope, 'TEXT', 'query', finalQuery || finalEvents.join('\n'));
+        logDresEvent(scope, 'FILTER', 'arm-configuration', JSON.stringify(armConfig));
         showToast(`${queryType} · ${scope === 'shared' ? 'đã xếp luồng chung; mọi user sẽ thấy tiến trình.' : 'đã chạy luồng riêng của bạn.'}`);
       } catch (error) { notice.textContent = error.message; }
       finally { button.disabled = false; }

@@ -77,6 +77,15 @@ def search_dirs() -> list[Path]:
     return dirs + list(FALLBACK_DIRS)
 
 
+def resolve_local_video(video_id: str) -> VideoSource | None:
+    """Find explicitly configured/local source files without testing a remote URL."""
+    for folder in search_dirs():
+        candidate = folder / f"{video_id}.mp4"
+        if candidate.is_file():
+            return VideoSource(video_id, "file", str(candidate.resolve()))
+    return None
+
+
 def resolve_video(video_id: str) -> VideoSource | None:
     """Chỗ phát được video này, hoặc `None` nếu máy này không có.
 

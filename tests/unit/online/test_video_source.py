@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import pytest
 
@@ -11,6 +12,7 @@ from mfe.online.video_source import (
     ENV_BASE_URL,
     ENV_DIR,
     resolve_video,
+    resolve_local_video,
     search_dirs,
     why_missing,
 )
@@ -58,6 +60,14 @@ class TestURL:
 
 
 class TestFile:
+    def test_local_lookup_is_available_when_remote_is_configured(self, tmp_path, monkeypatch):
+        (tmp_path / "M02_V004.mp4").write_bytes(b"source")
+        monkeypatch.setenv(ENV_DIR, str(tmp_path))
+        monkeypatch.setenv(ENV_BASE_URL, "https://remote.example/videos")
+        source = resolve_local_video("M02_V004")
+        assert source and not source.is_url
+        assert Path(source.location).read_bytes() == b"source"
+
     def test_tim_thay_trong_thu_muc_khai_bang_env(
         self, tmp_path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
