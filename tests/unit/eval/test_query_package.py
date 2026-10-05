@@ -1,0 +1,315 @@
+"""Khoá bộ nạp gói đề BTC — mfe.eval.query_package.
+
+Đề thật là file text người gõ tay, nên mọi test ở đây đều về chuyện **đọc sai một
+file trông không giống đọc sai**: một hậu tố lạ thành KIS, một nhãn sự kiện gõ
+nhầm thành thiếu sự kiện. Cả hai đều nộp được và đều bị chấm 0 mà không kêu.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from mfe.contracts.errors import ContractError
+from mfe.eval.query_package import (
+    load_package,
+    load_query,
+    parse_query,
+    parse_query_type,
+    split_events,
+)
+
+#: Gói đề THẬT của BTC. Chuyển từ `docs/context/` sang `eval/btc/` ngày 03-09-2026.
+BTC_ROOT = Path("eval/btc")
+BO_DE = str(BTC_ROOT / "bo-de-thu-nghiem")
+
+
+def bo_de(name: str) -> str:
+    """Đường dẫn tới một gói đề thật, **bỏ qua test** nếu máy này chưa có nó.
+
+    `eval/btc/` nằm trong `.gitignore` — gói đề là dữ liệu BTC phát, không phải
+    thứ đi theo repo. Nên trên máy chưa tải về, vắng mặt là **bình thường**.
+
+    Bỏ qua thay vì để đỏ, và đó không phải nới lỏng: một test đỏ vì thiếu dữ
+    liệu trông y hệt một test đỏ vì code hỏng, và người đọc sẽ đi sửa nhầm chỗ.
+    Bỏ qua kèm lý do thì nói đúng chuyện gì đang xảy ra.
+    """
+    path = BTC_ROOT / name
+    if not path.is_dir():
+        pytest.skip(f"chua co {path} tren may nay (eval/btc/ bi gitignore)")
+    return str(path)
+
+
+def write(tmp_path, name: str, body: str):
+    path = tmp_path / name
+    path.write_text(body, encoding="utf-8")
+    return path
+
+
+class TestDangTruyVan:
+    @pytest.mark.parametrize(
+        ("name", "expected"),
+        [
+            ("query-p1-1-kis.txt", "KIS"),
+            ("query-p1-15-qa.txt", "QA"),
+            ("query-p1-16-trake.txt", "TRAKE"),
+            ("query-2-KIS.txt", "KIS"),
+        ],
+    )
+    def test_doc_tu_hau_to_ten_file(self, name, expected):
+        assert parse_query_type(name) == expected
+
+    def test_hau_to_la_thi_ném_loi_chu_khong_mac_dinh_ve_kis(self):
+        """Mặc định về KIS ghi ra một file QA thiếu hẳn cột đáp án — nộp được,
+        chấm 0, và không có gì trong quá trình đó phát ra tiếng."""
+        with pytest.raises(ContractError):
+            parse_query_type("query-p1-9-vqa.txt")
+
+
+class TestTachSuKien:
+    def test_cau_mo_dau_duoc_ghep_vao_tung_su_kien(self, tmp_path):
+        """Một truy vấn TRAKE hỏi hai chuyện chồng lên nhau — *video nào* và
+        *khoảnh khắc nào*. Câu mở đầu trả lời chuyện thứ nhất, và DANTE chỉ xếp
+        được sự kiện TRONG một video nên nó không cứu được việc chọn nhầm video.
+        """
+        path = write(
+            tmp_path,
+            "query-p1-9-trake.txt",
+            "Đoạn video múa lân, tìm các sự kiện sau:\nE1: Lân xoay vòng.\nE2: Lân tiếp đất.\n",
+        )
+        query = load_query(path)
+        assert query.n_events == 2
+        assert query.searches() == [
+            "Đoạn video múa lân, tìm các sự kiện sau: Lân xoay vòng.",
+            "Đoạn video múa lân, tìm các sự kiện sau: Lân tiếp đất.",
+        ]
+
+    def test_khong_co_cau_mo_dau_thi_su_kien_di_mot_minh(self, tmp_path):
+        """Mất mát thật, ghi lại ở `preamble is None` — không bù bằng cách đoán
+        ra một câu mô tả video."""
+        path = write(tmp_path, "q-trake.txt", "E1: Bột vào tô.\nE2: Thả vào chảo.\n")
+        query = load_query(path)
+        assert query.preamble is None
+        assert query.searches() == ["Bột vào tô.", "Thả vào chảo."]
+
+    def test_nhan_go_nham_van_doc_duoc_theo_thu_tu_dong(self, caplog):
+        """`query-p1-18-trake.txt` của BTC ghi E1, E2, **E2**, E4 cho bốn dòng.
+
+        Bốn dòng vẫn là bốn sự kiện đúng thứ tự thời gian; chỉ cái nhãn sai. Từ
+        chối cả đề vì một chữ số gõ nhầm là tự bỏ một câu — nhưng đi qua trong im
+        lặng thì người vận hành không bao giờ biết để đối chiếu lại.
+        """
+        text = "Video nấu ăn:\nE1: cắt nấm.\nE2: cắt củ năng.\nE2: cắt đậu hũ.\nE4: bắc chảo.\n"
+        with caplog.at_level("WARNING"):
+            preamble, events = split_events(text)
+        assert len(events) == 4
+        assert events[2] == "cắt đậu hũ."
+        assert preamble == "Video nấu ăn:"
+        assert "THU TU DONG" in caplog.text
+
+    def test_dau_ngan_la_tuy_chon(self):
+        r"""Gói đề 21-08-2026 viết `E1 Khoảnh khắc…` KHÔNG có hai chấm.
+
+        Bản regex đòi `[:.\-]` làm hỏng cả lượt chạy trên Kaggle với thông báo
+        "không có dòng nào dạng E<n>" — trong khi file có đủ ba dòng, ngay trước
+        mắt người đọc. Một phép nhận dạng định dạng do người gõ ra phải chịu được
+        cách gõ của người đó.
+        """
+        _, events = split_events(
+            "Doan video mua lan.\n"
+            "E1 Khoanh khac dau tien xuat hien hai con rong vang.\n"
+            "E2 Khoanh khac con lan hoan tat cu xoay nguoi.\n"
+            "E3 Khoanh khac dui cham vao keng dong.\n"
+        )
+        assert len(events) == 3
+        assert events[0].startswith("Khoanh khac dau tien xuat hien")
+
+    def test_van_can_khoang_trang_truoc_noi_dung(self):
+        """`E1000` hay mã hiệu `E5A` KHÔNG được thành mốc sự kiện.
+
+        Đây là cái giá của việc nới dấu ngăn: nếu bỏ luôn yêu cầu khoảng trắng
+        thì mọi chuỗi bắt đầu bằng E-rồi-số đều bị nuốt thành một sự kiện.
+        """
+        with pytest.raises(ContractError):
+            split_events("Ma hieu E1000ABC va E5A khong phai su kien.")
+
+    def test_thieu_han_mot_dong_thi_dung(self):
+        """Nhãn chạy đến E4 mà chỉ đọc được 3 dòng: thiếu hẳn một sự kiện, không
+        phải lỗi gõ nhãn. Mọi dòng nộp sẽ sai số cột — thể lệ đòi số Frame ID
+        khớp chính xác số events."""
+        with pytest.raises(ContractError, match="E4"):
+            split_events("E1: a.\nE2: b.\nE4: d.\n")
+
+    def test_de_trake_khong_co_dong_su_kien_nao(self):
+        with pytest.raises(ContractError):
+            split_events("Tìm cảnh con lân nhảy qua cột.")
+
+    def test_chu_E_giua_cau_khong_bi_hieu_thanh_moc(self):
+        """Neo `^` chứ không phải tìm ở bất kỳ đâu: "vitamin E1" giữa câu không
+        được mở thêm một sự kiện."""
+        _, events = split_events("E1: nói về vitamin E2 trong rau.\nE2: cận cảnh rau.\n")
+        assert len(events) == 2
+
+
+class TestCaGoi:
+    def test_sap_theo_so_khong_theo_chuoi(self, tmp_path):
+        """Sắp theo chuỗi đặt `query-p1-10` trước `query-p1-2`, và đó là thứ tự
+        người vận hành đối chiếu với đề trên màn hình."""
+        for n in (1, 2, 10, 21):
+            write(tmp_path, f"query-p1-{n}-kis.txt", f"truy van {n}")
+        assert [q.query_id for q in load_package(tmp_path)] == [
+            "query-p1-1-kis",
+            "query-p1-2-kis",
+            "query-p1-10-kis",
+            "query-p1-21-kis",
+        ]
+
+    def test_ten_file_nop_giu_nguyen_ten_de(self, tmp_path):
+        """Ghép lại tên từ các mảnh là chỗ một `p1` bị rơi và cả gói lệch tên."""
+        write(tmp_path, "query-p1-15-qa.txt", "Xã này tên gì?")
+        assert load_package(tmp_path)[0].csv_name == "query-p1-15-qa.csv"
+
+    def test_thu_muc_rong(self, tmp_path):
+        with pytest.raises(ContractError):
+            load_package(tmp_path)
+
+    def test_file_rong(self, tmp_path):
+        path = write(tmp_path, "query-p1-1-kis.txt", "   \n")
+        with pytest.raises(ContractError):
+            load_query(path)
+
+
+class TestBoDeThat:
+    """Chạy trên chính bộ đề BTC gửi. Một test đọc dữ liệu thật, cố ý."""
+
+    def test_ca_bo_de_thu_nghiem_doc_duoc(self):
+        queries = load_package(bo_de("bo-de-thu-nghiem"))
+        assert len(queries) == 24
+        counts = {t: sum(1 for q in queries if q.type == t) for t in ("KIS", "QA", "TRAKE")}
+        assert counts == {"KIS": 18, "QA": 3, "TRAKE": 3}
+
+    def test_bo_de_dot_1_doc_duoc(self):
+        """Gói đề THẬT của đợt 1 — 25 câu, và nó dùng định dạng `E1 …` không hai
+        chấm. Test này tồn tại vì gói đó đã làm vỡ một lượt chạy Kaggle."""
+        queries = load_package(bo_de("bo-de-dot-1"))
+        assert len(queries) == 25
+        counts = {t: sum(1 for q in queries if q.type == t) for t in ("KIS", "QA", "TRAKE")}
+        assert counts == {"KIS": 20, "QA": 4, "TRAKE": 1}
+        trake = [q for q in queries if q.type == "TRAKE"]
+        assert trake[0].n_events == 3
+        assert trake[0].preamble  # câu mở đầu được ghép vào từng sự kiện
+
+    def test_moi_de_trake_deu_co_4_su_kien(self):
+        for query in load_package(bo_de("bo-de-thu-nghiem")):
+            if query.type == "TRAKE":
+                assert query.n_events == 4, query.query_id
+                assert len(query.searches()) == 4
+
+
+class TestDeTaiLen:
+    """`parse_query` — đường vào cho file TẢI LÊN, không có đường dẫn trên đĩa.
+
+    `app/submit_lab.py` nhận `UploadedFile` (tên + bytes). Luật đọc đề phải là
+    **một bản duy nhất**: nếu UI tự đoán dạng đề thì một hôm hai đường phân kỳ,
+    và file QA xuất ra thiếu hẳn cột đáp án mà vẫn nộp được.
+    """
+
+    def test_doc_duoc_de_kis_tu_bo_nho(self):
+        query = parse_query("query-p1-7-kis.txt", "  Cảnh cà rốt luộc trong nồi.  ")
+        assert query.query_id == "query-p1-7-kis"
+        assert query.type == "KIS"
+        assert query.csv_name == "query-p1-7-kis.csv"
+        assert query.text == "Cảnh cà rốt luộc trong nồi."
+
+    def test_hau_to_la_van_la_LOI_o_duong_tai_len(self):
+        with pytest.raises(ContractError):
+            parse_query("query-p1-9-vqa.txt", "nội dung gì đó")
+
+    def test_de_rong_la_loi(self):
+        with pytest.raises(ContractError):
+            parse_query("query-p1-1-kis.txt", "   \n  ")
+
+    def test_trake_tach_su_kien_y_nhu_doc_tu_dia(self):
+        body = "Nhảy sào.\nE1 chạy đà\nE2 giậm nhảy\nE3 qua xà"
+        query = parse_query("query-p1-16-trake.txt", body)
+        assert query.type == "TRAKE"
+        assert query.n_events == 3
+        assert query.preamble == "Nhảy sào."
+        assert query.searches() == [
+            "Nhảy sào. chạy đà", "Nhảy sào. giậm nhảy", "Nhảy sào. qua xà",
+        ]
+
+    def test_hai_duong_cho_cung_ket_qua(self, tmp_path):
+        """Đọc từ đĩa và đọc từ bộ nhớ phải trùng nhau ở MỌI trường trừ đường dẫn."""
+        body = "Nhảy sào.\nE1 chạy đà\nE2 giậm nhảy"
+        path = write(tmp_path, "query-p1-16-trake.txt", body)
+        tu_dia = load_query(path)
+        tu_bo_nho = parse_query(path.name, body)
+        assert tu_dia.query_id == tu_bo_nho.query_id
+        assert tu_dia.type == tu_bo_nho.type
+        assert tu_dia.text == tu_bo_nho.text
+        assert tu_dia.events == tu_bo_nho.events
+        assert tu_dia.preamble == tu_bo_nho.preamble
+
+    def test_doc_tu_dia_VAN_giu_duong_dan_day_du(self, tmp_path):
+        """`load_query` phải giữ đường dẫn thật để còn mở lại file gốc — gộp hai
+        đường mà đánh rơi nó là một lần thụt lùi im lặng."""
+        path = write(tmp_path, "query-p1-1-kis.txt", "một cảnh gì đó")
+        assert load_query(path).source_path == path
+
+
+class TestNhanSuKienDoiTheoDot:
+    """BTC đổi NHÃN sự kiện giữa hai đợt — và cùng một gói dùng cả hai kiểu.
+
+    `query-p2-8-trake.txt` viết `E1:`, `query-p2-21-trake.txt` viết `Cảnh 1:`.
+    Không suy ra được nhãn từ số hiệu đợt; phải nhận cả hai.
+
+    Vì sao nghiêm trọng hơn "mất một câu": `load_package` ném cho CẢ thư mục,
+    nên một file lạ nhãn làm 30 câu không nạp được ở đường tải theo thư mục.
+    """
+
+    def test_nhan_canh_cua_dot_2(self):
+        text = (
+            "4 cảnh này xảy ra liên tiếp nhau.\n"
+            "Cảnh 1: Hai người phụ nữ cùng nhau dán niêm phong một thùng carton.\n"
+            "Cảnh 2: Các thùng mì tôm và bọc bánh mì được sắp xếp ngay ngắn.\n"
+            "Cảnh 3: Một người đàn ông nhấc thùng mì tôm lên.\n"
+            "Cảnh 4: Cảnh quay cận cảnh các thùng mì được xếp chồng trên xe tải.\n"
+        )
+        preamble, events = split_events(text)
+        assert len(events) == 4
+        assert preamble == "4 cảnh này xảy ra liên tiếp nhau."
+        # Noi dung giu nguyen, ke ca khi chinh no bat dau bang chu "Canh".
+        assert events[3].startswith("Cảnh quay cận cảnh")
+
+    def test_cau_mo_dau_co_chu_canh_KHONG_thanh_moc(self):
+        """Câu mở đầu thật của `query-p2-21` là "4 cảnh này xảy ra liên tiếp nhau".
+
+        Neo `^` phải giữ nó ở lại preamble; đếm nó thành mốc là ra 5 sự kiện cho
+        một đề 4 sự kiện, và mọi dòng nộp sẽ sai số cột.
+        """
+        preamble, events = split_events(
+            "4 cảnh này xảy ra liên tiếp nhau.\nCảnh 1: a.\nCảnh 2: b.\n"
+        )
+        assert len(events) == 2
+        assert preamble == "4 cảnh này xảy ra liên tiếp nhau."
+
+    def test_khong_dau_cung_doc_duoc(self):
+        _, events = split_events("Canh 1: mot.\nCanh 2: hai.\n")
+        assert len(events) == 2
+
+    def test_nhan_E_van_chay_nhu_cu(self):
+        """Đợt 1 vẫn dùng `E<n>` — mở rộng không được phá đường cũ."""
+        _, events = split_events("E1: a.\nE2: b.\nE3: c.\n")
+        assert len(events) == 3
+
+    def test_ca_goi_dot_2_doc_duoc(self):
+        """Gói đề THẬT của đợt 2 — 30 câu, hai kiểu nhãn trong cùng một gói."""
+        queries = load_package(bo_de("bo-de-dot-2"))
+        assert len(queries) == 30
+        trake = [q for q in queries if q.type == "TRAKE"]
+        assert len(trake) == 2
+        assert all(q.n_events == 4 for q in trake), [
+            (q.query_id, q.n_events) for q in trake
+        ]

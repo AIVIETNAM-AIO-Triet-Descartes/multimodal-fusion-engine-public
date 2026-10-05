@@ -1,0 +1,70 @@
+# Baseline trên bộ mẫu 16 video AIC 2026 (batch 1), đã verify bằng
+# scripts/verify_sample_2026.py: 4.001 keyframe, floor(pts_time × fps) khớp
+# 100%, local == HuggingFace.
+#
+# Tách khỏi config/local.yaml thay vì sửa nó: local.yaml trỏ vào data/sample/
+# (bộ 2025) và các thành viên đang chạy với nó. Kho cũng tách sang
+# stores/sample_2026/ để một lần ingest ở đây không ghi đè kho họ đang dùng.
+
+paths:
+  videos: data/sample_2026/videos/
+  keyframes: data/sample_2026/keyframes/
+  clip_features: data/sample_2026/clip-features/
+  map_keyframes: data/sample_2026/map-keyframes/   # NGUỒN SỰ THẬT
+  objects: data/sample_2026/objects/
+  media_info: data/sample_2026/media-info/
+
+  segments: data/segments_2026/
+  vector_store: stores/sample_2026/vector/
+  inverted_store: stores/sample_2026/inverted/
+  asset_store: stores/sample_2026/asset/
+  relational_db: stores/sample_2026/relational/app.db
+  eval_results: eval/results_2026/
+  throughput: eval/throughput_2026.json
+  event_log: eval/results_2026/events.jsonl
+
+storage:
+  backend: local
+
+models:
+  clip: null                         # features.source = provided → không nạp checkpoint
+  detector: null
+  ocr: null
+  metadata: null
+  # Stage C. Null = tat. PHAI khac clip_checkpoint — cham lai bang chinh
+  # model da dung o stage A se ra y het ket qua cu.
+  reranker: google/siglip-base-patch16-256-multilingual
+
+features:
+  source: provided
+  object_score_min: 0.3
+  metadata_fields: [title, keywords, author]
+
+retrieval:
+  embed_dim: 512
+  coarse_topk: 500
+  rerank_topk: 100                   # = trần 100 đáp án/truy vấn của BTC (PDF §2.2)
+  fusion_weights:
+    clip: 1.0
+    bm25: 1.0
+  # Do duoc: 116 ms/anh tren CPU may nay -> 100 anh ~ 12s. Ngan sach dat de
+  # stage C CHAY XONG chu khong phai de cat ngang; cat ngang o depth 25 thi
+  # khong voi toi dap an dang nam o hang 50-92.
+  rerank_budget_ms: 20000
+  # Cham het 100 ung vien. Do tren bo 2026: rerank day du keo keyframe dung
+  # tu hang 92 len hang 3 — mot lan rerank nong 25 khong he thay no.
+  rerank_depth: 100
+  temporal_window_frames: 640     # don vi FRAME video goc, xem config/local.yaml
+  # Stage B chi duoc phep dao thu tu 20 vi tri dau (mot man hinh) de lay do
+  # da dang. Sau do giu nguyen xep hang fusion — R@20/50/100 doc sau 100 vi tri.
+  dedup_depth: 20
+  clip_checkpoint: clip-ViT-B-32
+  clip_text_checkpoint: sentence-transformers/clip-ViT-B-32-multilingual-v1
+
+submit:
+  schema_format: by_frame
+  frame_range_window: 25
+
+eval:
+  queryset: eval/queryset.jsonl          # ban noi bo (Recall@K); BTC: queryset_btc_2026.jsonl
+  recall_at: [1, 5, 20, 50, 100]

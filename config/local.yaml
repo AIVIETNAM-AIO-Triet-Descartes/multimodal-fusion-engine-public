@@ -1,0 +1,87 @@
+# Sprint 1 — the only active config. Every path/model/threshold lives here,
+# never in code (docs/01 §3.1, docs/00 §7).
+
+paths:
+  # --- INPUT: dataset giải nén vào data/sample/ (read-only, gitignored) -------
+  # Cấu trúc do Kaggle "AI Challenge 2025" cấp sẵn. Xem data/README.md.
+  videos: data/sample/videos/
+  keyframes: data/sample/keyframes/          # ảnh keyframe cấp sẵn (Asset Store đọc từ đây)
+  clip_features: data/sample/clip-features/  # .npy (n_keyframe, 512) float16 — không tự chạy CLIP
+  map_keyframes: data/sample/map-keyframes/  # CSV: n, pts_time, fps, frame_idx — NGUỒN SỰ THẬT
+  objects: data/sample/objects/              # object detection JSON
+  media_info: data/sample/media-info/        # metadata JSON mỗi video
+  # --- OUTPUT: kho ta sinh ra -------------------------------------------------
+  segments: data/segments/                   # video_segment ta cắt (optional, docs/03 §3)
+  vector_store: stores/vector/
+  inverted_store: stores/inverted/
+  asset_store: stores/asset/                 # manifest trỏ tới ảnh keyframe (docs/03 §3)
+  relational_db: stores/relational/app.db
+  eval_results: eval/results/
+  throughput: eval/throughput.json
+  event_log: eval/results/events.jsonl       # log sự kiện để tính TTCA (docs/04 §5)
+
+storage:
+  backend: local                     # local | modal (docs/01 §3.2 — modal is a stub)
+
+models:
+  # Chỉ dùng khi features.source = model. Sprint 1 để null vì ta đọc feature
+  # BTC cấp sẵn, không nạp checkpoint nào (docs/02 §1, §3).
+  clip: null                         # e.g. ViT-B-32 / laion2b_s34b_b79k
+  detector: null
+  ocr: null                          # null disables the OCR module (docs/02 §3)
+  metadata: null
+  # Stage C. Null = tat. PHAI khac clip_checkpoint — cham lai bang chinh
+  # model da dung o stage A se ra y het ket qua cu.
+  reranker: google/siglip-base-patch16-256-multilingual
+
+features:
+  # provided = đọc clip-features/*.npy + objects/*.json BTC cấp sẵn (Sprint 1)
+  # model    = tự chạy checkpoint trong models: (sprint sau)
+  source: provided
+  object_score_min: 0.3              # bỏ box nhiễu trước khi đẩy vào BM25
+  metadata_fields: [title, keywords, author]
+
+retrieval:
+  embed_dim: 512
+  coarse_topk: 500
+  # 100 = so dap an toi da BTC cho nop moi truy van (PDF §2.2). Nop it hon la
+  # tu bo khong cong 4 trong 5 so hang cua Final Score.
+  rerank_topk: 100
+  # Scores from CLIP (cosine) and BM25 are on different scales — normalize
+  # before weighting, do not add raw (docs/04 §3.1).
+  fusion_weights:
+    clip: 1.0
+    bm25: 1.0
+  # Qua budget => cat ngan, phan chua cham giu nguyen thu tu coarse (CHOT).
+  # Do duoc: 116 ms/anh tren CPU may nay -> 100 anh ~ 12s. Ngan sach dat de
+  # stage C CHAY XONG chu khong phai de cat ngang; cat ngang o depth 25 thi
+  # khong voi toi dap an dang nam o hang 50-92.
+  rerank_budget_ms: 20000
+  # Cham het 100 ung vien. Do tren bo 2026: rerank day du keo keyframe dung
+  # tu hang 92 len hang 3 — mot lan rerank nong 25 khong he thay no.
+  rerank_depth: 100
+  # Khoang cach gom nhom o giai doan B, don vi FRAME cua video goc (khong phai
+  # so keyframe). 640 = ban dich cua muc cu "5 keyframe": khoang cach trung vi
+  # giua 2 keyframe BTC do duoc la 128 frame. ~21s @30fps — rong, nen xem lai.
+  temporal_window_frames: 640
+  # Stage B chi duoc phep dao thu tu 20 vi tri dau (mot man hinh) de lay do
+  # da dang. Sau do giu nguyen xep hang fusion — R@20/50/100 doc sau 100 vi tri.
+  dedup_depth: 20
+  # Checkpoint BTC dung, ghi ro trong PDF §3. Da xac minh: cosine 0.9992-1.0000
+  # so voi vector BTC cap (scripts/verify_clip_checkpoint.py).
+  clip_checkpoint: clip-ViT-B-32
+  # Thap text PHAI la ban multilingual: clip-ViT-B-32 goc khong doc duoc tieng
+  # Viet — 3 cau hoi khac nghia tra ve CUNG 3 keyframe. Ban nay chung cat vao
+  # DUNG khong gian anh cua clip-ViT-B-32 nen khong phai re-index.
+  clip_text_checkpoint: sentence-transformers/clip-ViT-B-32-multilingual-v1
+
+submit:
+  # DA CHOT theo PDF §2.1.1: dap an la <video_id>, <frame_id>.
+  # by_timestamp/by_frame_range/raw_keyframe giu lai cho sprint sau, khong dung.
+  schema_format: by_frame
+  frame_range_window: 25             # only used by by_frame_range
+
+eval:
+  queryset: eval/queryset.jsonl
+  # Dung 5 moc cua Final Score (PDF §2.2), khong phai [1,5,10] tu doan.
+  recall_at: [1, 5, 20, 50, 100]

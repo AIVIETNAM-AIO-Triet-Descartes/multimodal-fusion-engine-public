@@ -1,0 +1,79 @@
+# BUNDLE BTC — LƯỢT 6: nhúng caption bằng BGE-M3
+# notebooks/btc/09-btc-bge-m3-embed.ipynb
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# CHẠY SAU LƯỢT 5 (`ingest_shards_batch1_btc_caption.yaml`). Tầng `n6_bge_m3`
+# đọc part `qwen_captions` **từ Volume**; chưa có caption thì nó ném ngay chứ
+# không ghi một part rỗng.
+#
+# CÙNG bundle, CÙNG volume, CÙNG bảng phân công như năm lượt trước. Bảng phân
+# công đọc từ `config/zips_keyframes_btc.yaml` — file DUY NHẤT, không chép lại.
+# `part-manifest/{video}.json` ghi đúng MỘT `author` và `merge.check_ownership`
+# từ chối cả bundle nếu author khác người được giao (§4.1 handoff).
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# VÌ SAO LÀ LƯỢT RIÊNG chứ không nối vào lượt 5:
+#
+#   vLLM giữ `gpu_memory_utilization=0.9`. Nạp thêm BGE-M3 (~2,2 GB) trong cùng
+#   vòng lặp là OOM; tháo rồi nạp lại model theo từng video thì tốn hơn cả phần
+#   việc nó làm. Một phiên, một model.
+#
+# ĐÂY LÀ LƯỢT RẺ NHẤT CỦA CẢ BUNDLE, và lý do đáng nhớ:
+#
+#   `stage_n6_bge_m3` **không đọc ảnh**. Nó tải một file JSON caption cho mỗi
+#   video rồi nhúng văn bản. Nên lượt này KHÔNG tải `Keyframes_*.zip` (28,7 GB),
+#   KHÔNG cần `map-keyframes`, KHÔNG cần bung ảnh — khoá của vector lấy thẳng từ
+#   khoá của caption, vốn đã là `{video_id}#{frame_idx:06d}` do lượt 5 dựng.
+#
+#   Kéo theo: notebook 09 ngắn hơn hẳn notebook 08, và **không có `PART`**. Cắt
+#   lát tồn tại để tránh tải cùng một gói zip nhiều lần; ở đây không có gói zip
+#   nào để tải, nên chia lát chỉ thêm một cần gạt sai được mà không lợi gì.
+#
+# VÌ SAO KHÔNG THÊM `n6_bge_m3` VÀO FILE CỦA LƯỢT 5:
+#
+#   `merge_bundle.py` đòi ĐỦ mảnh cho mọi tầng có trong `plan.stages`. Gộp chung
+#   là caption không gộp được cho tới khi cả 873 video đã nhúng xong. Tách ra thì
+#   gộp được độc lập:
+#
+#     python scripts/merge_bundle.py --shards config/ingest_shards_batch1_btc_bge.yaml
+#
+#   Lệnh đó chỉ gộp `dense_vectors`; nó không đụng năm lượt kia vì `merge` lọc
+#   artifact theo `spec.stage in plan.stages`.
+
+bundle: aic_btc_b1_v1
+keyframe_set: btc
+calibration_video: L21_V001
+
+assign: zips
+zip_inventory: config/zips_keyframes_btc_capb1.yaml
+
+stages:
+  - n6_bge_m3
+
+# ───────────────────────────────────────────────────────────────────────────
+# KHÔNG có `extras`. Lượt này không tải gì từ website BTC.
+# ───────────────────────────────────────────────────────────────────────────
+
+params:
+  n6_bge_m3:
+    # `batch_size` là thứ DUY NHẤT ở đây, và nó nằm trong `params` chứ không
+    # `facts` một cách CÓ CHỦ Ý — khác hẳn `n6_caption_qwen`.
+    #
+    # Lý do: BGE-M3 là encoder, không phải bộ sinh. Kích thước lô không đổi
+    # vector nó trả về (chỉ đổi cách gom, và mọi câu đều được đệm về cùng độ
+    # dài trong lô của nó). Với `n6_caption_qwen` thì ngược lại: vLLM xếp lịch
+    # theo lô nên lô khác cho ra chuỗi khác, và ở đó `batch_size` phải là
+    # `facts`, nếu không `check_fingerprints` từ chối cả bundle chỉ vì hai người
+    # dùng hai loại GPU.
+    #
+    # Để nó ở `params` cho `check_fingerprints` so được là có ích thật: hai
+    # người nhúng cùng một bundle bằng hai lô khác nhau thì phép đệm khác nhau,
+    # và dù chênh lệch rất nhỏ, nó vẫn là hai phép đo — đúng thứ đáng biết.
+    #
+    # 16 hợp với T4 15 GB. Hạ xuống 8 nếu OOM; nhớ là cả nhóm phải để cùng số.
+    batch_size: 16
+
+    # `source` KHÔNG khai ở đây. Từ 25-08-2026 tầng chỉ đọc `qwen_captions` và
+    # con số đó cứng trong `stages._BGE_M3_SOURCE` — nhưng nó VẪN được ghi vào
+    # `params` của part, nên `check_fingerprints` vẫn so được giữa các shard.
+    # Một nguồn sự thật, và nó nằm ở chỗ không ai gõ nhầm được.

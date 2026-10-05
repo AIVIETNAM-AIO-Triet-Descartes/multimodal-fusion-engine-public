@@ -1,0 +1,59 @@
+# BUNDLE BTC — LƯỢT 7: nhúng PHỤ ĐỀ bằng BGE-M3
+# tầng `n7_bge_m3_subtitles` -> artifact `subtitles_dense` -> arm `subtitle_bge_m3`
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# VÌ SAO FILE NÀY TỒN TẠI — và nó chặn một lỗi HỎNG IM LẶNG
+#
+#   `merge.py` chọn artifact bằng đúng một dòng:
+#
+#       wanted = [name for name, spec in ARTIFACTS.items() if spec.stage in plan.stages]
+#
+#   `subtitles_dense` khai `stage="n7_bge_m3_subtitles"`, và trước file này
+#   **không plan nào** liệt kê tầng đó. Nghĩa là gộp bằng bất kỳ plan cũ nào
+#   cũng bỏ qua `subtitles_dense` — không từ chối, không cảnh báo, vì artifact
+#   không bao giờ vào `wanted`. Sau đó arm `subtitle_bge_m3` báo "khong co
+#   subtitles_dense.npz" và người đọc kết luận là **tầng offline chưa chạy**,
+#   trong khi 873 mảnh nằm sẵn trên Volume.
+#
+#   Đúng cái bẫy `sviptr_ocr` đã mắc một lần, chỉ khác chiều: ở đó vắng mặt là
+#   CỐ Ý, ở đây là quên.
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# VÌ SAO LÀ LƯỢT RIÊNG chứ không nối vào lượt 6 (`..._btc_bge.yaml`):
+#
+#   `merge_bundle.py` đòi ĐỦ mảnh cho MỌI tầng có trong `plan.stages`. Gộp
+#   chung thì `dense_vectors` (đã đủ 873 từ trước) không gộp được cho tới khi
+#   phụ đề nhúng xong nốt. Tách ra thì gộp độc lập:
+#
+#     python scripts/merge_bundle.py --shards config/ingest_shards_batch1_btc_subtitle_bge.yaml
+#
+# NGUỒN: part `subtitles` trên Volume, KHÔNG phải ảnh. Nên lượt này không tải
+# `Keyframes_*.zip`, không cần `map-keyframes` — khoá vector lấy thẳng từ khoá
+# của phụ đề, vốn đã là `{video_id}#{frame_idx:06d}`.
+#
+# CÙNG bundle, CÙNG volume, CÙNG bảng phân công như sáu lượt trước. Bảng phân
+# công đọc từ `config/zips_keyframes_btc.yaml` — file DUY NHẤT, không chép lại.
+
+bundle: aic_btc_b1_v1
+keyframe_set: btc
+calibration_video: L21_V001
+
+assign: zips
+zip_inventory: config/zips_keyframes_btc.yaml
+
+stages:
+  - n7_bge_m3_subtitles
+
+# ───────────────────────────────────────────────────────────────────────────
+# KHÔNG có `extras`. Lượt này không tải gì từ website BTC.
+# ───────────────────────────────────────────────────────────────────────────
+
+params:
+  n7_bge_m3_subtitles:
+    # Cùng lý do như `n6_bge_m3`: BGE-M3 là encoder, kích thước lô không đổi
+    # vector nó trả về, nên `batch_size` nằm ở `params` (để `check_fingerprints`
+    # so được giữa các shard) chứ không ở `facts` (thứ sẽ từ chối cả bundle).
+    #
+    # PHẢI khớp con số lượt 6 dùng: hai lượt cùng model, và hai phép đệm khác
+    # nhau vẫn là hai phép đo.
+    batch_size: 16

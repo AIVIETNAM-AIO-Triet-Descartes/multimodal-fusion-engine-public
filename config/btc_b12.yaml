@@ -1,0 +1,94 @@
+# Runtime kho gộp BTC batch 1 + batch 2.
+# Các artifact lớn và map/ảnh nằm trên mount /data; script chuẩn bị kho là
+# scripts/aggregate_latest_parts.py và scripts/build_b12_relational.py.
+paths:
+  map_keyframes: /data/multimodal-fusion-engine/runtime/btc_b12/relational/map-keyframes/
+  media_info: /data/multimodal-fusion-engine/runtime/btc_b12/relational/media-info/
+  videos: /data/multimodal-fusion-engine/runtime/btc_b12/videos/
+  keyframes: /data/multimodal-fusion-engine/runtime/btc_b12/keyframes/
+  clip_features: /data/multimodal-fusion-engine/runtime/btc_b12/clip-features/
+  objects: /data/multimodal-fusion-engine/runtime/btc_b12/objects/
+  segments: /data/multimodal-fusion-engine/runtime/btc_b12/segments/
+  vector_store: /data/multimodal-fusion-engine/runtime/btc_b12/vector/
+  inverted_store: /data/multimodal-fusion-engine/runtime/btc_b12/inverted/
+  asset_store: /data/multimodal-fusion-engine/runtime/btc_b12/asset/
+  relational_db: /data/multimodal-fusion-engine/runtime/btc_b12/relational/app.db
+  eval_results: /data/multimodal-fusion-engine/runtime/btc_b12/eval/
+  throughput: /data/multimodal-fusion-engine/runtime/btc_b12/throughput.json
+  event_log: /data/multimodal-fusion-engine/runtime/btc_b12/events.jsonl
+
+storage:
+  backend: local
+
+models:
+  clip: null
+  detector: null
+  ocr: null
+  metadata: null
+  reranker: null
+
+features:
+  source: provided
+  object_score_min: 0.3
+  metadata_fields: [title, keywords, author]
+
+retrieval:
+  embed_dim: 512
+  coarse_topk: 500
+  rerank_topk: 100
+  fusion:
+    mode: rrf
+  fusion_weights:
+    clip: 1.0
+    bm25: 1.0
+    siglip: 2.0
+    bge_m3: 1.0
+    subtitle_bge_m3: 1.0
+    # Hai arm cửa sổ mới đã có dữ liệu, nhưng CHƯA từng leo dốc. 1.0 là giá
+    # trị tạm theo kế hoạch ingest; phải đo lại toàn bộ bảng sau khi có đề B2.
+    window_bm25: 1.0
+    window_bge_m3: 1.0
+    caption_gemini: 1.0
+    ocr_gemini: 0.5
+    ocr_qwen25: 1.0
+    subtitle_partial: 1.0
+    subtitle_exact: 1.0
+  # These are intentionally unavailable/disabled in the merged runtime. A
+  # zero weight would still pay their query cost and would bias one batch when
+  # only one side has the artifact.
+  arms_disabled:
+    - caption
+    - caption_qwen
+    - ocr
+    - ocr_paddle
+    - ocr_vietocr
+    - object
+    - clap
+    # Đã ingest đầy đủ artifact window, nhưng trọng số 1.0 chưa tune và phép
+    # đo trên dev làm Final giảm; giữ dữ liệu + UI override, tắt mặc định.
+    - window_bm25
+    - window_bge_m3
+  rerank_budget_ms: 20000
+  rerank_depth: 100
+  temporal_window_frames: 640
+  dedup_depth: 20
+  scene_order_weight: 0.5
+  rerank_tiers: []
+  rerank_tier_depth: 20
+  rerank_skip_when_scene_order: true
+  clip_checkpoint: clip-ViT-B-32
+  clip_text_checkpoint: sentence-transformers/clip-ViT-B-32-multilingual-v1
+  translation:
+    enabled: true
+    tiers: [mt]
+    mt_checkpoint: VietAI/envit5-translation
+    mt_num_beams: 1
+    cache_path: eval/translations.json
+
+submit:
+  schema_format: by_frame
+  frame_range_window: 25
+
+eval:
+  queryset: eval/dev/
+  recall_at: [1, 5, 20, 50, 100]

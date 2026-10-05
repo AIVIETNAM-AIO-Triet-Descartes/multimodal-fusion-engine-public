@@ -1,0 +1,49 @@
+# BUNDLE BTC — GỘP CHUNG lượt 5 + 6 + 7 để ĐẨY LÊN bundle
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# VÌ SAO CÓ FILE NÀY, khi đã có ba plan riêng
+#
+#   Ba plan riêng tồn tại để **gộp độc lập**: `merge_bundle.py` đòi đủ mảnh cho
+#   mọi tầng trong `plan.stages`, nên gộp chung là caption không gộp được cho
+#   tới khi phụ đề nhúng xong. Đúng cho lúc dữ liệu về lệch nhau.
+#
+#   Nhưng `--upload` thì ngược lại. Nó đẩy CẢ `out/`, trong đó có
+#   `manifest.json`, lên đúng một đường dẫn `{root}/manifest.json`. Ba lượt
+#   riêng = ba manifest ghi đè nhau, và cái sống sót chỉ mô tả MỘT artifact.
+#   Bản kê của bundle khi ấy nói dối về chính bundle đó — kể cả về
+#   `accepted_divergences`, tức mất luôn dấu vết Lead đã ký duyệt cái gì.
+#
+#   Nên: gộp riêng khi dữ liệu về lệch nhau, gộp CHUNG khi đẩy lên.
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Bốn tầng dưới đây đều đã đủ 873/873 mảnh (đếm trên Volume 28-08-2026).
+#
+#   n6_caption_qwen      -> qwen_captions.json    -> arm caption_qwen
+#   n6_ocr_qwen25        -> qwen_ocr.json         -> arm ocr_qwen25
+#   n6_bge_m3            -> dense_vectors.npz     -> arm bge_m3
+#   n7_bge_m3_subtitles  -> subtitles_dense.npz   -> arm subtitle_bge_m3
+#
+# LỆCH ĐÃ KÝ DUYỆT: `transformers` chạy ba bản trên hai tầng Qwen — xem
+# `config/accepted_divergences.yaml` mục `env.n6_caption_qwen.transformers`.
+# Không có hai mục đó thì lượt này vẫn `TU CHOI GOP`.
+
+bundle: aic_btc_b1_v1
+keyframe_set: btc
+calibration_video: L21_V001
+
+assign: zips
+zip_inventory: config/zips_keyframes_btc.yaml
+
+stages:
+  - n6_caption_qwen
+  - n6_ocr_qwen25
+  - n6_bge_m3
+  - n7_bge_m3_subtitles
+
+params:
+  # Giữ nguyên đúng những gì ba plan riêng khai. Khai lại khác đi ở đây thì
+  # `check_fingerprints` so mảnh với một kỳ vọng không ai từng chạy.
+  n6_bge_m3:
+    batch_size: 16
+  n7_bge_m3_subtitles:
+    batch_size: 16

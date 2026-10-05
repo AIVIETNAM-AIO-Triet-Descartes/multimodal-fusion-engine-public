@@ -1,0 +1,404 @@
+# Toàn bộ batch 1 của BTC — 873 video, 178.195 keyframe.
+#
+# Tách khỏi `config/pilot.yaml` thay vì sửa nó: pilot trỏ vào `stores/pilot/`
+# với 3 video lấy từ SOTA_AIC, và nó là mốc so sánh đang dùng được. Ghi đè lên
+# đó là mất mốc.
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# KHO NÀY KHÔNG DỰNG BẰNG `mfe-ingest`.
+#
+# `mfe.offline.ingest` đòi một `ProvidedDataset` đầy đủ trên đĩa — ảnh keyframe,
+# `objects/`, và `clip-features/{video}.npy` khớp từng dòng với `map-keyframes`.
+# Với batch 1 là ~28 GB, và `clip-features` thì KHÔNG có trên Volume.
+#
+# Thay vào đó: `scripts/build_btc_relational.py` dựng bảng `videos`/`keyframes`
+# từ hai thư mục nhỏ (~2 MB), còn 10 arm chính đọc Elasticsearch + Milvus. Hai
+# kho local dưới đây (`vector_store`, `inverted_store`) CỐ Ý để rỗng — arm `clip`
+# và `bm25` sẽ ngồi ngoài và nói rõ lý do trong bảng arm.
+# ═══════════════════════════════════════════════════════════════════════════
+
+paths:
+  # Hai thư mục THẬT SỰ cần, kéo từ Volume về.
+  map_keyframes: data/btc_b1/map-keyframes/   # NGUỒN SỰ THẬT cho frame_idx
+  media_info: data/btc_b1/media-info/
+
+  # Không tải về: ~28 GB, và tầng truy vấn không đọc chúng. Khai để `Config`
+  # hợp lệ; thư mục rỗng thì arm tương ứng tự tắt kèm lý do.
+  videos: data/btc_b1/videos/
+  keyframes: data/btc_b1/keyframes/
+  clip_features: data/btc_b1/clip-features/
+  objects: data/btc_b1/objects/
+
+  segments: data/segments_btc_b1/
+  vector_store: stores/btc_b1/vector/
+  inverted_store: stores/btc_b1/inverted/
+  asset_store: stores/btc_b1/asset/
+  relational_db: stores/btc_b1/relational/app.db
+  eval_results: eval/results_btc_b1/
+  throughput: eval/throughput_btc_b1.json
+  event_log: eval/results_btc_b1/events.jsonl
+
+storage:
+  backend: local
+
+models:
+  clip: null
+  detector: null
+  ocr: null
+  metadata: null
+  # Stage C TẮT cho lượt đo đầu tiên trên toàn tập, hai lý do:
+  #   1. Đo được 116 ms/ảnh trên CPU (`torch` trong venv là bản +cpu), tức
+  #      ~12 giây/truy vấn. Trên 51 câu dev là 10 phút chỉ cho tầng cuối.
+  #   2. Reranker chạy SAU khi gộp, nên nó làm nhoè đúng phép đo ta cần: arm nào
+  #      đóng góp gì ở quy mô 873 video.
+  # Bật lại sau khi có con số nền, và sau khi cài torch CUDA.
+  reranker: null
+
+features:
+  source: provided
+  object_score_min: 0.3
+  metadata_fields: [title, keywords, author]
+
+retrieval:
+  embed_dim: 512
+  coarse_topk: 500
+  rerank_topk: 100                   # = trần 100 đáp án/truy vấn của BTC (§2.2)
+  fusion:
+    mode: rrf
+  # ═══ Thiên kiến THỨ TỰ CẢNH cho KIS nhiều cảnh — bật 28-08-2026 ═══
+  #
+  # Tách câu thành mệnh đề, truy hồi từng mệnh đề, rồi thưởng video nào kể được
+  # câu chuyện ĐÚNG THỨ TỰ THỜI GIAN (`mfe.online.scene_order` + `dante.align`).
+  #
+  # Đo trên 14 câu KIS ba cảnh (`eval/queryset_order_l30.jsonl`, video L30 chưa
+  # câu dev/heldout nào đụng tới):
+  #
+  #                       RỘNG          hạng TB     lên/xuống
+  #   nền                 0,800         10,3        —
+  #   scene_order 0,5     0,843         4,2         4 / 0
+  #
+  # DANTE xếp ĐÚNG VIDEO lên hạng nhất ở 14/14 câu, trên 873 video. Kiểm chéo
+  # qua `mfe.eval.official` (đường chạy thật, không phải script đo): 0,771 →
+  # 0,814, cùng Δ +0,043.
+  #
+  # KHÔNG LÀM HỎNG, đo chứ không suy: trên 189 câu dev tầng chạm 4 câu (+0,050),
+  # 111 câu KIS còn lại GIỮ NGUYÊN TỪNG CON SỐ. Trên heldout: 0/36 câu chạm tới.
+  #
+  # ĐỘ PHỦ THẤP, và đó là giới hạn thật: chỉ câu tách được ≥3 mệnh đề mới kích
+  # hoạt (`MIN_CLAUSES_FOR_PRIOR`), vì câu 2 mệnh đề đo được là LUÔN gây hại —
+  # với 2 mệnh đề, hai vị trí bất kỳ trong một video xếp đúng thứ tự với xác
+  # suất ~½ nên ràng buộc tăng dần gần như không lọc gì. Đếm trên 38 đề KIS
+  # thật: 21 câu có từ nối, 14 câu tách được ≥2, nhưng chỉ **3 câu** đạt ≥3.
+  # Nút thắt là bộ luật tách dè dặt, không phải cơ chế — người vận hành tách tay
+  # ở giao diện (`scene_order.clauses_from_texts`) là đường nâng độ phủ.
+  #
+  # GIÁ: chạy lại tầng A một lần MỖI MỆNH ĐỀ, tức 3× chi phí truy hồi — nhưng
+  # chỉ trên câu thật sự kích hoạt; 111/115 câu dev thoát ra trước đó.
+  scene_order_weight: 0.5
+
+  # ═══ Tầng rerank cho LƯỢT NỘP — bật `vlm` 28-08-2026 (Lead quyết) ═══
+  #
+  # Đo lại 27-08 trên 163 câu dev, đúng nền đang dùng (0,515 · hạng TB 11,6):
+  #
+  #   vlm        0,530   +0,015   hạng TB 11,3   161/163   27,6 s/câu
+  #   ta         0,506   −0,010   hạng TB 12,6   163/163   15,3 s/câu
+  #   hf_cross   0,486   −0,029   hạng TB 13,2   138/163    8,8 s/câu
+  #   colpali    0,482   −0,033   hạng TB 13,2   163/163   36,6 s/câu
+  #
+  # `vlm` là tầng DUY NHẤT dương. Ba tầng kia âm, nên danh sách này có đúng một
+  # tên — không phải vì chưa thử, mà vì đã thử cả bốn.
+  #
+  # ⚠ PHẢI đặt `MFE_GEMINI_VLM_MODEL=gemini-flash-lite-latest` khi chạy.
+  #   Mặc định của module là `gemini-3.6-flash`, mà free tier của nó cho **20
+  #   request MỖI NGÀY** — với 49 đề thì nó chết ở câu thứ 21 và 28 câu còn lại
+  #   giữ nguyên thứ tự cũ mà KHÔNG có gì đỏ lên trong file nộp. Con số +0,015
+  #   ở trên đo bằng `flash-lite`, nên đó cũng là model duy nhất bảng này nói về.
+  #
+  # GIÁ: 20 ảnh/câu gửi lên API tính phí. 49 đề = 980 ảnh, ~23 phút cho cả lượt
+  # nộp. Chấp nhận được cho một lượt nộp, KHÔNG chấp nhận được cho vòng lặp thử.
+  #
+  # ═══ ⚠ 28-08 (tối): ĐO TRÊN HELDOUT, `vlm` MẤT ĐIỂM. CHỜ LEAD QUYẾT ═══
+  #
+  # Cùng config, cùng 60 câu heldout, đổi đúng dòng này:
+  #
+  #                RỘNG    HẸP  |  KIS    QA     TRAKE
+  #   vlm BẬT     0,509  0,393  | 0,500  0,667   0,285
+  #   vlm TẮT     0,536  0,413  | 0,517  0,733   0,285
+  #
+  # −0,027 RỘNG · −0,020 HẸP. Nặng nhất ở QA: 0,733 → 0,667.
+  #
+  # Đây là bằng chứng THỨ HAI cùng chiều. Thứ nhất: trên 14 câu KIS ba cảnh,
+  # thứ tự cảnh đưa 0,771 → 0,814 rồi `vlm` kéo về lại 0,771 (khối
+  # `rerank_skip_when_scene_order` bên dưới).
+  #
+  # Còn con số +0,015 làm cơ sở bật `vlm`? Nó đến từ `measure_rerank.py`, vốn
+  # gộp lại từ cache evidence và KHÔNG gọi `Cascade.search` — nên nó tả một hệ
+  # không có thứ tự cảnh, và giờ cũng không có bốn arm mới. Nghi ngờ này đã ghi
+  # sẵn ở khối dưới từ 28-08; giờ có số cho nó.
+  #
+  # Log cho thấy `vlm` dời 17–20 trong 20 ứng viên mỗi câu — nó VIẾT LẠI thứ tự
+  # đầu chứ không tinh chỉnh. Với một tầng chỉ +0,015 trên dev, mức can thiệp
+  # đó là đặt cược, không phải lớp an toàn.
+  #
+  # ═══ 04-09: ĐO LẠI ĐÚNG THIẾT KẾ §O.3 — TẮT. Lead quyết. ═══
+  #
+  # `vlm` KHÔNG tất định, nên một cặp bật/tắt không kết luận được. Chạy tắt ×1
+  # (tất định) và bật ×3, cùng 60 câu heldout, cùng config, đổi đúng dòng này:
+  #
+  #                 RỘNG     HẸP  |  KIS     QA    TRAKE
+  #   vlm TẮT      0,5228  0,4064 | 0,517  0,680   0,285
+  #   vlm bật #1   0,4828  0,3764 | 0,489  0,587   0,285
+  #   vlm bật #2   0,5028  0,3831 | 0,506  0,627   0,285
+  #   vlm bật #3   0,5061  0,3931 | 0,517  0,613   0,285
+  #   bật: TB      0,4972  0,3842
+  #
+  # Δ trung bình −0,0256 RỘNG · −0,0222 HẸP. Khoảng của nhánh bật
+  # [0,4828–0,5061] **không chạm** 0,5228 trên CẢ HAI thước — đó đúng là điều
+  # kiện §O.3 đặt ra để được phép kết luận. Thiệt hại tập trung ở QA
+  # (0,680 → 0,609); TRAKE không đổi vì `rerank_tier_depth` = 20.
+  #
+  # Tầng CÓ chạy thật: 80/81 · 81/81 · 80/81 câu, dời 15–17 trong 20 ứng viên
+  # mỗi câu. Đây không phải "tầng ngồi ngoài in ra +0,000".
+  #
+  # Quota KHÔNG phải nguyên nhân: **0 lỗi 429 trên 243 lượt gọi**
+  # `gemini-flash-lite-latest`. Chế độ hỏng thật là **503 UNAVAILABLE** (2 lần,
+  # mỗi lần 1 câu mất rerank) — ngẫu nhiên, nên hai lượt cùng cấu hình chấm
+  # khác số câu. Đó là nguồn dao động THỨ HAI chồng lên cái vốn đã không tất
+  # định.
+  #
+  # Con số +0,015 hồi 27-08 sai vì nó đo trên **dev** — chính bộ mà mọi thứ
+  # khác cũng đã được chỉnh trên đó. Heldout bác nó ba lần liên tiếp.
+  #
+  # Bật lại cho MỘT câu vẫn làm được trên giao diện (`app/submit_lab.py`, bộ
+  # tuỳ chọn theo phạm vi) — đó là chỗ đúng để thử một câu bí, không phải ở đây.
+  rerank_tiers: []
+  rerank_tier_depth: 20
+
+  # `vlm` NGỒI NGOÀI câu đã có thiên kiến thứ tự cảnh — hai bên giẫm chân nhau.
+  # Đo qua `mfe.eval.official` trên 14 câu KIS ba cảnh:
+  #   thứ tự cảnh tắt, vlm tắt   0,771
+  #   thứ tự cảnh BẬT, vlm tắt   0,814
+  #   thứ tự cảnh bật, vlm BẬT   0,771   <- vlm xoá sạch phần vừa được
+  # `vlm` dời 16/20 ứng viên mỗi câu. Thứ tự cảnh làm việc ở mức VIDEO (đẩy cả
+  # cụm khung của video kể đúng chuyện lên), còn `vlm` xếp lại 20 khung đầu mà
+  # không biết gì về trình tự — nó chỉ so từng ảnh với câu truy vấn.
+  #
+  # CHƯA ĐO: `vlm` + thứ tự cảnh trên 163 câu dev. Con số +0,015 của `vlm` đến
+  # từ `measure_rerank.py`, vốn gộp cache evidence và KHÔNG gọi `Cascade.search`
+  # — tức nó tả một hệ KHÔNG có thứ tự cảnh. Xem `docs/triet/handoff.md` §K.
+  rerank_skip_when_scene_order: true
+
+  # KHAI ĐỦ mọi arm, kể cả cái đang bằng 1.0 và cái chưa có dữ liệu.
+  # `tune_weights.py` chỉ quét những khoá CÓ MẶT trong file này, nên arm không
+  # khai là arm không bao giờ được chỉnh.
+  #
+  fusion_weights:
+    # ═══ ĐO LẠI 28-08-2026 trên kho phẳng 12 ARM — bảng 24-08 ĐÃ CŨ ═══
+    #
+    # Bốn nguồn mới về cùng lúc (lượt 5+6+7): `qwen_captions`, `qwen_ocr`,
+    # `dense_vectors`, `subtitles_dense`. Kho đi từ 7 lên 11 file, arm chạy được
+    # từ 8 lên 12. Bảng trọng số cũ được leo dốc trên một hệ KHÔNG có bốn arm
+    # đó, nên nó không còn mô tả hệ nào đang chạy.
+    #
+    # Coordinate ascent trên 163 câu `eval/queryset_dev.jsonl` (KIS+QA; 26 câu
+    # TRAKE để ngoài vì chúng ghép qua DANTE).
+    #
+    #                          RỘNG    HẸP    hạngTB   trúng
+    #   trọng số 24-08         0,530   0,412   15,2   124/163
+    #   sau leo dốc 28-08      0,583   0,442   12,1   129/163
+    #
+    # +0,053 trên dev.
+    #
+    # ── CÔNG BỐ trên heldout 60 câu (KIS 36 · QA 15 · TRAKE 9) ───────────────
+    #
+    # Bốn lượt, CÙNG kho, CÙNG bộ đề, mỗi lượt đổi đúng một thứ:
+    #
+    #                                  RỘNG    HẸP  |  KIS    QA    TRAKE
+    #   trọng số 24-08, vlm BẬT        0,499  0,369 | 0,478  0,680  0,285
+    #   trọng số 28-08, vlm BẬT        0,509  0,393 | 0,500  0,667  0,285
+    #   trọng số 28-08, vlm TẮT        0,536  0,413 | 0,517  0,733  0,285
+    #   ~8 arm cũ, vlm TẮT             0,541  0,391 | 0,533  0,693  0,320
+    #
+    # Đọc bảng này theo BA kết luận, và chỉ một trong ba là về trọng số:
+    #
+    # 1. Bảng mới THẮNG bảng cũ khi so đúng nền: +0,010 RỘNG · +0,024 HẸP.
+    # 2. `vlm` MẤT 0,027 RỘNG trên heldout — xem khối `rerank_tiers` ở trên.
+    # 3. Bốn arm mới KHÔNG cho lợi rõ trên RỘNG (0,541 → 0,536, trong vùng
+    #    nhiễu ±0,005 trên 60 câu) dù dev tăng +0,053. Chúng thắng ở HẸP
+    #    (+0,022) và ở QA (+0,040), thua ở KIS và TRAKE. Dev tăng nhiều hơn
+    #    heldout là dấu hiệu leo dốc bám bộ dev — chưa đủ để bỏ, đủ để KHÔNG
+    #    nói rằng bốn nguồn mới đã cải thiện hệ.
+    #
+    # ⚠ ĐỪNG so với con số 0,563 ghi hồi 24-08. Nó KHÔNG tái lập được từ chính
+    # bảng theo dạng của nó trên bộ heldout hiện tại:
+    #   (0,511×36 + 0,833×15 + 0,178×9)/60 = 0,542 ≠ 0,563
+    # trong khi bảng hôm nay khớp khít: (0,517×36 + 0,733×15 + 0,285×9)/60
+    # = 0,536. Tức 0,563 đo trên một bộ heldout KHÁC. So với nó là lặp lại đúng
+    # cái sai mà bảng rerank 24-08 đã mắc.
+    #
+    # ĐỪNG so 0,583 với 0,610 của bảng cũ — 0,610 đo trên **42 câu** của bộ dev
+    # cũ, còn đây là **163 câu**. Hai bộ khác nhau thì hai con số không nói
+    # chuyện được với nhau; con số so được nằm ngay trên: 0,530 → 0,583 trên
+    # CÙNG 163 câu, CÙNG kho.
+    #
+    # Tái lập:
+    #   python scripts/tune_weights.py --config config/btc_b1.yaml
+    #     --queryset eval/queryset_dev.jsonl --skip-types TRAKE
+    #     --flat-root stores/flat --en-source auto
+    #     --evidence-cache .cache/tune/dev-kisqa-v3.json
+    #
+    # Cache PHẢI là file mới (`v3`). Vân tay của `--evidence-cache` chỉ bắt
+    # config/queryset/topk/en-source — KHÔNG bắt nội dung kho. Dùng lại `v2` là
+    # leo dốc trên kết quả của kho 8 arm và vẫn in ra một bảng đẹp.
+    #
+    # Lưới (0 · 0,5 · 1 · 2 · 4) + OFF, dừng sau 3 vòng. Cực trị ĐỊA PHƯƠNG trên
+    # lưới thô đó; lưới mịn vẫn chưa quét.
+    #
+    # ── vì sao từng con số ───────────────────────────────────────────────────
+    clip: 1.0
+    bm25: 1.0
+
+    # siglip 2.0 — vẫn là arm gánh cả hệ, và bốn arm mới KHÔNG thay được nó.
+    # Quét vòng 3: OFF 0,357 · 0,5 0,453 · 1,0 0,540 · 2,0 0,583 · 4,0 0,553.
+    # Tắt nó đi mất 0,226 — lớn hơn tổng đóng góp của mọi arm còn lại.
+    siglip: 2.0
+
+    # bge_m3 1.0 — nhúng CAPTION Qwen2.5-VL. Lần đầu có dữ liệu để đo.
+    # Quét: OFF 0,533 · 0,5 0,568 · 1,0 0,583 · 2,0 0,567 · 4,0 0,503.
+    # Tắt mất 0,050 — arm mạnh thứ hai sau siglip.
+    bge_m3: 1.0
+
+    # subtitle_bge_m3 1.0 — nhúng PHỤ ĐỀ, arm thêm 28-08. Không phải bản sao của
+    # `bge_m3` (cái kia nhúng thứ NHÌN thấy, cái này nhúng thứ NGHE thấy) cũng
+    # không phải bản sao của hai arm subtitle kia (chúng khớp CHỮ, nó khớp NGHĨA).
+    # Quét vòng 1: 0,0 0,567 -> 1,0 0,575. Vòng 3: OFF 0,562 · 1,0 0,583.
+    subtitle_bge_m3: 1.0
+
+    # Hai arm cửa sổ 15 giây. Dữ liệu và cách mở rộng về keyframe vừa được
+    # bổ sung; 1.0 là giá trị TẠM, CHƯA từng leo dốc trên dev/heldout.
+    window_bm25: 1.0
+    window_bge_m3: 1.0
+
+    # caption_qwen 1.0 — BM25 trên chính caption tiếng Anh mà `bge_m3` nhúng.
+    # Hai arm trên cùng một văn bản mà KHÔNG dìm nhau: quét OFF 0,568 · 1,0 0,583.
+    # Khớp chữ và khớp nghĩa bắt được hai loại câu khác nhau.
+    caption_qwen: 1.0
+
+    # ocr_qwen25 1.0 — OCR bằng Qwen2.5-VL. Quét: OFF 0,579 · 1,0 0,583.
+    # Đóng góp nhỏ hơn ba arm trên, nhưng DƯƠNG — khác hẳn hai bộ OCR cũ.
+    ocr_qwen25: 1.0
+
+    # subtitle_partial 1.0 -> 0.5. Quét vòng 3: 0,0 0,580 · 0,5 0,583 · 1,0 0,573.
+    # Bị `subtitle_bge_m3` chia việc: cùng nguồn `subtitles.json`, một bên khớp
+    # chữ một bên khớp nghĩa, nên giữ cả hai ở phiếu đầy đủ là đếm hai lần.
+    subtitle_partial: 0.5
+
+    # subtitle_exact 1.0 — KHÔNG THAM GIA lượt quét: trên 163 câu này nó không
+    # trả về gì. Khớp nguyên văn cả cụm sau chuẩn hoá gần như không bao giờ trúng
+    # một câu đề viết lại. Giữ 1.0 vì chưa có số để đổi, không phải vì đã đo.
+    subtitle_exact: 1.0
+
+    # caption 1.0 — `dense_captions.json` của Bảo, KHÔNG tầng nào sinh ra nên arm
+    # vĩnh viễn tối trên kho này. Cũng không tham gia quét. Giữ khoá để đọc được
+    # bundle của Bảo nếu có (CLAUDE.md §4).
+    caption: 1.0
+
+    # ocr 0.0 — easyocr, giữ nguyên từ 24-08 và lượt quét mới xác nhận lại:
+    # vòng 3 OFF 0,583 · 0,5 0,566 · 1,0 0,531. Bật lên là mất điểm.
+    ocr: 0.0
+
+    # ocr_paddle 0.5 -> 0.0. ĐẢO so với 24-08, và lý do là `ocr_qwen25`.
+    # Vai của paddle hồi đó là "đọc sạch logo và đồng hồ mà hai bộ kia làm hỏng";
+    # Qwen2.5-VL giờ làm việc đó tốt hơn, nên phiếu của paddle chỉ còn là nhiễu.
+    # Quét vòng 3: 0,0 0,583 · 0,5 0,568 · 1,0 0,544.
+    ocr_paddle: 0.0
+
+    # ocr_vietocr 1.0 -> 0.5. Cùng lý do: ba bộ OCR cũ giờ phải chia chỗ với
+    # `ocr_qwen25`. Quét vòng 3: 0,0 0,577 · 0,5 0,583 · 1,0 0,569.
+    ocr_vietocr: 0.5
+
+    # object 0.0 -> 0.5. ĐẢO so với 24-08, lần đầu arm này ăn được trọng số.
+    # Không phải vì `object` đổi — nó vẫn là bản token ghép của 26-08. Đổi là ở
+    # NỀN: khi ba bộ OCR cũ hạ xuống, chỗ trống trong hợp nhất đủ để nửa phiếu
+    # của `object` có tác dụng. Quét vòng 2: 0,0 0,582 · 0,5 0,583 · 1,0 0,575.
+    # Chênh 0,001 — nằm trong vùng nhiễu, giữ vì leo dốc chọn nó, không vì tin nó.
+    object: 0.5
+
+    # clap 0.5 -> 0.0. Nó NGHE, và giờ `subtitle_bge_m3` cũng trả lời phần "câu
+    # này nói về cái gì" bằng một tín hiệu sạch hơn hẳn. Quét vòng 3: OFF 0,583 ·
+    # 0,5 0,582 · 1,0 0,579. Vẫn CHƯA có câu hỏi nào về tiếng động để đo arm này
+    # bằng — 0,0 nghĩa là "không đóng góp trên bộ đề này", không phải "vô dụng".
+    clap: 0.0
+  rerank_budget_ms: 20000
+  # ── Arm TẮT HẲN — khác trọng số 0, và khác biệt đó tốn 25% độ trễ ──────────
+  #
+  # `fusion.py` ghi thẳng: "A weight of 0 does not disable an arm — the arm
+  # still contributes its candidates to the pool". Nên ba arm dưới đây vẫn chạy
+  # đủ thời gian rồi mới bị nhân với 0.
+  #
+  # Đo 25-09 trên 163 câu dev (`scripts/measure_latency.py` + `--ablation`):
+  #
+  #   arm          thời gian   ablation (gỡ HẲN)
+  #   ocr             772 ms   +0,000 · 124/163
+  #   ocr_paddle      994 ms   +0,000 · 124/163
+  #   clap             63 ms   +0,000 · 124/163
+  #   ──────────────────────────────────────────
+  #   cộng          1.829 ms   trên tổng 7.402 ms = 25%
+  #
+  # Không mất câu nào, không đổi Final (0,563 cả hai). Chi phí thuần.
+  #
+  # ── Thêm `object` + `ocr_vietocr` (Lead chốt 25-09) ───────────────────────
+  #
+  # Khác ba arm trên: hai arm này trọng số **0,5**, tức đang thật sự cho điểm.
+  # Lý do bỏ là **dữ liệu**, không phải hiệu năng:
+  #
+  #   ocr_vietocr  batch 2 KHÔNG kịp sinh vietocr, và `ocr_qwen25` (Gemini) đã
+  #                đảm nhận toàn bộ phần OCR cho cả hai batch. Giữ nó nghĩa là
+  #                mọi khung batch 1 được cộng tới 5,9% trần điểm hợp nhất mà
+  #                không khung batch 2 nào có cơ hội nhận — thiên lệch giữa hai
+  #                nửa kho, không phải vì nội dung mà vì thiếu một file.
+  #   object       Lead chốt không còn tính tới. Biên leo dốc của nó vốn là
+  #                0,001, và `config` tự ghi "nằm trong vùng nhiễu, giữ vì leo
+  #                dốc chọn nó, không vì tin nó".
+  #
+  # Đo 25-09 trước khi đổi, `mfe.eval.official`, gỡ CẢ HAI cùng lúc:
+  #
+  #   bộ đề      giữ        bỏ         Δ
+  #   dev      0,5192     0,5197    +0,0005
+  #   heldout  0,5419     0,5486    +0,0067
+  #
+  # ⇒ **Không mất gì, còn được một ít.** Con số "−0,006 khi bỏ vietocr" trong
+  # CLAUDE.md là của kho 12 arm hồi 28-08 và đã lạc hậu.
+  #
+  # ⚠ Vẫn NÊN leo dốc lại cả bảng trọng số (bỏ arm là đổi hợp nhất), nhưng số
+  # đo trên cho thấy đó không còn là việc CHẶN. Nhớ xoá `.cache/tune/*` trước.
+  #
+  # ⚠ Gắn với KHO HIỆN TẠI, và cả hai bộ đề đều dựng trên **batch 1** — nơi
+  # vietocr CÓ dữ liệu. Tức phép đo này đang cho vietocr lợi thế tối đa mà nó
+  # vẫn không thắng. Thiên lệch thật chỉ lộ khi khung batch 2 cạnh tranh cùng
+  # truy vấn với khung batch 1, và chưa có bộ đề nào như thế.
+  # Window đã có artifact và arm, nhưng trọng số 1.0 chưa tune. Phép đo hệ
+  # gộp làm Final dev giảm nên mặc định tắt; có thể bật riêng qua UI để đo.
+  arms_disabled:
+    [ocr, ocr_paddle, clap, object, ocr_vietocr, window_bm25, window_bge_m3]
+
+  rerank_depth: 100
+  temporal_window_frames: 640
+  dedup_depth: 20
+  clip_checkpoint: clip-ViT-B-32
+  clip_text_checkpoint: sentence-transformers/clip-ViT-B-32-multilingual-v1
+
+  translation:
+    enabled: true
+    tiers: [mt]
+    mt_checkpoint: VietAI/envit5-translation
+    mt_num_beams: 1                  # greedy: chạy lại phải ra đúng số cũ
+    cache_path: eval/translations.json
+
+submit:
+  schema_format: by_frame
+  frame_range_window: 25
+
+eval:
+  queryset: eval/dev/
+  recall_at: [1, 5, 20, 50, 100]

@@ -1,0 +1,211 @@
+# LỆCH GIỮA CÁC MẢNH MÀ LEAD ĐÃ XEM VÀ QUYẾT ĐỊNH GIỮ
+#
+#     src/mfe/offline/merge.py  ·  check_fingerprints / _compare
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# ĐÂY KHÔNG PHẢI CHỖ TẮT PHÉP KIỂM.
+#
+# Mỗi mục ở đây vẫn được so, vẫn in ra giá trị hai bên và video nào mang giá
+# trị nào, và `reason` được chép thẳng vào `manifest.json` của bundle đã gộp.
+# Thứ duy nhất nó đổi là: lệch đó không CHẶN merge nữa.
+#
+# Một mục thiếu `reason`/`decided_by`/`decided_on` thì `load_accepted_divergences`
+# NÉM LỖI. Một lệch được chấp nhận mà không ghi lý do thì sáu tuần sau không ai
+# phân biệt được nó với một phép kiểm bị tắt.
+#
+# Khoá đánh theo TỪNG TRƯỜNG, không phải cả artifact:
+#     {artifact}.model              — tên model
+#     {artifact}.params.{key}       — một tham số
+# Chấp nhận `subtitles.params.beam_size` KHÔNG chấp nhận `subtitles.params.window`.
+# ═══════════════════════════════════════════════════════════════════════════
+
+aic_btc_b1_v1:
+  # ─── Vì sao có lệch này ────────────────────────────────────────────────
+  # Trọng chạy `stage_n2_subtitles` của repo; Quang chạy một bản cài đặt riêng
+  # trong notebook 04 của bạn ấy. Model trùng nhau (`faster-whisper large-v3`,
+  # `float16`, `vi`, `vad_filter=True`, `min_silence_duration_ms=500`), nhưng
+  # LỐI GIẢI MÃ thì khác.
+  #
+  # Đo trên volume 20-08-2026: 404 video của Trọng, 469 của Quang.
+  #
+  # Lead chốt: chấp nhận. Chạy lại 469 video mất ~12 giờ GPU tính theo
+  # `elapsed_sec ≈ 91s` trong marker của Quang, và với beam 5 còn lâu hơn —
+  # đắt hơn mức ảnh hưởng của nó lên BM25.
+  #
+  # Điều KHÔNG được suy ra từ mục này: rằng hai bản phiên âm tương đương. Chúng
+  # không được đo để so. Nếu về sau `subtitles` có biểu hiện lệch giữa hai nửa
+  # bundle, đây là chỗ đầu tiên phải đọc.
+
+  subtitles.model:
+    reason: >-
+      CÙNG checkpoint, khác cách gọi tên. Marker của Trọng ghi
+      "faster-whisper large-v3" (chuỗi do stage_n2_subtitles đặt), marker của
+      Quang ghi "large-v3" (giá trị WHISPER_MODEL_NAME truyền vào WhisperModel).
+      Cả hai đều là faster-whisper large-v3 float16 — Quang dùng
+      BatchedInferencePipeline nên có WHISPER_BATCH_SIZE. Ghi nguyên văn hai
+      chuỗi rồi khai ở đây, thay vì viết lại chuỗi của Quang cho khớp: sửa dữ
+      liệu để phép kiểm im lặng là đúng thứ phép kiểm này tồn tại để chặn.
+    decided_by: triet
+    decided_on: 2026-08-20
+
+  # `subtitles.params.window` TỪNG ở đây, và đã bị XOÁ ngày 21-08-2026 vì nó
+  # không còn là lệch — chứ không phải vì ai đó thôi bận tâm.
+  #
+  # Nó vào danh sách này lúc bản cài đặt của Quang không ghi lại quy tắc gán
+  # segment -> keyframe. Truy tiếp thì hoá ra không phải "quy tắc khác" mà là
+  # **lỗi đánh rơi dữ liệu**: đo trên Volume, quy tắc next_keyframe áp lên chính
+  # segment thô đang có phủ 99% keyframe, còn file thật chỉ có 31% (L22_V001),
+  # 19% (L26_V398), 13% (L27_V005). Bên Trọng khớp chính xác 298/298. Tác giả
+  # xác nhận `build_keyframe_subtitles()` dùng bisect sai.
+  #
+  # Đã dựng lại toàn bộ 469 mảnh của Quang từ `subtitles_segments/` bằng ĐÚNG
+  # quy tắc next_keyframe của `stage_n2_subtitles` — không chạy lại Whisper, chữ
+  # vẫn là chữ cũ. Xem `scripts/remap_subtitles.py`. Cả 873 giờ chung một quy
+  # tắc, nên không còn gì để chấp nhận ở khoá này.
+  #
+  # Bài học đáng giữ: một lệch "chỉ là ghi chép" có thể đang che một lệch thật.
+  # `khong ghi lai` KHÔNG phải một giá trị — nó là dấu hiệu chưa ai nhìn.
+
+  subtitles.params.beam_size:
+    reason: >-
+      Trọng chạy beam search (beam_size=5, mặc định của stage_n2_subtitles),
+      Quang chạy greedy (beam_size=1). Cùng model large-v3, khác lối giải mã.
+      Chạy lại 469 video ~12 giờ GPU — đắt hơn mức chênh lệch chất lượng phiên
+      âm mà BM25 thực sự cảm nhận được.
+    decided_by: triet
+    decided_on: 2026-08-20
+    videos: "404 beam=5 (trong) · 469 beam=1 (quang)"
+
+  subtitles.params.condition_on_previous_text:
+    reason: >-
+      Quang đặt False; repo không đặt nên Trọng chạy mặc định faster-whisper là
+      True. Lệch này KHÔNG ai cố ý tạo ra — nó đến từ chỗ repo im lặng còn
+      Quang khai rõ. Cùng lý do chi phí như beam_size. Việc phải làm sau vòng
+      này: đặt hẳn giá trị trong `stage_n2_subtitles` thay vì để mặc định.
+    decided_by: triet
+    decided_on: 2026-08-20
+
+  subtitles.params.temperature:
+    reason: >-
+      Quang cố định 0.0; Trọng dùng mặc định faster-whisper là tuple lùi dần
+      (0.0, 0.2, … 1.0) — tức Trọng có bước thử lại khi giải mã hỏng, Quang thì
+      không. Cùng nhóm lý do với beam_size.
+    decided_by: triet
+    decided_on: 2026-08-20
+
+  subtitles.params.best_of:
+    reason: >-
+      Quang 1, mặc định của Trọng là 5. Chỉ có tác dụng khi temperature > 0,
+      nên trên thực tế nó chỉ ăn theo lệch `temperature` ở trên.
+    decided_by: triet
+    decided_on: 2026-08-20
+
+  # ─── Nhóm 2: KHÔNG lệch hành vi, chỉ lệch chỗ được GHI LẠI ──────────────
+  #
+  # Năm mục dưới đây đều có dạng: Quang khai rõ, `stage_n2_subtitles` chạy đúng
+  # y như vậy nhưng KHÔNG ghi giá trị vào `params`. Nên manifest bên Trọng ra
+  # "(khong khai)" và phép so báo lệch — một lệch chỉ tồn tại trong sổ sách.
+  #
+  # Đối chiếu từ mã nguồn (`src/mfe/offline/stages.py`, stage_n2_subtitles) và
+  # từ chữ ký `faster_whisper.WhisperModel.transcribe`. Kiểm lại được, không
+  # phải suy đoán.
+  #
+  # VIỆC PHẢI LÀM SAU VÒNG NÀY, và nó mới là cách sửa thật: cho
+  # `stage_n2_subtitles` ghi ĐỦ tham số nó thực sự dùng vào `params`, thay vì
+  # ghi bốn khoá rồi để phần còn lại nằm ẩn trong mặc định thư viện. Năm mục
+  # dưới đây biến mất ngay khi làm điều đó.
+
+  subtitles.params.compute_type:
+    reason: >-
+      GIỐNG NHAU, chỉ khác chỗ ghi. `stage_n2_subtitles` gọi
+      WhisperModel("large-v3", device="cuda", compute_type="float16") — đúng
+      float16 như Quang khai — nhưng không đưa giá trị đó vào `params`.
+    decided_by: triet
+    decided_on: 2026-08-20
+
+  subtitles.params.min_silence_duration_ms:
+    reason: >-
+      GIỐNG NHAU, chỉ khác chỗ ghi. `stage_n2_subtitles` truyền
+      vad_parameters={"min_silence_duration_ms": 500} — đúng 500 như Quang khai
+      — nhưng chỉ ghi `vad_filter` vào `params`, không ghi ngưỡng.
+    decided_by: triet
+    decided_on: 2026-08-20
+
+  subtitles.params.task:
+    reason: >-
+      GIỐNG NHAU. Quang khai "transcribe"; repo không truyền `task` nên nhận
+      mặc định của faster-whisper, cũng là "transcribe". Không có lượt nào dịch
+      sang tiếng Anh.
+    decided_by: triet
+    decided_on: 2026-08-20
+
+  subtitles.params.word_timestamps:
+    reason: >-
+      GIỐNG NHAU. Quang khai false; mặc định faster-whisper cũng là False, và
+      repo không bật. Không bên nào sinh mốc thời gian theo từ.
+    decided_by: triet
+    decided_on: 2026-08-20
+
+  subtitles.params.patience:
+    reason: >-
+      GIỐNG NHAU. Quang khai 1.0; mặc định faster-whisper là 1. Và với
+      beam_size=1 bên Quang thì patience không có tác dụng gì.
+    decided_by: triet
+    decided_on: 2026-08-20
+
+  # ─── Nhóm 3: lệch THẬT về đường chạy, chưa đo được ảnh hưởng ────────────
+
+  subtitles.params.batch_size:
+    reason: >-
+      LỆCH THẬT, khác nhóm 2. Trọng chạy model.transcribe() tuần tự; Quang chạy
+      BatchedInferencePipeline với batch 4 (WHISPER_BATCH_SIZE). Hai đường cắt
+      audio thành khối khác nhau, nên ngay cả khi mọi tham số giải mã trùng
+      nhau thì ranh giới segment vẫn có thể lệch. Ảnh hưởng lên văn bản CHƯA
+      ĐO — chấp nhận vì cùng lý do chi phí với beam_size, không phải vì đã
+      chứng minh là tương đương. Nếu subtitles về sau lệch giữa hai nửa bundle,
+      đọc mục này cùng `subtitles.params.window`.
+    decided_by: triet
+    decided_on: 2026-08-20
+
+  # ─── Nhóm 4: lệch MÔI TRƯỜNG (khoá `env.{tầng}.{gói}`) ──────────────────
+  #
+  # Khác ba nhóm trên ở chỗ đối chiếu: chúng so `artifacts.{tên}.model/params`
+  # (thứ tầng TỰ KHAI), còn hai mục dưới so `stages.{tên}.env` (phiên bản gói
+  # thật sự đã nạp). `merge.check_stage_environments` mới tra bảng này từ
+  # 28-08-2026; trước đó nửa env không có đường nào để ký duyệt.
+
+  env.n6_caption_qwen.transformers:
+    reason: >-
+      Ba bản `transformers` trên cùng một tầng: 5.15.1 (232 video, L25+L26),
+      5.16.0 (106 video, L26+L28), 5.16.1 (534 video, phần còn lại). Cả ba đều
+      chạy Qwen2.5-VL-7B qua vLLM 0.27.1 — `vllm` KHÔNG lệch, và vLLM mới là
+      thứ xếp lịch giải mã, tức thứ quyết định caption. `transformers` ở đây
+      chủ yếu cấp tokenizer/processor, và ba bản này chỉ cách nhau một patch
+      cộng một minor.
+      CHƯA ĐO ảnh hưởng lên văn bản caption — chấp nhận vì chi phí, không phải
+      vì đã chứng minh tương đương. Chạy lại 338 video của hai bản cũ là ~vài
+      chục giờ GPU, trong khi vòng sơ khảo 2 đã cận.
+      Việc phải làm khi có thời gian: lấy ~30 video của mỗi bản, sinh lại
+      caption bằng 5.16.1 rồi so bằng `scripts/compare_qwen_captions.py`. Nếu
+      lệch thật thì bundle này là hỗn hợp hai phép đo và mọi số của arm
+      `caption_qwen`/`bge_m3` phải đọc lại.
+    decided_by: triet
+    decided_on: 2026-08-28
+    videos: "232 × 5.15.1 · 106 × 5.16.0 · 534 × 5.16.1"
+
+  env.n6_ocr_qwen25.transformers:
+    reason: >-
+      CÙNG lượt chạy, cùng ba bản, cùng phân bố video như
+      `env.n6_caption_qwen.transformers` — hai tầng này chạy trong một phiên
+      vLLM. Đọc lý do và việc-phải-làm ở mục đó; khai riêng vì phép kiểm so
+      theo TỪNG tầng, và chấp nhận một tầng không được phép kéo theo tầng kia.
+    decided_by: triet
+    decided_on: 2026-08-28
+    videos: "232 × 5.15.1 · 106 × 5.16.0 · 535 × 5.16.1"
+
+# ─── KHÔNG phải lệch, đã kiểm và loại ────────────────────────────────────
+# `audio_features`: có lúc tưởng lệch cửa sổ CLAP. Không lệch.
+#   repo/Trọng  half_window_s = 5.0 -> audio[centre - 5s : centre + 5s]
+#   Quang       CLAP_CONTEXT_SECONDS = 5.0 -> start = center - 5s, end = center + 5s
+# Hai bên cùng ±5 giây, tổng 10 giây. Model, sample_rate 48000 và dim 512 cũng
+# trùng. Ghi lại ở đây để lần sau không phải đi hỏi lại.

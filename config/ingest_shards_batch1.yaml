@@ -1,0 +1,49 @@
+# Phân công offline ingest — BATCH 1 ĐẦY ĐỦ (873 video)
+# docs/triet/ke-hoach-offline-ingest.md §6.1, §10
+#
+# Khác `ingest_shards.yaml` (16 video mẫu) ở đúng một chỗ: không liệt kê tay.
+# 873 id chia 5 người mà gõ tay thì lỗi đánh máy là chuyện chắc chắn, và một id
+# gõ sai nghĩa là một video KHÔNG THUỘC VỀ AI CẢ — merge_bundle sẽ báo "thiếu
+# mảnh" mà không ai biết vì sao.
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# ĐỌC TRƯỚC KHI CHẠY — quy mô này KHÔNG giống bộ 16 video
+#
+# Suy từ số đo được (177.321 keyframe / 873 video batch 1, và 4.001 keyframe /
+# 3,9 giờ trên bộ mẫu — xem §5.5b):
+#
+#   mỗi người        ~175 video, ~35 giờ video
+#   máy mỗi người    ~53 giờ  → quota Kaggle 30 giờ GPU/tuần = ~1,8 TUẦN/người
+#   đĩa mỗi người    ~26 GB video, mà /kaggle/working chỉ ~20 GB
+#   shot ReCap       ~116.000 → free tier 15 req/phút là ~26 giờ CHỜ mỗi người
+#   inode lượt DAKE  ~616.000 → VƯỢT giới hạn cứng 500.000 của Volume v1
+#
+# Ba việc phải quyết TRƯỚC khi mở quy mô này (§12): tier Gemini, phiên bản
+# Volume (hoặc đóng gói objects/), và có chấp nhận ~2 tuần quota/người không.
+# Chạy `ingest_shards.yaml` (16 video) trước để có số thật thay cho ước lượng.
+# ═══════════════════════════════════════════════════════════════════════════
+
+bundle: aic_btc_b1_v1
+keyframe_set: btc
+calibration_video: L21_V001
+
+# Chia vòng tròn trên danh sách ĐÃ SẮP XẾP, không chia khối liên tiếp: id gom
+# theo chương trình (L21_* tin tức, L25_* bài giảng…) và các nhóm dài ngắn rất
+# khác nhau, nên chia khối sẽ dồn toàn bộ bài giảng cho một người.
+assign: round_robin
+
+members: [triet, trong, quang, bao, dat]
+
+# Sinh bằng: python scripts/make_video_list.py --from-drive gdrive:AIC2026/videos
+# Đường dẫn tính từ gốc repo.
+video_list: config/videos_batch1.txt
+
+stages:
+  - n1_keyframes      # bỏ qua khi keyframe_set = btc
+  - n2_subtitles
+  - n4_objects
+  - n4_siglip
+  - n5_ocr_easyocr
+  - n5_ocr_qwen
+  - n6_bge_m3
+  - n3_audio

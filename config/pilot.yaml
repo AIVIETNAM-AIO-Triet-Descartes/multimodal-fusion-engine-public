@@ -1,0 +1,143 @@
+# Pilot merge SOTA_AIC — 3 video L21_V001..V003, 855 keyframe.
+#
+# Ba video nay la GIAO cua bo 16 cua ta va bo 3 video Bao da trich xuat day du
+# (subtitles/OCR/caption/audio/SigLIP). Xem docs/triet/ke-hoach-merge-sota.md §6.0.
+#
+# Tach kho rieng sang stores/pilot/ vi hai ly do:
+#   1. stores/sample_2026/ dang giu ban ingest 16 video theo keyframe_id CU
+#      (danh so thu tu). Khoa da doi sang frame_id, nen ghi de len do la tron
+#      hai the he ID trong mot kho.
+#   2. Pilot se bi xoa/dung lai nhieu lan trong khi do dac.
+#
+# Doc chung input voi config/sample2026.yaml — khong copy du lieu.
+
+paths:
+  videos: data/sample_2026/videos/
+  keyframes: data/sample_2026/keyframes/
+  clip_features: data/sample_2026/clip-features/
+  map_keyframes: data/sample_2026/map-keyframes/   # NGUON SU THAT
+  objects: data/sample_2026/objects/
+  media_info: data/sample_2026/media-info/
+
+  segments: data/segments_pilot/
+  vector_store: stores/pilot/vector/
+  inverted_store: stores/pilot/inverted/
+  asset_store: stores/pilot/asset/
+  relational_db: stores/pilot/relational/app.db
+  eval_results: eval/results_pilot/
+  throughput: eval/throughput_pilot.json
+  event_log: eval/results_pilot/events.jsonl
+
+storage:
+  backend: local
+
+models:
+  clip: null                         # features.source = provided -> khong nap checkpoint
+  detector: null
+  ocr: null
+  metadata: null
+  # Stage C tat trong pilot toi thieu: ta dang do dong gop cua CAC ARM VAN BAN,
+  # ma reranker chay sau khi fusion xong nen no lam nhoe phep do do. Bat lai o
+  # buoc 14 khi cam ColPali vao.
+  reranker: null
+
+features:
+  source: provided
+  object_score_min: 0.3
+  metadata_fields: [title, keywords, author]
+
+retrieval:
+  embed_dim: 512
+  coarse_topk: 500
+  rerank_topk: 100                   # = tran 100 dap an/truy van cua BTC (PDF §2.2)
+  # CHINH THEO SO DO, khong phai do tay — scripts/measure_arms.py tren 9 truy van
+  # pilot (ke-hoach-merge-sota.md §3.4b buoc B1):
+  #   arm              tim thay   hang TB
+  #   siglip              9/9        2.0   <- can text_en; xem retrieval.translation
+  #   bge_m3              9/9        3.0   <- da ngu, khong can dich
+  #   caption             4/9        6.8   (tieng Anh, van an diem)
+  #   subtitle_partial    5/9        8.0
+  #   clip                9/9        9.8
+  #   bm25                8/9       20.9
+  #   ocr                 6/9       29.8   (easyocr, nhieu tu dong ho)
+  #   ocr_sviptr          3/9        1.0   <- noi it, moi lan noi deu dung hang 1
+  #   object              1/9       41.0
+  #   subtitle_exact      0/9         -    (match_phrase khong khop cau mo ta)
+  #
+  # HANG DUNG RIENG KHONG PHAI DONG GOP. Ablation (scripts/tune_weights.py
+  # --ablation) do hang TB SAU KHI GOP: du 10 arm 2.7, bo ocr_sviptr con 2.4.
+  # Tuc arm hang-1.0 nay co dong gop bien AM — no bo phieu cho 6 cau no khong
+  # bat duoc. Do la ly do bang tren khong duoc dung de dat trong so.
+  #
+  # DA THU chinh theo bang tren — VA THUA. Do duoc tren cung 9 truy van:
+  #   khong co arm van ban        : RONG 0.633 / HEP 0.267
+  #   8 arm, trong so deu 1.0     : RONG 0.607 / HEP 0.474   <- dang dung
+  #   8 arm, trong so "co can cu" : RONG 0.585 / HEP 0.452
+  #     (clip 2.0, ocr_sviptr 2.0, subtitle_partial 0.5, caption 0.5,
+  #      ocr 0.25, object 0.0, subtitle_exact 0.0)
+  #
+  # Vi RRF chi doc THU HANG chu khong doc do lon diem, nen suy luan "arm nay
+  # chinh xac hon thi cho trong so cao hon" khong chuyen thanh diem cao hon.
+  # Day dung la ly do §3.4b yeu cau LEO DOC THEO TOA DO tren bo dev roi cong bo
+  # tren heldout, thay vi dat so bang lap luan — ke ca lap luan dua tren so do.
+  # Do tren cung 9 truy van, 10 arm, trong so deu 1.0:
+  #   mode: rrf          -> RONG 0.711 / HEP 0.533
+  #   mode: weighted_sum -> RONG 0.663 / HEP 0.574   (TRAKE 0.389 vs 0.333)
+  #
+  # KHONG co ben nao thang han: rrf tim dung CANH tot hon, weighted_sum xep dung
+  # KHUNG HINH tot hon. Chon rrf lam mac dinh vi MEAN rong la con so BTC cham.
+  # Chenh lech nay den tu hinh dang duong suy giam — 1/(k+rank) doc o dau bang,
+  # linear_rank deu — chu khong tu do lon diem, vi ca hai deu chuan hoa theo hang.
+  # Chot lai sau khi co bo heldout; 9 cau chua du de ket luan.
+  fusion:
+    mode: rrf
+  # KHAI DU CA 10 ARM, ke ca cai bang 1.0. FusionWeights cho phep khoa la
+  # (extra="allow") va Cascade._build_arms mac dinh 1.0 khi thieu, nen bo trong
+  # van chay — nhung buoc B3 leo dốc quet TUNG KHOA CO MAT trong file nay, nen
+  # arm khong khai la arm khong bao gio duoc chinh. Do la ly do liet ke du.
+  #
+  # weight 0 KHONG tat arm — arm van day ung vien vao tap gop. Muon tat han:
+  # ArmRegistry.set_enabled(name, False), hoac scripts/tune_weights.py --allow-off.
+  fusion_weights:
+    clip: 1.0
+    bm25: 1.0
+    siglip: 1.0
+    bge_m3: 1.0
+    ocr_sviptr: 1.0
+    subtitle_partial: 1.0
+    caption: 1.0
+    ocr: 1.0
+    # Luot 4 — hai bo doc sai o hai cho khac nhau (§8.6). 1.0 la mac dinh
+    # TRUNG LAP, khong phai gia tri da tune: trong so dat bang leo doc tren
+    # dev roi cong bo tren heldout (§9.4).
+    ocr_paddle: 1.0
+    ocr_vietocr: 1.0
+    object: 1.0
+    subtitle_exact: 1.0
+  rerank_budget_ms: 20000
+  rerank_depth: 100
+  temporal_window_frames: 640        # don vi FRAME video goc, xem config/local.yaml
+  dedup_depth: 20
+  clip_checkpoint: clip-ViT-B-32
+  clip_text_checkpoint: sentence-transformers/clip-ViT-B-32-multilingual-v1
+
+  # Dich VI->EN cho arm co query_language="en" (hien la siglip). Dat canh
+  # clip_text_checkpoint vi cung la buoc TIEN XU LY TRUY VAN, khong phai buoc gop.
+  # THU TU: text_en dien tay -> cache dia -> envit5 chay may.
+  # KHONG co tang "giu nguyen tieng Viet" — het duong dich thi arm NGOI NGOAI.
+  # Do duoc 16-08: siglip voi ban dich may 9/9 hang 2.2, voi ban dien tay 9/9 hang 2.0.
+  # Xem src/mfe/online/translate.py va docs/triet/handoff.md §5.1.
+  translation:
+    enabled: true
+    tiers: [mt]
+    mt_checkpoint: VietAI/envit5-translation
+    mt_num_beams: 1                  # greedy: chay lai phai ra dung so cu
+    cache_path: eval/translations.json
+
+submit:
+  schema_format: by_frame
+  frame_range_window: 25
+
+eval:
+  queryset: eval/dev/pilot.jsonl
+  recall_at: [1, 5, 20, 50, 100]

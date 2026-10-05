@@ -1,0 +1,96 @@
+import pytest
+
+from mfe.eval.dres_client import (
+    DresError,
+    apply_selected_frame,
+    build_selected_payload,
+    dres_credentials,
+    submission_key,
+)
+
+
+def test_dres_payload_matches_final_format_for_each_query_type():
+    item = {"video_id": "L21_V001", "timestamp_ms": 1234, "frame_idx": 31}
+    assert build_selected_payload("KIS", item) == {
+        "answerSets": [{"answers": [{"mediaItemName": "L21_V001", "start": 1234, "end": 1234}]}]
+    }
+    assert build_selected_payload("QA", item, answer="áo xanh") == {
+        "answerSets": [{"answers": [{"text": "QA-áo xanh-L21_V001-1234"}]}]
+    }
+    trake = {
+        "video_id": "L21_V001",
+        "events": [{"frame_idx": 31}, {"frame_idx": 80}],
+    }
+    assert build_selected_payload("TRAKE", trake) == {
+        "answerSets": [{"answers": [{"text": "TR-L21_V001-31,80"}]}]
+    }
+
+
+def test_kis_payload_accepts_a_manual_time_range():
+    assert build_selected_payload(
+        "KIS",
+        {"video_id": "L21_V001", "start_ms": 1000, "end_ms": 2500},
+    ) == {
+        "answerSets": [
+            {"answers": [{"mediaItemName": "L21_V001", "start": 1000, "end": 2500}]}
+        ]
+    }
+
+
+def test_dres_credentials_accept_the_existing_aliases(monkeypatch):
+    monkeypatch.delenv("user_dres", raising=False)
+    monkeypatch.delenv("pass_dres", raising=False)
+    monkeypatch.setenv("user_dress", "operator")
+    monkeypatch.setenv("pass_dress", "secret")
+    assert dres_credentials() == ("operator", "secret")
+
+
+def test_dres_submission_key_ignores_lane_and_result_rank():
+    state = {"query_type": "KIS", "query": "một cảnh", "events": []}
+    same_query = {**state, "scope": "private", "rank": 9}
+    other_query = {**state, "query": "cảnh khác"}
+    assert submission_key("eval-1", state) == submission_key("eval-1", same_query)
+    assert submission_key("eval-1", state) != submission_key("eval-1", other_query)
+    assert submission_key("eval-1", state) != submission_key("eval-2", state)
+
+
+def test_dres_submission_key_allows_a_different_answer_for_same_query():
+    state = {"query_type": "KIS", "query": "một cảnh", "events": []}
+    first = {
+        "answerSets": [
+            {"answers": [{"mediaItemName": "L21_V001", "start": 100, "end": 100}]}
+        ]
+    }
+    second = {
+        "answerSets": [
+            {"answers": [{"mediaItemName": "L21_V002", "start": 200, "end": 200}]}
+        ]
+    }
+    assert submission_key("eval-1", state, first) != submission_key("eval-1", state, second)
+    assert submission_key("eval-1", state, first) == submission_key("eval-1", state, first)
+
+
+def test_manual_frame_selection_overlays_timestamp_without_changing_video():
+    item = {
+        "video_id": "L21_V001",
+        "frame_idx": 31,
+        "timestamp_ms": 1234,
+        "rank": 1,
+    }
+    selected = apply_selected_frame(
+        item,
+        {"video_id": "L21_V001", "frame_idx": 88, "timestamp_ms": 3520},
+    )
+    assert selected["video_id"] == "L21_V001"
+    assert selected["frame_idx"] == 88
+    assert selected["timestamp_ms"] == 3520
+    assert selected["keyframe_id"] == "L21_V001#000088"
+    assert item["frame_idx"] == 31
+
+
+def test_manual_frame_selection_cannot_switch_video():
+    with pytest.raises(DresError, match="khong cung video"):
+        apply_selected_frame(
+            {"video_id": "L21_V001"},
+            {"video_id": "L21_V002", "frame_idx": 88, "timestamp_ms": 3520},
+        )

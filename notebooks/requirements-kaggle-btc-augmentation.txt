@@ -1,0 +1,33 @@
+# Kaggle environment for notebooks/btc/10-btc-keyframe-augmentation.ipynb.
+#
+# Keep this environment separate from notebook 08 (vLLM/Qwen) and notebook 09
+# (BGE-M3): those notebooks pin a different torch stack.  The augmentation
+# pilot uses the already-approved SigLIP + EasyOCR per-frame arms so B0/B1/B2/
+# B3/B4 are measured with identical feature availability.
+
+numpy>=1.26,<3
+pyyaml>=6.0
+pydantic>=2.6
+tqdm>=4.66
+pillow>=10.0
+modal>=1.0
+av>=12.0
+opencv-python>=4.9
+tensorflow>=2.16,<3
+
+# Existing MFE image-stage stack.
+torch>=2.2
+transformers>=4.45
+accelerate>=0.30
+sentencepiece>=0.2
+bitsandbytes>=0.43
+easyocr>=1.7,<2
+
+# Offline evaluation/index adapters used by the causal A/B harness.
+faiss-cpu>=1.8
+rank-bm25>=0.2.2
+
+# TransNetV2 is intentionally not fetched from an unpinned package.  The
+# Lead-approved factory implementation must be committed in the cloned repo or
+# attached as a Kaggle Dataset and selected with TRANSNET_IMPL_ROOT; the
+# checkpoint is selected with CHECKPOINT_GLOB and pinned by its SHA in config.

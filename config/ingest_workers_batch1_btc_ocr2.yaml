@@ -1,0 +1,37 @@
+# Lớp chia EXECUTOR cho phần của Trọng ở lượt OCR2.
+#
+# File shard gốc vẫn là nguồn duy nhất quyết định ownership:
+#   config/ingest_shards_batch1_btc_ocr2.yaml -> config/zips_keyframes_btc.yaml
+# Cả Kaggle lẫn Modal vẫn ghi author="trong". Tên worker dưới đây KHÔNG phải
+# member mới và tuyệt đối không được đưa vào part-manifest.
+#
+# Chia theo nguyên ZIP để:
+#   - không có video nào bị hai máy cùng ghi;
+#   - không tải cùng một ZIP lớn ở cả hai nơi;
+#   - có thể kiểm tra giao/hợp trước khi chạy.
+#
+# Cân theo số keyframe và công suất dự kiến L4/T4 ~= 1,49:
+#   kaggle T4: 216 video, 35.593 ảnh, 7,08 GiB ZIP
+#   modal  L4: 188 video, 53.071 ảnh, 7,93 GiB ZIP
+#   53.071 / 35.593 = 1,491 — mục tiêu là hai worker kết thúc gần nhau.
+
+shards: config/ingest_shards_batch1_btc_ocr2.yaml
+member: trong
+basis: keyframes
+
+workers:
+  kaggle:
+    zips:
+      - Keyframes_L21.zip
+      - Keyframes_L23.zip
+      - Keyframes_L24.zip
+      - Keyframes_L29.zip
+      - Keyframes_L30.zip
+  modal:
+    zips:
+      - Keyframes_L25.zip
+      - Keyframes_L26_b.zip
+
+expected:
+  kaggle: {videos: 216, keyframes: 35593, zip_bytes: 7601257327}
+  modal:  {videos: 188, keyframes: 53071, zip_bytes: 8510564047}

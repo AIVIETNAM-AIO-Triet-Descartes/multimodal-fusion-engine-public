@@ -1,0 +1,91 @@
+schema_version: 2
+backlog_id: keyframe-augmentation-hypotheses-2026-08-30
+decision_authority: diagnostic_only_until_official_ab
+priority_policy: >-
+  Rank by expected gain and evidence, then lower implementation cost and regression
+  risk. Numeric fields are ordinal planning inputs, not measured uplift.
+hypotheses:
+  - proposal_id: P-SELECTOR-01
+    mechanism: dynamic density uses C0+C1 blind gaps to expose representative source frames
+    target_failure_slice: temporal-missing or O1-S-positive representative-gap queries
+    expected_primary_metric_gain: HYPOTHESIS positive official Final Score delta on target slice
+    expected_cost: low_to_medium
+    risks: [candidate crowding, false shot boundaries, density-only confound]
+    minimum_implementation: B0-B4 equal-budget selector-only DEV comparison
+    control_arm: B0 BTC-only plus B4 density control
+    treatment_arm: B3 dynamic-density
+    fixed_factors: [dataset_hash, split_hash, query_ids, feature/index/fusion/reranker fingerprints, delta_budget, seed]
+    falsification_rule: reject if O1-R has no uplift or B3 target-slice delta is non-positive
+    prerequisites: [O1-S measured, O1-R measured, feature parity measured]
+    priority_score: {expected_gain: 5, evidence_strength: 2, implementation_cost: 2, regression_risk: 3}
+    status: blocked
+  - proposal_id: P-EXPOSURE-01
+    mechanism: origin quota increases exposure when a better source frame exists but is crowded out
+    target_failure_slice: O1-S-positive with retrieval/fusion exposure failure
+    expected_primary_metric_gain: HYPOTHESIS improved R@K and official Final Score
+    expected_cost: medium
+    risks: [BTC displacement, hidden calibration change]
+    minimum_implementation: E-X1 with frozen B3 candidates and frozen calibration
+    control_arm: E-S0 B3 selector with frozen exposure
+    treatment_arm: E-X1 B3 selector with origin quota
+    fixed_factors: [candidate_manifest_hash, feature/index/fusion/reranker fingerprints, budget]
+    falsification_rule: reject if exposure ceiling or E-X1 paired delta is non-positive
+    prerequisites: [O1-S measured, O1-R retrieval ceiling measured, E-S0]
+    priority_score: {expected_gain: 5, evidence_strength: 2, implementation_cost: 3, regression_risk: 4}
+    status: blocked
+  - proposal_id: P-CALIBRATION-01
+    mechanism: origin-aware calibration preserves BTC score scale after supplemental ingest
+    target_failure_slice: BTC-covered queries regressing after fusion/reranker
+    expected_primary_metric_gain: HYPOTHESIS lower regression count with non-inferior Final Score
+    expected_cost: medium
+    risks: [DEV overfit, selector/calibration attribution error]
+    minimum_implementation: E-C1 with candidates and exposure frozen
+    control_arm: E-S0 or E-X1 matching exposure
+    treatment_arm: E-C1 origin-aware calibration only
+    fixed_factors: [query_set, candidates, feature/index/retrieval fingerprints, exposure, dedup]
+    falsification_rule: reject if paired Final Score delta is non-positive or regressions increase
+    prerequisites: [crowding measured, O1-S positive, exposure arm frozen]
+    priority_score: {expected_gain: 4, evidence_strength: 1, implementation_cost: 3, regression_risk: 4}
+    status: blocked
+  - proposal_id: P-INTERACTION-01
+    mechanism: exposure and calibration may interact non-additively
+    target_failure_slice: O1-S-positive queries with measured BTC displacement
+    expected_primary_metric_gain: HYPOTHESIS interaction beyond either main effect
+    expected_cost: medium
+    risks: [multiple comparisons, tuning leakage]
+    minimum_implementation: E-S0/E-X1/E-C1/E-XC staged DEV ablation
+    control_arm: predeclared E-S0 E-X1 and E-C1 main effects
+    treatment_arm: E-XC origin quota plus origin-aware calibration
+    fixed_factors: [split, budget, fingerprints, timeout, hardware, run order policy]
+    falsification_rule: reject if interaction delta is non-positive or seed rerun disagrees
+    prerequisites: [E-S0 completed, E-X1 completed, E-C1 completed]
+    priority_score: {expected_gain: 4, evidence_strength: 1, implementation_cost: 4, regression_risk: 4}
+    status: backlog
+  - proposal_id: P-DAKE-01
+    mechanism: per-video normalized JPEG-size slope cheaply detects dynamic/transition frames
+    target_failure_slice: B3 failure with positive O1-S/O1-R headroom
+    expected_primary_metric_gain: HYPOTHESIS better representative selection at equal budget
+    expected_cost: low
+    risks: [AIC2025-to-2026 transfer, proxy optimization]
+    minimum_implementation: paper-exact DAKE as a separate selector arm
+    control_arm: B0 and seeded B4 at the same hard delta budget
+    treatment_arm: DAKE selector with frozen downstream fingerprint
+    fixed_factors: [BTC identity, split, delta budget, downstream fingerprint]
+    falsification_rule: reject if target-slice Final Score delta is non-positive
+    prerequisites: [B0-B4 DEV completed, O1-S measured, O1-R measured]
+    priority_score: {expected_gain: 3, evidence_strength: 2, implementation_cost: 2, regression_risk: 5}
+    status: backlog
+  - proposal_id: P-CROWD-01
+    mechanism: exact identity/SHA dedup and audited near-duplicate cap prevent result collapse
+    target_failure_slice: high supplemental top-K share with BTC displacement
+    expected_primary_metric_gain: HYPOTHESIS restored BTC non-inferiority and lower latency
+    expected_cost: low
+    risks: [false duplicate removal, unaudited perceptual threshold]
+    minimum_implementation: exact dedup diagnostic; perceptual threshold disabled until false-merge audit
+    control_arm: unchanged E-X1 rankings
+    treatment_arm: E-X1 with predeclared exact dedup or audited cap
+    fixed_factors: [top_k, candidate budget, index, selector, calibration]
+    falsification_rule: reject if cap removes positive O1-S hits without reducing displacement
+    prerequisites: [feature parity measured, per-query rank artifacts, crowding report]
+    priority_score: {expected_gain: 4, evidence_strength: 2, implementation_cost: 1, regression_risk: 3}
+    status: blocked

@@ -1,0 +1,126 @@
+<!doctype html>
+<meta charset="utf-8">
+<!--
+  Trinh phat co nut "lay dung khung dang dung".
+
+  Giao thuc component cua Streamlit la postMessage thuan:
+    streamlit:componentReady   -> bao da san sang
+    streamlit:setFrameHeight   -> xin dung chieu cao
+    streamlit:setComponentValue-> tra {frame, seconds, nonce} ve Python
+
+  So khung tinh bang floor(currentTime * fps) voi fps do PYTHON truyen xuong,
+  doc tu map-keyframes. Khong dung fps trinh duyet suy ra tu container: batch 1
+  co 4 gia tri fps va lech nguon fps la lech khung that.
+-->
+<style>
+  body { margin: 0; background: #0E1117; color: #FAFAFA;
+         font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
+  video { width: 100%; max-height: 380px; background: #000; border-radius: 6px;
+          display: block; }
+  .bar { display: flex; gap: 8px; align-items: center; margin-top: 8px;
+         flex-wrap: wrap; font-size: 13px; }
+  .chip { background: #262730; border: 1px solid #4B4B52; border-radius: 6px;
+          padding: 6px 10px; }
+  .chip b { color: #FF4B4B; font-variant-numeric: tabular-nums; }
+  button { background: #FF4B4B; color: #fff; border: 0; border-radius: 6px;
+           padding: 8px 14px; font-weight: 700; font-size: 13px; cursor: pointer;
+           margin-left: auto; }
+  button:hover { background: #FF6666; }
+  #done { color: #21c45d; font-size: 12px; }
+</style>
+
+<video id="v" controls preload="metadata"></video>
+<div class="bar">
+  <span class="chip">khung ước lượng <b id="f">—</b></span>
+  <span class="chip">giây <b id="t">—</b></span>
+  <span class="chip">fps <b id="r">—</b></span>
+  <span id="done"></span>
+  <button id="pick">📌 …</button>
+</div>
+
+<script>
+const send = (type, extra) =>
+  window.parent.postMessage({ isStreamlitMessage: true, type, ...extra }, "*");
+
+const v = document.getElementById("v");
+let fps = 25, nonce = 0, ready = false;
+let presentedTime = null, callbackId = null;
+const pickButton = document.getElementById("pick");
+const supportsPTS = typeof v.requestVideoFrameCallback === "function";
+function watchFrame() {
+  if (!supportsPTS) return;
+  callbackId = v.requestVideoFrameCallback((_now, metadata) => {
+    presentedTime = Number.isFinite(metadata.mediaTime) && metadata.mediaTime >= 0
+      ? metadata.mediaTime : null;
+    paint();
+    watchFrame();
+  });
+}
+function invalidateFrame() {
+  presentedTime = null;
+  if (callbackId !== null) v.cancelVideoFrameCallback(callbackId);
+  watchFrame();
+  paint();
+}
+v.addEventListener("seeking", invalidateFrame);
+v.addEventListener("emptied", invalidateFrame);
+v.addEventListener("pause", paint);
+v.addEventListener("play", paint);
+watchFrame();
+
+function fit() {
+  send("streamlit:setFrameHeight", { height: document.documentElement.scrollHeight });
+}
+
+const frameNow = () => Math.floor(v.currentTime * fps);
+
+function paint() {
+  document.getElementById("f").textContent = frameNow();
+  document.getElementById("t").textContent = v.currentTime.toFixed(3);
+  document.getElementById("r").textContent = fps.toFixed(3);
+  pickButton.disabled = !v.paused || v.seeking || presentedTime === null;
+  pickButton.title = !supportsPTS ? "Trình duyệt chưa hỗ trợ PTS: không thể chọn khung an toàn."
+    : "Dừng video và chờ khung hiển thị trước khi chọn.";
+}
+
+// Cap nhat lien tuc trong luc tua, nhung KHONG gui ve Python o day: moi lan
+// setComponentValue la mot luot ve lai ca trang, tuc iframe dung lai tu dau va
+// mat luon vi tri dang tua. Chi gui khi nguoi dung bam chon.
+v.addEventListener("timeupdate", paint);
+v.addEventListener("seeked", paint);
+v.addEventListener("loadedmetadata", paint);
+
+document.getElementById("pick").addEventListener("click", () => {
+  if (!v.paused || v.seeking || presentedTime === null) return;
+  nonce += 1;
+  send("streamlit:setComponentValue", {
+    value: { frame: Math.floor(presentedTime * fps), seconds: presentedTime,
+             time_source: "video_frame_callback", nonce: Date.now() + nonce },
+    dataType: "json",
+  });
+  document.getElementById("done").textContent = "đã chọn khung " + frameNow();
+});
+
+window.addEventListener("message", (event) => {
+  if (event.data.type !== "streamlit:render") return;
+  const a = event.data.args || {};
+  fps = a.fps || 25;
+  document.getElementById("pick").textContent = "📌 " + (a.label || "Chọn khung này");
+
+  // Chi nap lai nguon khi URL doi that. Gan lai src giong het se lam video tai
+  // lai tu dau, tuc moi lan Streamlit ve lai trang la nguoi dung mat cho dang tua.
+  if (a.url && v.dataset.url !== a.url) {
+    v.dataset.url = a.url;
+    v.src = a.url;
+    v.addEventListener("loadedmetadata", function once() {
+      v.removeEventListener("loadedmetadata", once);
+      v.currentTime = a.start || 0;
+    });
+    document.getElementById("done").textContent = "";
+  }
+  paint();
+  fit();
+});
+
+if (!ready) { ready = true; send("streamlit:componentReady", { apiVersion: 1 }); fit(); }
+</script>

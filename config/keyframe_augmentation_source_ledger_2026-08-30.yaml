@@ -1,0 +1,609 @@
+schema_version: 2
+ledger_id: keyframe-augmentation-sources-2026-08-30
+accessed_at: 2026-08-30
+authority_grades:
+  A0: official_AIC_BTC_rules_evaluator_data_contract
+  A1: local_canonical_artifact_with_hash_and_script
+  A2: paper_plus_official_code_or_checkpoint
+  B: official_proceedings_system_paper_or_leaderboard_other_dataset
+  C: team_report_or_official_issue_discussion_technical_but_not_independent
+  D: forum_blog_social_anecdote_discovery_only
+sources:
+  - source_id: A0-RULE-001
+    title: Thông tin vòng Sơ tuyển AIC 2026
+    url_or_path: docs/context/Thong-tin-vong-So-tuyen-AIC2026.pdf
+    source_type: official_rule
+    publisher_or_team: AIC/BTC
+    authors: [AIC/BTC]
+    published_at: not_stated_in_file
+    accessed_at: 2026-08-30
+    version_commit_tag: local_checkout
+    archive_or_content_sha256: 48D988142A6A90C1ED65542DB3661181F8B5269AE7A0F2580CB5F1067BD9447D
+    primary: true
+    authority_grade: A0
+    claims_supported: [C-AIC-QUERY-TYPES, C-FRAME-SUBMISSION-CONTRACT, C-FINAL-SCORE-AUTHORITY]
+    claims_contradicted: []
+    reproducible_artifact: docs/context/Thong-tin-vong-So-tuyen-AIC2026.pdf
+    dataset_and_metric: AIC2026_rules_and_official_Final_Score
+    transfer_risk_to_AIC: low
+    notes: evaluator/rule authority; does not prove selector uplift
+  - source_id: A0-AIC-002
+    title: AIC HCMC 2026 official portal
+    url_or_path: https://aichallenge.hochiminhcity.gov.vn/
+    source_type: official_rule
+    publisher_or_team: AIC HCMC
+    authors: [AIC HCMC]
+    published_at: not_stated
+    accessed_at: 2026-08-30
+    version_commit_tag: not_applicable
+    archive_or_content_sha256: not_archived_local
+    primary: true
+    authority_grade: A0
+    claims_supported: [C-AIC-MULTIMEDIA-SCOPE, C-AIC-RELATION-TO-LSC-VBS]
+    claims_contradicted: []
+    reproducible_artifact: url_only
+    dataset_and_metric: AIC2026
+    transfer_risk_to_AIC: low
+    notes: portal does not replace the local rule PDF
+  - source_id: A1-MAP-003
+    title: Gate 0 local mapping audit
+    url_or_path: tmp/research-2026-08-30/math-audit-sample16.json
+    source_type: internal_note
+    publisher_or_team: MFE checkout
+    authors: [Quang]
+    published_at: 2026-08-30
+    accessed_at: 2026-08-30
+    version_commit_tag: bced309a87927849e76fd72d2eb3a777eed57322
+    archive_or_content_sha256: EDF43C964B5A346D18AD7682440CA29F042CA0E0FAF769C207437B2706DCDB90
+    primary: true
+    authority_grade: A1
+    claims_supported: [C-FLOOR-MAPPING, C-ROUND-COUNTERFACTUAL, C-DUPLICATE-ALIAS]
+    claims_contradicted: []
+    reproducible_artifact: .venv/Scripts/python.exe -m mfe.offline.keyframe_augmentation.cli math-audit
+    dataset_and_metric: sample16_map_keyframes; rows_and_formula_mismatch_counts
+    transfer_risk_to_AIC: medium
+    notes: sample only; not full corpus
+  - source_id: A1-GATE0-004
+    title: Gate 0 sample-16 lock
+    url_or_path: tmp/research-2026-08-30/gate0-sample16-lock-final.json
+    source_type: internal_note
+    publisher_or_team: MFE checkout
+    authors: [Quang]
+    published_at: 2026-08-30
+    accessed_at: 2026-08-30
+    version_commit_tag: bced309a87927849e76fd72d2eb3a777eed57322
+    archive_or_content_sha256: D4FA5A665EDC3BC07EF850F7C5B3C2C52F3B9D363AF8EE2C5FCA8D36B3B1E5F7
+    primary: true
+    authority_grade: A1
+    claims_supported: [C-SAMPLE-SPLIT-ISOLATION, C-SAMPLE-DATASET-IDENTITY]
+    claims_contradicted: []
+    reproducible_artifact: .venv/Scripts/python.exe -m mfe.offline.keyframe_augmentation.cli gate0
+    dataset_and_metric: AIC2026_sample16; Gate_0_contract
+    transfer_risk_to_AIC: high
+    notes: cannot stand in for canonical full DEV/held-out
+  - source_id: A1-DIAG-005
+    title: Gate 1 local diagnostic
+    url_or_path: tmp/research-2026-08-30/diagnostic-sample16.json
+    source_type: internal_note
+    publisher_or_team: MFE checkout
+    authors: [Quang]
+    published_at: 2026-08-30
+    accessed_at: 2026-08-30
+    version_commit_tag: bced309a87927849e76fd72d2eb3a777eed57322
+    archive_or_content_sha256: 92896618D4C6B6969602EFBC6DB6607634B23ED907FEE94DE7F782BAB228D735
+    primary: true
+    authority_grade: A1
+    claims_supported: [C-TEMPORAL-COVERAGE-DIAGNOSTIC-ONLY]
+    claims_contradicted: [C-COVERAGE-IMPLIES-NO-HEADROOM]
+    reproducible_artifact: .venv/Scripts/python.exe -m mfe.offline.keyframe_augmentation.cli diagnostic
+    dataset_and_metric: sample16; event_coverage_not_official_score
+    transfer_risk_to_AIC: high
+    notes: O1-S/O1-R not measured
+  - source_id: A2-TRANSNET-006
+    title: TransNetV2 paper paired with upstream code and trained checkpoint
+    url_or_path: https://github.com/soCzech/TransNetV2/tree/85cef72af9a916bdfd7cc94a670c9cdfbf12d1ed
+    source_type: official_code
+    publisher_or_team: soCzech/TransNetV2
+    authors: [Tomáš Souček, Jakub Lokoč]
+    published_at: 2020-08-11
+    accessed_at: 2026-08-30
+    version_commit_tag: 85cef72af9a916bdfd7cc94a670c9cdfbf12d1ed
+    archive_or_content_sha256: not_archived_local
+    primary: true
+    authority_grade: A2
+    claims_supported: [C-TRANSNET-INCLUSIVE-ENDPOINT]
+    claims_contradicted: []
+    reproducible_artifact: >-
+      paper https://arxiv.org/abs/2008.04838 paired with official repository,
+      commit 85cef72af9a916bdfd7cc94a670c9cdfbf12d1ed and its LFS-tracked
+      inference/transnetv2-weights checkpoint; local checkpoint fetch remains blocked
+    dataset_and_metric: TransNetV2; shot_endpoint_convention
+    transfer_risk_to_AIC: medium
+    notes: >-
+      A2 applies to the paired method paper+official code+official checkpoint only;
+      local executable checkpoint provenance and AIC detector quality remain unverified
+  - source_id: C-TRANSNET-007
+    title: TransNetV2 GitHub issue 59
+    url_or_path: https://github.com/soCzech/TransNetV2/issues/59
+    source_type: official_issue
+    publisher_or_team: soCzech/TransNetV2
+    authors: [issue reporter, maintainers]
+    published_at: 2025-12-24
+    accessed_at: 2026-08-30
+    version_commit_tag: issue-59
+    archive_or_content_sha256: not_archived_local
+    primary: false
+    authority_grade: C
+    claims_supported: [C-TRANSNET-LFS-BLOCKER]
+    claims_contradicted: []
+    reproducible_artifact: issue_url
+    dataset_and_metric: TransNetV2_weights; fetch_status
+    transfer_risk_to_AIC: low
+    notes: supports blocker only; no mirror weight allowed
+  - source_id: C-DAKE-008
+    title: U-CESE/DAKE arXiv 2605.23274
+    url_or_path: https://arxiv.org/abs/2605.23274
+    source_type: preprint
+    publisher_or_team: U-CESE
+    authors: [paper_authors]
+    published_at: 2026-05-22
+    accessed_at: 2026-08-30
+    version_commit_tag: v1
+    archive_or_content_sha256: not_archived_local
+    primary: true
+    authority_grade: C
+    claims_supported: [C-DAKE-JPEG-SELECTOR, C-DAKE-ABS-SLOPE, C-DAKE-PER-VIDEO-NORM]
+    claims_contradicted: []
+    reproducible_artifact: arxiv_paper_only
+    dataset_and_metric: AIC2025; paper_proxy_experiments
+    transfer_risk_to_AIC: high
+    notes: candidate mechanism only; no AIC2026 Final Score transfer
+  - source_id: B-VBS-009
+    title: VBS Hall of Fame
+    url_or_path: https://videobrowsershowdown.org/hall-of-fame/
+    source_type: leaderboard
+    publisher_or_team: Video Browser Showdown
+    authors: [VBS organizers]
+    published_at: 2024
+    accessed_at: 2026-08-30
+    version_commit_tag: not_stated
+    archive_or_content_sha256: not_archived_local
+    primary: true
+    authority_grade: B
+    claims_supported: [C-VBS2024-VISIONE-OVERALL, C-VBS2024-CATEGORY-RESULTS]
+    claims_contradicted: []
+    reproducible_artifact: organizer_page
+    dataset_and_metric: VBS2024; organizer_result
+    transfer_risk_to_AIC: high
+    notes: team cards use only these verified ranks
+  - source_id: B-VBS-010
+    title: VBS teams and papers
+    url_or_path: https://videobrowsershowdown.org/teams/
+    source_type: proceedings
+    publisher_or_team: Video Browser Showdown
+    authors: [VBS organizers, participating teams]
+    published_at: 2024
+    accessed_at: 2026-08-30
+    version_commit_tag: not_stated
+    archive_or_content_sha256: not_archived_local
+    primary: true
+    authority_grade: B
+    claims_supported: [C-VBS-SYSTEM-PAPER-INDEX]
+    claims_contradicted: []
+    reproducible_artifact: organizer_page_plus_Springer_links
+    dataset_and_metric: VBS2024; system_descriptions
+    transfer_risk_to_AIC: high
+    notes: no AIC rank is inferred
+  - source_id: B-VBS-011
+    title: VISIONE 5.0 VBS2024 paper
+    url_or_path: https://link.springer.com/chapter/10.1007/978-3-031-53302-0_29
+    source_type: proceedings
+    publisher_or_team: VISIONE 5.0
+    authors: [team_authors]
+    published_at: 2024
+    accessed_at: 2026-08-30
+    version_commit_tag: VBS2024
+    archive_or_content_sha256: not_archived_local
+    primary: true
+    authority_grade: B
+    claims_supported: [C-VISIONE-MULTIMODAL-QUERY-PATHS]
+    claims_contradicted: []
+    reproducible_artifact: Springer_paper
+    dataset_and_metric: VBS2024
+    transfer_risk_to_AIC: high
+    notes: official team paper and organizer overall rank, not AIC evidence
+  - source_id: B-VBS-012
+    title: Vibro VBS2024 paper
+    url_or_path: https://link.springer.com/chapter/10.1007/978-3-031-53302-0_33
+    source_type: proceedings
+    publisher_or_team: Vibro
+    authors: [team_authors]
+    published_at: 2024
+    accessed_at: 2026-08-30
+    version_commit_tag: VBS2024
+    archive_or_content_sha256: not_archived_local
+    primary: true
+    authority_grade: B
+    claims_supported: [C-VIBRO-INTERACTION-LOGGING]
+    claims_contradicted: []
+    reproducible_artifact: Springer_paper
+    dataset_and_metric: VBS2024; KIS_expert_textual_category
+    transfer_risk_to_AIC: high
+    notes: architecture hypothesis only
+  - source_id: B-VBS-013
+    title: diveXplore VBS2024 paper
+    url_or_path: https://link.springer.com/chapter/10.1007/978-3-031-53302-0_34
+    source_type: proceedings
+    publisher_or_team: diveXplore
+    authors: [team_authors]
+    published_at: 2024
+    accessed_at: 2026-08-30
+    version_commit_tag: VBS2024
+    archive_or_content_sha256: not_archived_local
+    primary: true
+    authority_grade: B
+    claims_supported: [C-DIVEXPLORE-RETRIEVAL-STACK]
+    claims_contradicted: []
+    reproducible_artifact: Springer_paper
+    dataset_and_metric: VBS2024; QA_novice_category
+    transfer_risk_to_AIC: high
+    notes: checkpoint provenance does not transfer
+  - source_id: B-VBS-014
+    title: PraK VBS2024 paper
+    url_or_path: https://link.springer.com/chapter/10.1007/978-3-031-53302-0_30
+    source_type: proceedings
+    publisher_or_team: PraK
+    authors: [team_authors]
+    published_at: 2024
+    accessed_at: 2026-08-30
+    version_commit_tag: VBS2024
+    archive_or_content_sha256: not_archived_local
+    primary: true
+    authority_grade: B
+    claims_supported: [C-PRAK-MODULARITY]
+    claims_contradicted: []
+    reproducible_artifact: Springer_paper
+    dataset_and_metric: VBS2024; visual_KIS_expert_category
+    transfer_risk_to_AIC: high
+    notes: supports modular isolation hypothesis
+  - source_id: B-LSC-015
+    title: LSC 2024 organizer introduction paper
+    url_or_path: https://eprints.lancs.ac.uk/id/document/128287
+    source_type: proceedings
+    publisher_or_team: LSC organizers
+    authors: [LSC organizers]
+    published_at: 2024
+    accessed_at: 2026-08-30
+    version_commit_tag: ACM_ICMR_2024_D0I_10.1145/3652583.3658891
+    archive_or_content_sha256: not_archived_local
+    primary: true
+    authority_grade: B
+    claims_supported: [C-LSC2024-CHALLENGE-SCOPE]
+    claims_contradicted: []
+    reproducible_artifact: eprints_pdf
+    dataset_and_metric: LSC2024; interactive_search
+    transfer_risk_to_AIC: high
+    notes: latency/interaction measurement inspiration, not AIC metric
+  - source_id: B-TREC-016
+    title: NIST TRECVID AVS overview
+    url_or_path: https://pages.nist.gov/trec-browser/trec33/avs/overview/
+    source_type: organizer_data
+    publisher_or_team: NIST TREC
+    authors: [NIST]
+    published_at: 2024
+    accessed_at: 2026-08-30
+    version_commit_tag: TREC33
+    archive_or_content_sha256: not_archived_local
+    primary: true
+    authority_grade: B
+    claims_supported: [C-TRECVID-AVS-TASK-SCOPE]
+    claims_contradicted: []
+    reproducible_artifact: NIST_page
+    dataset_and_metric: TRECVID_AVS; mAP_task_contract
+    transfer_risk_to_AIC: high
+    notes: different corpus/metric
+  - source_id: B-TREC-017
+    title: NIST TRECVID AVS proceedings
+    url_or_path: https://pages.nist.gov/trec-browser/trec33/avs/proceedings/
+    source_type: proceedings
+    publisher_or_team: NIST TREC
+    authors: [participating_teams]
+    published_at: 2024
+    accessed_at: 2026-08-30
+    version_commit_tag: TREC33
+    archive_or_content_sha256: not_archived_local
+    primary: true
+    authority_grade: B
+    claims_supported: [C-TRECVID-AVS-SYSTEM-COMPONENTS]
+    claims_contradicted: []
+    reproducible_artifact: NIST_proceedings
+    dataset_and_metric: TRECVID_AVS; mAP
+    transfer_risk_to_AIC: high
+    notes: no AIC rank claim
+  - source_id: C-VN-018
+    title: Vietnamese AIC2026 community guide
+    url_or_path: https://github.com/dducsw/ai-challenge-2026/blob/main/docs/huongdan.md
+    source_type: team_report
+    publisher_or_team: Vietnamese community
+    authors: [dducsw]
+    published_at: not_stated
+    accessed_at: 2026-08-30
+    version_commit_tag: main_at_access
+    archive_or_content_sha256: not_archived_local
+    primary: false
+    authority_grade: C
+    claims_supported: [C-VN-COMMUNITY-WORKFLOW]
+    claims_contradicted: [C-COMMUNITY-AS-RULE-AUTHORITY]
+    reproducible_artifact: GitHub_page
+    dataset_and_metric: AIC2026_community_workflow
+    transfer_risk_to_AIC: medium
+    notes: local PDF/code wins when conflict exists
+  - source_id: D-OPEN-019
+    title: OpenReview FOCUS search result
+    url_or_path: https://openreview.net/pdf?id=1OQKqLFcbB
+    source_type: preprint
+    publisher_or_team: OpenReview
+    authors: [unknown]
+    published_at: unknown
+    accessed_at: 2026-08-30
+    version_commit_tag: id_1OQKqLFcbB
+    archive_or_content_sha256: not_archived_local
+    primary: false
+    authority_grade: D
+    claims_supported: [C-QUERY-AWARE-SELECTION-HYPOTHESIS]
+    claims_contradicted: []
+    reproducible_artifact: browser_verification_blocked
+    dataset_and_metric: not_verified
+    transfer_risk_to_AIC: high
+    notes: forum-like discovery; no decision authority
+  - source_id: D-HF-020
+    title: Hugging Face Q-Gate paper page
+    url_or_path: https://huggingface.co/papers/2604.17422
+    source_type: blog
+    publisher_or_team: Hugging Face
+    authors: [unknown]
+    published_at: 2026-04-19
+    accessed_at: 2026-08-30
+    version_commit_tag: 2604.17422
+    archive_or_content_sha256: not_archived_local
+    primary: false
+    authority_grade: D
+    claims_supported: [C-QUERY-GATING-HYPOTHESIS]
+    claims_contradicted: []
+    reproducible_artifact: no_linked_model_or_dataset
+    dataset_and_metric: not_verified
+    transfer_risk_to_AIC: high
+    notes: hypothesis backlog only
+  - source_id: D-REDDIT-021
+    title: Video VLM evaluation discussion
+    url_or_path: https://www.reddit.com/r/deeplearning/comments/1u8elvp/how_are_you_all_evaluating_vlms_for_video/
+    source_type: forum
+    publisher_or_team: Reddit
+    authors: [unknown]
+    published_at: unknown
+    accessed_at: 2026-08-30
+    version_commit_tag: post_at_access
+    archive_or_content_sha256: not_archived_local
+    primary: false
+    authority_grade: D
+    claims_supported: [C-SAMPLING-CHUNKING-HYPOTHESIS]
+    claims_contradicted: []
+    reproducible_artifact: none
+    dataset_and_metric: anecdotal
+    transfer_risk_to_AIC: high
+    notes: discovery only; requires paired A/B
+  - source_id: D-REDDIT-022
+    title: Semantic video retrieval repetition discussion
+    url_or_path: https://www.reddit.com/r/computervision/comments/1v3jvnz/built_a_semantic_videoretrieval_pipeline_that/
+    source_type: forum
+    publisher_or_team: Reddit
+    authors: [unknown]
+    published_at: unknown
+    accessed_at: 2026-08-30
+    version_commit_tag: post_at_access
+    archive_or_content_sha256: not_archived_local
+    primary: false
+    authority_grade: D
+    claims_supported: [C-ANTI-CROWDING-HYPOTHESIS]
+    claims_contradicted: []
+    reproducible_artifact: none
+    dataset_and_metric: anecdotal
+    transfer_risk_to_AIC: high
+    notes: discovery only; no independent evidence
+claim_ledger:
+  C-FINAL-SCORE-AUTHORITY:
+    statement: official Final Score is the sole primary endpoint
+    decision_effect: unchanged; proxy rows remain diagnostic_only
+    evidence: [A0-RULE-001]
+  C-FLOOR-MAPPING:
+    statement: frame_idx_from_pts uses floor with literal mapping FPS
+    decision_effect: accepted for newly decoded frames; copy canonical CSV identity when present
+    evidence: [A0-RULE-001, A1-MAP-003]
+  C-COVERAGE-IMPLIES-NO-HEADROOM:
+    statement: temporal coverage alone proves no representative/ranking headroom
+    decision_effect: rejected; O1-S and O1-R remain required
+    evidence: [A1-DIAG-005]
+  C-ANTI-CROWDING-HYPOTHESIS:
+    statement: origin crowding can displace correct BTC results
+    decision_effect: hypothesis only pending paired diagnostic/official A/B
+    evidence: [D-REDDIT-022]
+
+team_cards:
+  - team_id: T-VISIONE-2024
+    team_name: VISIONE 5.0
+    strength_evidence:
+      event: Video Browser Showdown
+      year: 2024
+      official_rank_or_result: overall winner
+      source_id: B-VBS-009
+    system_components: [multimodal text/drawing/image query paths, refreshed AI models]
+    keyframe_strategy: not reported as an isolated selector ablation
+    retrieval_fusion_reranker: described in B-VBS-011; no AIC-parity claim
+    reported_ablation: unknown
+    public_code: unknown
+    applicable_to_AIC_BTC: multimodal routing is a factorized retrieval hypothesis
+    non_transferable_parts: VBS corpus, interaction protocol, metric and rank
+    hypotheses_generated: [P-EXPOSURE-01]
+  - team_id: T-VIBRO-2024
+    team_name: Vibro
+    strength_evidence:
+      event: Video Browser Showdown
+      year: 2024
+      official_rank_or_result: best textual KIS experts
+      source_id: B-VBS-009
+    system_components: [interactive query logging, embedding candidate evaluation]
+    keyframe_strategy: no verified isolated keyframe selector result
+    retrieval_fusion_reranker: candidate embeddings evaluated interactively
+    reported_ablation: unknown
+    public_code: unknown
+    applicable_to_AIC_BTC: logging and query-slice diagnostics only
+    non_transferable_parts: VBS expert interaction and category metric
+    hypotheses_generated: [P-EXPOSURE-01]
+  - team_id: T-DIVEXPLORE-2024
+    team_name: diveXplore
+    strength_evidence:
+      event: Video Browser Showdown
+      year: 2024
+      official_rank_or_result: best QA novices
+      source_id: B-VBS-009
+    system_components: [OpenCLIP LAION-2B, query server, result merge, clusters]
+    keyframe_strategy: clustering reported; selector uplift not isolated
+    retrieval_fusion_reranker: merged retrieval results with fast clusters
+    reported_ablation: unknown
+    public_code: unknown
+    applicable_to_AIC_BTC: origin/exposure and cluster diagnostics hypothesis
+    non_transferable_parts: checkpoint provenance, VBS corpus, QA protocol and metric
+    hypotheses_generated: [P-CROWD-01, P-CALIBRATION-01]
+  - team_id: T-PRAK-2024
+    team_name: PraK
+    strength_evidence:
+      event: Video Browser Showdown
+      year: 2024
+      official_rank_or_result: best visual KIS experts
+      source_id: B-VBS-009
+    system_components: [data-service abstraction, API modularity]
+    keyframe_strategy: not reported as selector ablation
+    retrieval_fusion_reranker: modular service boundary; exact AIC stack absent
+    reported_ablation: unknown
+    public_code: unknown
+    applicable_to_AIC_BTC: isolate selector/exposure/calibration artifacts
+    non_transferable_parts: VBS interaction, corpus, metric and implementation
+    hypotheses_generated: [P-SELECTOR-01]
+search_log:
+  saturation_rule: >-
+    Saturation is declared only after three query-expansion rounds in all six
+    clusters, EN+VN variants, forward/backward citation chaining, and code/issue
+    search for each priority method; forum results are discovery only.
+  query_language: [EN, VN]
+  accessed_at: 2026-08-30
+  citation_chaining: forward_and_backward
+  code_issue_search: each_priority_method
+  clusters:
+    - id: rules_eval
+      queries: [AIC2026 BTC Final Score official, AIC2026 frame_id frame_idx floor, AIC2026 điểm Final Score khung hình]
+      channels: [official_portal, local_pdf, GitHub_VN]
+      rounds: 3
+      date: 2026-08-30
+      result_authority_grades: [A0, A1, C]
+      result: local_A0_rule_and_A1_code_locked
+      saturated: true
+    - id: strong_teams
+      queries: [VBS 2024 hall of fame system paper, LSC 2024 proceedings teams, đội mạnh VBS bài báo hệ thống]
+      channels: [organizer_hall, organizer_teams, Springer, Lancaster_eprints]
+      rounds: 3
+      date: 2026-08-30
+      result_authority_grades: [B]
+      result: four_team_cards_with_verified_VBS_results
+      saturated: true
+    - id: candidate_methods
+      queries: [TransNetV2 official inference predictions_to_scenes, U-CESE DAKE arXiv, chọn keyframe query aware]
+      channels: [official_code, arXiv, OpenReview, HuggingFace]
+      rounds: 3
+      date: 2026-08-30
+      result_authority_grades: [A2, C, D]
+      result: TransNet_pinned; DAKE_candidate; emerging_sources_hypothesis_only
+      saturated: true
+    - id: retrieval_systems
+      queries: [TRECVID AVS proceedings CLIP BLIP rerank, VBS OpenCLIP query server, FAISS BM25 video retrieval]
+      channels: [NIST, VBS_Springer, official_code_docs, GitHub]
+      rounds: 3
+      date: 2026-08-30
+      result_authority_grades: [B, A2, C]
+      result: architecture_inspiration_no_metric_transfer
+      saturated: true
+    - id: oracle_eval
+      queries: [best frame inside ground truth interval oracle, force rank retrieval ceiling, O1-S O1-R video retrieval]
+      channels: [papers, OpenReview, local_eval_code, GitHub_issues]
+      rounds: 3
+      date: 2026-08-30
+      result_authority_grades: [A1, D]
+      result: local_validator_contract_added; canonical_runs_missing
+      saturated: true
+    - id: operations
+      queries: [feature parity video embedding RGB BGR normalization, retrieval result crowding duplicate keyframe, latency P95 feature index]
+      channels: [official_library_docs, GitHub_issues, Reddit, local_code]
+      rounds: 3
+      date: 2026-08-30
+      result_authority_grades: [A1, C, D]
+      result: parity_and_crowding_diagnostics_added; anecdotes_grade_D
+      saturated: true
+  stopping_reason: >-
+    New queries returned the same source families and no A0-A2 artifact that
+    removes the full-corpus/feature/evaluator blocker; further search would not
+    safely change the local decision.
+conflict_ledger:
+  - conflict_id: CON-001
+    claim: frame_identity_conversion
+    source_for: [A0-RULE-001, A1-MAP-003]
+    source_against: [C-VN-018]
+    scope_difference: community_workflow_vs_local_canonical_map
+    metric_difference: floor_vs_round
+    dataset_difference: sample_and_full_claims_not_same
+    implementation_difference: copy_CSV_frame_idx_vs_recompute
+    resolution: accepted_source
+    resolution_detail: use_CSV_identity_and_floor_only_for_new_decoder_frame
+    resolution_reason: A0/A1 contract plus local counterfactual audit; no source overwrite
+  - conflict_id: CON-002
+    claim: temporal_coverage_means_no_headroom
+    source_for: [A1-DIAG-005]
+    source_against: [A0-RULE-001, local_O1_contract]
+    scope_difference: coverage_vs_retrieval_and_representation
+    metric_difference: event_inside_interval_vs_Final_Score
+    dataset_difference: sample16_vs_canonical_DEV
+    implementation_difference: temporal_set_membership_vs_feature/rank evidence
+    resolution: experiment_needed
+    resolution_detail: never infer_NO_HEADROOM; require_O1-S_and_O1-R
+    resolution_reason: D6 contract separates temporal, representation, retrieval, fusion, reranker
+  - conflict_id: CON-003
+    claim: DAKE_proxy_transfer
+    source_for: [C-DAKE-008]
+    source_against: [A0-RULE-001]
+    scope_difference: AIC2025_paper_proxy_vs_AIC2026_official
+    metric_difference: proxy_ablation_vs_Final_Score
+    dataset_difference: different corpus/split
+    implementation_difference: paper_selector_vs_MFE_downstream_fingerprint
+    resolution: experiment_needed
+    resolution_detail: keep_DAKE_deferred_until_B0-B4_and_O1-R
+    resolution_reason: primary metric and equal-budget gate dominate proxy
+  - conflict_id: CON-004
+    claim: TransNet_weight_availability
+    source_for: [A2-TRANSNET-006]
+    source_against: [C-TRANSNET-007]
+    scope_difference: source_code_vs_weight_distribution
+    metric_difference: endpoint_convention_vs_executable_detector_quality
+    dataset_difference: none
+    implementation_difference: local_adapter_vs_missing_LFS_asset
+    resolution: unresolved
+    resolution_detail: pin_source_commit_but_block_full_detector_until_weight_provenance
+    resolution_reason: code provenance does not prove checkpoint provenance
+  - conflict_id: CON-005
+    claim: forum_crowding_observation_is_policy
+    source_for: [D-REDDIT-022]
+    source_against: [A0-RULE-001]
+    scope_difference: anecdote_vs_official_evaluation
+    metric_difference: repetition anecdote_vs paired per-query rank
+    dataset_difference: unknown_vs_AIC2026
+    implementation_difference: hard cap vs measured exposure/fusion effect
+    resolution: experiment_needed
+    resolution_detail: keep_as_P-CROWD-01_hypothesis_and_diagnostic_only
+    resolution_reason: grade_D cannot authorize production policy

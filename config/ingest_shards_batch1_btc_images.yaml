@@ -1,0 +1,71 @@
+# BUNDLE BTC — CÁC TẦNG ĂN ẢNH KEYFRAME (SigLIP + hai nguồn OCR)
+# docs/triet/ke-hoach-offline-ingest.md §2.1, §7
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# CÙNG bundle, CÙNG volume, CÙNG cách chia người như `ingest_shards_batch1_btc`.
+# Đây là lượt thứ hai trên chính bộ keyframe vừa nạp, không phải bộ khác.
+#
+# Bộ keyframe của BTC là CỐ ĐỊNH: nó không phụ thuộc ρ, không phụ thuộc ngưỡng
+# mật độ, không phụ thuộc bất cứ tham số DAKE nào còn đang hiệu chỉnh. Nên mọi
+# thứ trích ở đây là kết quả cuối, không phải bản nháp chờ chốt tham số.
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# `n4_objects` KHÔNG có trong danh sách: BTC phát hành sẵn nhãn object và lượt
+# `n0_import_btc` đã nạp chúng. Chạy detector của ta lên chính bộ keyframe này
+# là một phép đo KHÁC (§3.6 — tách "khác detector" khỏi "khác keyframe"), nó
+# ghi ra artifact khác, và nó không phải việc của lượt này.
+#
+# ẢNH LẤY TỪ ĐÂU: tải lại `Keyframes_*.zip` — KHÔNG kéo về từ Modal Volume.
+# Volume ở đường BTC là ghi-một-chiều: kéo về là ~177.000 lần `read_file`, còn
+# tải lại gói là 1,4–6 GB mỗi người, có resume, và BTC vẫn đang phát hành.
+
+bundle: aic_btc_b1_v1
+keyframe_set: btc
+calibration_video: L21_V001
+
+assign: zips
+zip_inventory: config/zips_keyframes_btc.yaml
+
+# THỨ TỰ NÀY CÓ Ý NGHĨA — vòng lặp chạy theo TẦNG, không theo video (mỗi tầng
+# quét hết video của một gói rồi mới sang tầng sau). Nạp lại model cho từng
+# video tốn 5–16 giờ mỗi người CHỈ để nạp; theo tầng thì mỗi model nạp một lần.
+# Rẻ trước, đắt sau: hỏng phiên ở tầng cuối thì hai tầng đầu vẫn còn.
+stages:
+  - n4_siglip          # ~1 ảnh/40ms, model 1,1 GB
+  - n5_ocr_easyocr     # nhanh, CPU-GPU hỗn hợp
+
+# ═══════════════════════════════════════════════════════════════════════════
+# `n5_ocr_qwen` ĐÃ BỎ — Lead chốt 21-08-2026.
+#
+# Đo được: 10,8 giây/ảnh trên Qwen2-VL 7B 4-bit, tức ~532 giờ GPU cho 177.321
+# ảnh của batch 1. Hai tầng thay chỗ nó — `n5_ocr_paddle` + `n5_ocr_vietocr`
+# trong `…_btc_ocr2.yaml` — đọc cùng bộ vùng chữ, sai ở hai chỗ khác nhau nên
+# fusion ăn được cả hai (§8.6).
+#
+# Xoá khỏi ĐÂY chứ không để ở `SKIP_STAGES` của notebook 03: `plan.stages` là
+# HỢP ĐỒNG của bundle, còn `SKIP_STAGES` chỉ là lựa chọn của một lượt chạy.
+# `merge_bundle.py` đọc hợp đồng — `wanted` lọc artifact theo `spec.stage in
+# plan.stages` — nên chừng nào tầng còn nằm đây thì merge còn ĐÒI đủ 873 mảnh
+# `sviptr_ocr` và từ chối cả bundle vì thiếu.
+#
+# Trên Volume còn 2 mảnh `parts/sviptr_ocr/` từ lượt probe. GIỮ, không xoá:
+# chúng là bằng chứng của phép đo 10,8 s/ảnh, và vì `sviptr_ocr` không còn
+# trong `plan.stages` nên `merge._list_parts` tìm thấy mà `wanted` không nhận —
+# chúng nằm ngoài bản gộp mà không chặn gì.
+# ═══════════════════════════════════════════════════════════════════════════
+
+extras:
+  map_keyframes: https://aic-data.ledo.io.vn/map-keyframes-aic25-b1.zip
+
+params:
+  n4_siglip:
+    batch_size: 32
+  n5_ocr_qwen:
+    # Đo được 19-08: một ảnh một lần `generate()` cho 10,8 giây/ảnh trên T4, tức
+    # ~532 giờ GPU cho 177.321 keyframe của batch 1. Tầng giờ gộp lô.
+    #
+    # Con số này BỊ CHẶN BỞI VRAM, không bởi tính toán, nên nó phải được ĐO chứ
+    # không suy ra. Tầng tự hạ nửa lô khi OOM rồi thử lại chính lô đó, và ghi giá
+    # trị CUỐI + số lần hạ vào marker (`batch_size`, `oom_retries`) — nên một lần
+    # chạy bị hạ lô không trông giống một lần chạy sạch.
+    batch_size: 8

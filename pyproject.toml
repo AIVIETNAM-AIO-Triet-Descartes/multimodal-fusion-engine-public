@@ -1,0 +1,113 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mfe"
+version = "0.1.0"
+description = "Multimodal Fusion Engine - video retrieval for AIC 2026"
+readme = "README.md"
+license = { file = "LICENSE" }
+# Pinned per docs/01 §3.1 ("Ghi rõ Python version").
+# Upper bound: faiss-cpu / torch wheels lag behind new CPython releases.
+requires-python = ">=3.11,<3.13"
+
+dependencies = [
+    "pydantic>=2.6",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# Split by workstream so Nhật Bảo/Vỹ Triết can run the validator and eval harness
+# without installing torch. See docs/00 §2 for the ownership map.
+offline = [
+    "av>=12.0",
+    "opencv-python>=4.9",
+    "torch>=2.2",
+    "open-clip-torch>=2.24",
+    "ultralytics>=8.1",
+]
+stores = [
+    "faiss-cpu>=1.8",
+    "numpy>=1.26",
+    "pyarrow>=15.0",
+    "rank-bm25>=0.2.2",
+]
+production-stores = [
+    "elasticsearch==9.4.1",
+    "numpy>=1.26",
+    "pymilvus==2.6.16",
+]
+production-lite = [
+    "mfe[production-stores]",
+    "milvus-lite==3.2.0",
+]
+online = [
+    "mfe[stores]",
+    # clip-ViT-B-32 — the checkpoint the official PDF §3 names as the source of
+    # the shipped keyframe features. Verified at cosine 0.9992-1.0000 against
+    # them (scripts/verify_clip_checkpoint.py). Pulls torch.
+    "sentence-transformers>=2.5",
+    # SigLIP's tokenizer and the EnViT5 translator use SentencePiece.
+    "sentencepiece>=0.2",
+    "pillow>=10.0",
+    # Bo doc cau tra loi Q&A (mfe.online.readers). BTC cho phep goi API trong
+    # vong so tuyen. Cung thu vien `build_gemini_generate` dung cho ReCap, nen
+    # mot phu thuoc va mot khoa API cho ca hai duong.
+    "google-genai>=1.0",
+]
+browser = [
+    "streamlit>=1.32",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.1",
+    "ruff>=0.3",
+]
+all = ["mfe[offline,stores,production-stores,production-lite,online,browser,dev]"]
+
+[project.scripts]
+mfe-ingest = "mfe.offline.ingest:main"
+mfe-eval = "mfe.eval.run:main"
+# Cham diem theo cong thuc chinh thuc cua BTC (PDF §2). Khac mfe-eval: do la
+# benchmark noi bo (Recall@K tren keyframe_id, TTCA, exit criteria).
+mfe-official = "mfe.eval.official:main"
+# Gop bo test cua 5 nguoi (eval/dev/*, eval/heldout/*) sau khi validate.
+mfe-merge-queryset = "mfe.eval.merge_queryset:main"
+# BTC-first Gate 0-2 keyframe augmentation research pipeline.
+mfe-keyframe-augmentation = "mfe.offline.keyframe_augmentation.cli:main"
+# Quan ly kho production (Milvus + Elasticsearch) — Cong Quang.
+mfe-production-store = "mfe.stores.production.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mfe"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+    "stub: test targets a NotImplementedError stub; xfail until the owner implements it",
+    "integration: requires live Milvus and Elasticsearch services",
+]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# Prompt của LLM là DỮ LIỆU, không phải mã. Xuống dòng cho vừa 100 cột là đổi
+# đúng chuỗi ký tự model nhận được — và một prompt bị sửa vì lý do định dạng là
+# thứ không ai nghĩ tới khi đi tìm nguyên nhân kết quả đổi. Chỉ tha E501, mọi
+# luật khác vẫn áp dụng cho file này.
+"src/mfe/online/quest.py" = ["E501"]
+# Cung ly do: `caption_prompt.py` chi chua prompt + few-shot cua Qwen2.5-VL.
+# Mot vi du few-shot bi ngat dong cho vua 100 cot la mot vi du KHAC voi cai
+# model duoc hoc, va no doi dinh dang dau ra tren ca 177.321 keyframe.
+"src/mfe/offline/caption_prompt.py" = ["E501"]
+# `scratchpad/gen_nb*.py` chua NOI DUNG notebook, khong phai ma. Mot dong cua
+# bang markdown PHAI nam tren mot dong thi no moi render ra bang — ngat no cho
+# vua 100 cot la bien bang thanh van xuoi trong notebook nguoi khac doc.
+"scratchpad/gen_nb*.py" = ["E501"]

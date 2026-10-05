@@ -1,0 +1,88 @@
+# BUNDLE BTC — LƯỢT 4: hai nguồn OCR chuyên dụng (PaddleOCR + VietOCR)
+# docs/triet/ke-hoach-offline-ingest.md §2.2 · notebooks/btc/06-btc-paddle-vietocr.ipynb
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# CÙNG bundle, CÙNG volume, CÙNG cách chia người như ba lượt trước. Bảng phân
+# công đọc từ `config/zips_keyframes_btc.yaml` — file DUY NHẤT, không chép lại.
+#
+# Đây là bất biến quan trọng nhất của bundle này (§4.1 handoff):
+# `part-manifest/{video}.json` ghi đúng MỘT `author`, và `merge.check_ownership`
+# từ chối cả bundle nếu author khác người được giao. Chia lại theo bảng khác là
+# hỏng bundle, không phải chỉ chậm.
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# VÌ SAO LÀ FILE RIÊNG chứ không thêm hai tầng vào
+# `ingest_shards_batch1_btc_images.yaml`:
+#
+#   `merge_bundle.py` đòi ĐỦ mảnh cho mọi tầng có trong `plan.stages`. Thêm vào
+#   file kia là bundle bị từ chối ngay lập tức cho tới khi lượt này chạy xong
+#   toàn bộ 873 video — trong khi Trọng & Quang vẫn đang chạy notebook 03.
+#
+#   Tách ra thì gộp được ĐỘC LẬP:
+#     python scripts/merge_bundle.py --shards config/ingest_shards_batch1_btc_images.yaml
+#     python scripts/merge_bundle.py --shards config/ingest_shards_batch1_btc_ocr2.yaml
+#   Cái sau chỉ gộp `paddle_ocr` + `viet_ocr`; hai lệnh không đụng nhau vì
+#   `merge` lọc artifact theo `spec.stage in plan.stages`.
+#
+# ẢNH LẤY TỪ ĐÂU: tải lại `Keyframes_*.zip`, KHÔNG kéo từ Modal Volume — cùng lý
+# do như lượt 2 (§2.1): Volume ở đường BTC là ghi-một-chiều, kéo về là ~177.000
+# lần `read_file` còn tải lại gói là 1,4–6 GB có resume.
+
+bundle: aic_btc_b1_v1
+keyframe_set: btc
+calibration_video: L21_V001
+
+assign: zips
+zip_inventory: config/zips_keyframes_btc.yaml
+
+# THỨ TỰ CÓ Ý NGHĨA, và ở đây nó là một ràng buộc chứ không phải sở thích.
+#
+# `n5_ocr_vietocr` dùng CHÍNH bộ phát hiện của `n5_ocr_paddle`, và `paddle_scan`
+# giữ lại kết quả trong phiên. Chạy paddle trước thì VietOCR không phải trả lại
+# giá của cả pipeline PaddleOCR — đo được trên CPU: đó là một nửa tổng thời gian.
+#
+# Cache chỉ sống trong PHIÊN và chỉ giữ MỘT video, nên hai tầng phải chạy liền
+# nhau trên từng video. Vòng lặp của notebook 06 theo VIDEO chứ không theo TẦNG,
+# đúng vì lý do này — khác notebook 03.
+stages:
+  - n5_ocr_paddle
+  - n5_ocr_vietocr
+
+extras:
+  map_keyframes: https://aic-data.ledo.io.vn/map-keyframes-aic25-b1.zip
+
+# ───────────────────────────────────────────────────────────────────────────
+# VÌ SAO GIỮ CẢ HAI, KHÔNG CHỌN MỘT
+#
+# Đo trên 40 keyframe chung của `L21_V001`, cùng bộ phát hiện, khác đúng bộ
+# nhận dạng:
+#
+#            tỉ lệ chữ có dấu     tiêu đề tiếng Việt          logo đài
+#   VietOCR       20,6%           "TÌNH TRẠNG SỤT LÚN Ở..."   HTVập / HTM2 / HIVE
+#   PaddleOCR     10,7%           "TINH TRANG SUT LÚN d..."   HTV9 (sạch)
+#
+# Hai bộ sai ở HAI CHỖ KHÁC NHAU: VietOCR đọc tiêu đề tiếng Việt gần như hoàn
+# hảo nhưng biến logo thành từ tiếng Việt; PaddleOCR đọc logo/đồng hồ sạch nhưng
+# rụng dấu có hệ thống. Fusion ăn được cả hai — đó là phép cộng, không phải phép
+# chọn (§8.6 handoff).
+#
+# ⚠️ Số trên đo trên 40 keyframe của MỘT video tin tức. Nó đủ để biện minh cho
+# việc SINH cả hai artifact; nó KHÔNG đủ để đặt trọng số. Trọng số đặt bằng leo
+# dốc trên tập dev và công bố trên heldout (§9.4).
+# ───────────────────────────────────────────────────────────────────────────
+params:
+  n5_ocr_paddle:
+    lang: vi
+    # 0.0 = giữ tất cả, giống easyocr `detail=0`. Lọc theo điểm là một quyết
+    # định về CHẤT LƯỢNG chưa ai đo, nên để nguyên và ghi vào marker.
+    rec_score_min: 0.0
+    progress_every: 50
+  n5_ocr_vietocr:
+    lang: vi
+    # PHẢI giống hệt `n5_ocr_paddle`, nếu không hai tầng dựng HAI đối tượng
+    # PaddleOCR khác nhau: khoá cache gồm cả `lang` lẫn `device`, nên lệch một
+    # chữ là mất cache phát hiện và tăng gấp đôi thời gian.
+    vietocr_config: vgg_transformer   # 'vgg_seq2seq' nhẹ hơn, kém hơn
+    beamsearch: false                 # true chính xác hơn một chút, chậm hơn nhiều
+    crop_pad: 2
+    progress_every: 50

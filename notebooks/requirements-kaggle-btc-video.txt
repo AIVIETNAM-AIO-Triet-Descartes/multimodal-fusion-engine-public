@@ -1,0 +1,24 @@
+# Môi trường cho notebook 04 — subtitle (Whisper) + CLAP trên video gốc
+# docs/triet/ke-hoach-offline-ingest.md §2.1, §2.5, §4.5
+#
+# KHÔNG có torch-vision-stack cho SigLIP/Qwen: những tầng đó ăn ảnh keyframe và
+# đi bằng notebook 03. `torch` vẫn cần vì CLAP là model PyTorch.
+#
+# ffmpeg là BINARY có sẵn trên Kaggle — `StageContext.audio_path()` gọi thẳng
+# qua subprocess, không qua gói Python nào.
+#
+# ⚠️ Dùng `requirements-kaggle.lock.txt` nếu repo đã có (§2.5).
+
+numpy>=1.26,<3
+pyyaml>=6.0
+tqdm>=4.66
+modal>=1.0
+
+# N2 — subtitle
+faster-whisper>=1.1,<2
+
+# N3 — CLAP
+torch>=2.2
+transformers>=4.45
+librosa>=0.10
+soundfile>=0.12

@@ -1,0 +1,42 @@
+# NHẬP BỘ KEYFRAME + OBJECTS CỦA BTC — batch 1, chia 5 người theo ZIP
+# docs/triet/ke-hoach-offline-ingest.md §7 (bundle đối chứng)
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# ĐÂY LÀ BUNDLE ĐỐI CHỨNG, KHÔNG PHẢI BUNDLE CHÍNH.
+#
+# Volume RIÊNG: `keyframes-btc` (v2). Không dùng chung volume với bundle DAKE —
+# một bundle chỉ chứa một bộ keyframe (§1.2), và ảnh cùng `objects/` đều đánh
+# địa chỉ theo số thứ tự `n`, nên trộn hai bộ là bundle không còn khớp
+# `map-keyframes` của chính nó.
+#
+# Vì sao làm bây giờ: tham số DAKE còn phải hiệu chỉnh tiếp, nên bộ này là chỗ
+# dựa an toàn — nó KHÔNG phụ thuộc ρ hay ngưỡng mật độ, và nó là mốc so sánh cho
+# §3.7. Hoá ra rẻ: BTC phát hành sẵn nên chỉ tốn băng thông, không tốn trích.
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# KHÔNG TỐN GPU, KHÔNG TỐN GIẢI MÃ. Đây là chuyển dữ liệu thuần:
+#
+#   Keyframes_*.zip   28,69 GB · 177.321 ảnh · STORED · keyframes/{video}/{n:03d}.jpg
+#   objects-*.zip      0,60 GB · 177.321 json · DEFLATE (giải nén 1,68 GB)
+#   map-keyframes-*    ~1 MB   ·     873 csv
+#   media-info-*       ~1 MB   ·     873 json
+#
+# Số file objects khớp CHÍNH XÁC số keyframe — hai thứ đánh địa chỉ theo cùng
+# một `n`, và tầng nhập từ chối nếu hai con số lệch nhau.
+
+bundle: aic_btc_b1_v1
+keyframe_set: btc
+calibration_video: L21_V001
+
+assign: zips
+zip_inventory: config/zips_keyframes_btc.yaml
+
+# Một tầng, và nó không nạp model nào.
+stages:
+  - n0_import_btc
+
+# Các gói dùng chung cho mọi thành viên (tải riêng, nhỏ).
+extras:
+  objects: https://aic-data.ledo.io.vn/objects-aic25-b1.zip
+  map_keyframes: https://aic-data.ledo.io.vn/map-keyframes-aic25-b1.zip
+  media_info: https://aic-data.ledo.io.vn/media-info-aic25-b1.zip
