@@ -123,12 +123,15 @@ Python 3.11 or 3.12.
 ```bash
 python -m venv .venv
 source .venv/bin/activate            # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"              # contracts, evaluation, tests
-pip install -e ".[online]"           # retrieval stack (numpy, BM25, sentence-transformers, …)
+pip install -e ".[dev,web,browser]"  # retrieval stack, web cockpit, Streamlit tools, tests
 ```
 
-Other extras: `offline` (ingest), `browser` (Streamlit tools), `stores`,
-`production-stores`. Copy `.env.example` to `.env` for the optional services.
+`web` pulls in the online retrieval stack (`online` → `stores`: NumPy, SciPy,
+BM25, sentence-transformers/PyTorch). Other extras: `offline` (local ingest
+tools) and `production-stores` (the Milvus/Elasticsearch prototype that the final
+system replaced with the flat store). The GPU stages of the offline pipeline ran on
+Kaggle; their dependencies are listed in `notebooks/requirements-kaggle-*.txt`.
+Copy `.env.example` to `.env` for the optional services.
 
 ## Running
 
@@ -150,6 +153,11 @@ output is not a competition result.
 ```bash
 pytest tests/unit -q
 ```
+
+Tests that need inputs which are not part of this replica (the notebook generator
+scripts, the raw per-annotator dev files and the organizers' official queryset) are
+skipped with an explicit reason. Integration tests under `tests/integration` need
+live Milvus/Elasticsearch services.
 
 ### Full system
 
