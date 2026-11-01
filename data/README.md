@@ -28,4 +28,4 @@ data/sample/
 
 `config/local.yaml` trỏ đường dẫn vào đây. Ai extract sai chỗ → code không tìm thấy data, hoặc lệch path so với người khác. Giải nén đúng `data/sample/` là xong.
 
-> **Lưu ý:** `map-keyframes/*.csv` là nguồn duy nhất nối `n` với `frame_idx` — có dòng thì đọc thẳng. Hàm bị cấm là `round(pts_time×fps)` (sai 83–93% ở video 29.97fps); `floor(pts_time×fps)` đúng 100% và là cách đặt id cho khung ngoài danh mục BTC. Xem `CLAUDE.md` §2.
+> **Lưu ý:** `map-keyframes/*.csv` là nguồn duy nhất nối `n` với `frame_idx` — có dòng thì đọc thẳng. Hàm bị cấm là `round(pts_time×fps)` (sai 83–93% ở video 29.97fps); `floor(pts_time×fps)` đúng 100% và là cách đặt id cho khung ngoài danh mục BTC.

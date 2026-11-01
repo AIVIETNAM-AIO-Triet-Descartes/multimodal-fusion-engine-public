@@ -1,135 +1,174 @@
-# multimodal-fusion-engine
+# Multimodal Fusion Engine (MFE) — public replica
 
-Hệ truy xuất video cho **AIC 2026**. Nhận một mô tả bằng chữ, trả về đúng khoảnh khắc trong một kho video lớn, dưới áp lực thời gian.
+> **This is a replica.** Team AICare developed the Multimodal Fusion Engine in a
+> **private repository** that we used for the Ho Chi Minh City AI Challenge 2026 and
+> for writing our two papers. This public repository is a reproduction of that
+> repository that keeps **only the core system**: the code needed to build the
+> index and run retrieval, the web cockpit used during the final round, its tests,
+> and a few measurements recorded from the official system.
+>
+> The commit history was carried over from the private repository for the files
+> kept here. Authors, dates and commit messages are the original ones. Each
+> member's identity is normalized to a single name and a GitHub `noreply` address,
+> and AI-assistant co-author trailers were removed. Internal notes, paper
+> manuscripts, experiment artifacts, competition data and model weights are not
+> included.
 
-Đây không phải bài toán "nhét video vào AI rồi hỏi". Nó là: tìm keyframe ứng viên → xác định đúng video và đúng khoảnh khắc → kiểm ngữ cảnh trước/sau → trả `video_id` + frame/timestamp đúng schema BTC.
+## Team AICare — University of Science, VNU-HCM
 
-> **Trạng thái: Sprint 1 — scaffold.** `src/mfe/contracts/` có code chạy được và test. Phần còn lại là stub có signature + README ownership, chờ 4 workstream điền.
+| Member | Role |
+|---|---|
+| Trịnh Vỹ Triết | Team leader |
+| Nguyễn Quốc Đạt | Member |
+| Trần Công Quang | Member |
+| Phạm Minh Trọng | Member |
+| Bùi Nhật Bảo | Member |
 
----
+**Competition:** Ho Chi Minh City AI Challenge 2026 — **Potential Prize (Top 35)**.
 
-## Bắt đầu
+## What the system does
+
+Given a Vietnamese description, MFE finds the matching moment in a large video
+archive (news, documentaries, traffic cameras, sports) for three task types:
+
+- **KIS** — known-item search for a described moment;
+- **Q&A** — find the moment and answer a question about it;
+- **TRAKE** — find a sequence of events in the correct temporal order.
+
+Answers are given as `video_id` plus the source-video `frame_idx`, either exported
+as submission files (`app/submit_lab.py`) or sent to the organizers' DRES
+evaluation server from the web cockpit.
+
+## Architecture
+
+```
+offline (Kaggle GPU workers, per-video shards on Modal Volumes)
+  keyframes + keyframe→frame maps provided by the organizers
+  captions (Gemini, English) · OCR (Qwen2.5-VL / Gemini) · ASR (faster-whisper)
+  SigLIP SO400M image vectors (1,152-d) · BGE-M3 text vectors (1,024-d)
+  15-second window records
+          │  merged into one flat store: .npz matrices (memory-mapped) + JSON + SQLite
+          ▼
+online (CPU only — no Milvus, no Elasticsearch, no GPU at query time)
+  query translation + QUEST query expansion
+  8 retrieval arms ──► weighted Reciprocal Rank Fusion (k = 60)
+                   ──► scene-order prior ──► temporal grouping ──► top-100
+  task adapters: KIS ranking · Q&A visual reader · TRAKE alignment (DANTE-style DP)
+          ▼
+web cockpit (Starlette + WebSocket): shared/private search lanes, per-query arm
+toggles and weights, candidate inspection, DRES submission with a duplicate lock
+```
+
+### Retrieval arms used in the final round
+
+From `config/btc_b12.yaml` (`fusion_weights`, `arms_disabled`):
+
+| Arm | Evidence | Method | Weight |
+|---|---|---|---|
+| `siglip` | keyframe image | SigLIP SO400M, dense | 2.0 |
+| `bge_m3` | caption | BGE-M3, dense | 1.0 |
+| `subtitle_bge_m3` | ASR transcript | BGE-M3, dense | 1.0 |
+| `caption_gemini` | caption | BM25 | 1.0 |
+| `ocr_qwen25` | on-screen text (batch 1) | BM25 | 1.0 |
+| `ocr_gemini` | on-screen text (batch 2) | BM25 | 0.5 |
+| `subtitle_partial` | ASR transcript | partial matching | 1.0 |
+| `subtitle_exact` | ASR transcript | exact phrase matching | 1.0 |
+
+Two window-level arms (`window_bm25`, `window_bge_m3`) are implemented and disabled
+by default; operators could enable and weight them per query in the cockpit.
+
+### Key parameters (from the code)
+
+| Component | Setting | Source |
+|---|---|---|
+| Candidates per arm | 500 | `config/btc_b12.yaml` (`coarse_topk`) |
+| RRF constant | k = 60 | `src/mfe/online/fusion.py` |
+| Scene-order prior | weight 0.5, only for queries with ≥ 3 ordered clauses | `config/btc_b12.yaml`, `src/mfe/online/scene_order.py` |
+| Temporal grouping | groups of ≤ 640 frames, 20 representatives promoted | `config/btc_b12.yaml`, `src/mfe/online/dedup.py` |
+| TRAKE alignment | dynamic programming with gap penalty λ = 0.001 | `src/mfe/online/dante.py` |
+| Lexical index | BM25 as a precomputed sparse matrix | `src/mfe/online/bm25_thua.py` |
+
+## Results
+
+Every number below is quoted from a record in this repository; the `results/`
+files reproduce the original text verbatim and name the commit that contains it.
+
+| Measurement | Before | After | Source |
+|---|---|---|---|
+| Median query latency (CPU) | 5,862 ms | 294 ms (p90 512 ms) | [`results/query_latency_2026-09-25.md`](results/query_latency_2026-09-25.md), commit `be743e3` |
+| Official score while optimizing latency (dev / heldout) | 0.5192239858906526 / 0.5419444444444445 | unchanged (difference 0.0) | same as above |
+| R@100 of the caption BM25 arm, 163 dev queries | 11.7% (Vietnamese query) | 60.1% (English translation) | [`results/caption_query_language_2026-09-21.md`](results/caption_query_language_2026-09-21.md), commit `cf05ca0` |
+
+The final flat store held 446,926 keyframes (batch 1: 176,707; batch 2: 270,219),
+about 4.9 GB (commit `438fe63`).
+
+## Repository layout
+
+```
+src/mfe/        engine: contracts, offline ingest, flat stores, online retrieval, evaluation
+web/            web cockpit used in the final round (server.py, index.html)
+app/            Streamlit tools: submission bench and rerank lab
+config/         run configs (btc_b12.yaml = final-round configuration) and ingest shards
+scripts/        store building, merging, measurement (measure_latency.py, …) and tooling
+notebooks/btc/  Kaggle notebooks of the offline pipeline (keyframes, captions, OCR, ASR, embeddings)
+eval/           163-query development set (team-annotated) and cached query translations
+results/        recorded measurements quoted in this README
+tests/          unit and integration tests
+```
+
+## Installation
+
+Python 3.11 or 3.12.
 
 ```bash
 python -m venv .venv
-.venv/Scripts/activate            # Windows;  source .venv/bin/activate trên Unix
-pip install -e ".[dev]"
-
-pytest tests/unit/contracts -v    # 52 test, không cần torch/faiss
+source .venv/bin/activate            # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"              # contracts, evaluation, tests
+pip install -e ".[online]"           # retrieval stack (numpy, BM25, sentence-transformers, …)
 ```
 
-Cài thêm theo workstream của bạn: `pip install -e ".[offline]"` (Quốc Đạt), `".[stores]"` (Công Quang), `".[online,browser]"` (Phạm Trọng). Nhật Bảo và Vỹ Triết chỉ cần `dev`.
+Other extras: `offline` (ingest), `browser` (Streamlit tools), `stores`,
+`production-stores`. Copy `.env.example` to `.env` for the optional services.
 
-Hai lệnh của sprint (chưa hiện thực):
+## Running
+
+### Smoke test with a synthetic store (no data, no models)
 
 ```bash
-mfe-ingest --input data/raw/ --config config/local.yaml
-mfe-eval --queryset eval/queryset.jsonl --config config/local.yaml --out eval/results/
+python scripts/make_demo_store.py --out stores/demo
+python scripts/query_flat.py "người đàn ông đạp xe" --root stores/demo \
+    --config config/btc_b12.yaml --en "a man riding a bicycle" \
+    --arms caption_gemini,ocr_qwen25,subtitle,subtitle_exact
 ```
 
----
+`make_demo_store.py` writes a few **hand-written, synthetic** records in the flat
+store layout, so the lexical arms and RRF fusion run end to end on a laptop. Its
+output is not a competition result.
 
-## Đọc gì trước khi code
+### Tests
 
-**Bắt buộc, theo thứ tự:**
-
-1. [`docs/00-overview.md`](docs/00-overview.md) — **contract**. Nguồn duy nhất. Đọc hết trước khi gõ dòng đầu tiên.
-2. File cá nhân của bạn (bảng dưới).
-3. README của package bạn sở hữu — nó nói *đừng* viết gì vào đó.
-
-**Nền:** [`docs/context/`](docs/context/) — ghi chú Buổi 1 (bài toán & dữ liệu), Buổi 2 (browser tương tác & fusion), Buổi 3 (agent).
-
-**Quyết định:** [`docs/adr/`](docs/adr/) — vì sao lệnh chạy là `mfe.*`, và chuẩn ID/timestamp.
-
----
-
-## Bản đồ workstream
-
-| Người | Vai | Spec | Code |
-|---|---|---|---|
-| Vỹ Triết | Contract, eval, infra | [`docs/01`](docs/01-lead-coordination-infra.md) | [`contracts/`](src/mfe/contracts/) [`core/`](src/mfe/core/) [`eval/`](src/mfe/eval/) |
-| Quốc Đạt | Offline ingestion | [`docs/02`](docs/02-offline-ingestion.md) | [`offline/`](src/mfe/offline/) |
-| Công Quang | Storage (3 kho tìm kiếm) | [`docs/03`](docs/03-storage-indexes.md) | [`stores/`](src/mfe/stores/) |
-| Phạm Trọng | Online retrieval + browser | [`docs/04`](docs/04-online-retrieval.md) | [`online/`](src/mfe/online/) [`browser/`](src/mfe/browser/) |
-| Nhật Bảo | Validator / Mapping **(P0)** | [`docs/05`](docs/05-validator-mapping.md) | [`mapping/`](src/mfe/mapping/) |
-
-**`src/mfe/<workstream>/` = một owner.** Đó là luật giữ cây thư mục không rối khi thêm sprint.
-
----
-
-## Kiến trúc
-
-```
-                          OFFLINE
-video mẫu (local)
-  └─ [Quốc Đạt] ingestion: keyframe + pretrained (CLIP/object/OCR/metadata)
-       └─ ghi ra 4 KHO:
-
-  [Công Quang] Vector Index   [Công Quang] Inverted Index   [Công Quang] Asset Store   [Nhật Bảo] Relational Map
-     (semantic)          (text/exact match)      (ảnh gốc/blob)      (validator core, P0)
-  └──────────── phục vụ TÌM KIẾM ────────────┘   └── nguồn SỰ THẬT, chỉ dùng lúc xác minh ──┘
-
-                          ONLINE
-query text
-  └─ [Phạm Trọng] Cascade: late-fusion coarse → dedup/temporal → early-fusion rerank → browser
-       └─ [Nhật Bảo] Validator + submit adapter → Submit hợp lệ
+```bash
+pytest tests/unit -q
 ```
 
-**Luồng quan trọng nhất:** retrieval **không** query thẳng vào Relational Map. Ba kho đầu phục vụ *tìm*; kho thứ tư phục vụ *xác minh*, chỉ ở bước cuối trước submit.
+### Full system
 
----
+The full system needs data and services that are **not distributed** with this
+repository:
 
-## Ba thứ cả nhóm phải thuộc
+- the competition videos, keyframes and keyframe→frame maps, which belong to the
+  organizers;
+- the flat store built from them (`scripts/build_b12_relational.py`,
+  `scripts/aggregate_latest_parts.py`, `scripts/embed_latest_caption_parts.py`),
+  placed under `runtime/btc_b12/` or pointed to with `MFE_RUNTIME_ROOT`;
+- the SigLIP SO400M and BGE-M3 models (downloaded on first use);
+- optionally, an OpenAI-compatible LLM gateway for translation, QUEST and the
+  visual readers (`TRAMMAY_API_KEY`, `MFE_TRAMMAY_BASE_URL`), and DRES
+  credentials (`user_dres`, `pass_dres`, `MFE_DRES_BASE_URL`).
 
-**1. `keyframe_id` là khóa nối mọi kho.**
+With these in place, start the cockpit with `web/start_html.sh` (port 8501) after
+creating accounts with `web/create_accounts.py`.
 
-```python
-from mfe.contracts.ids import build_keyframe_id
-build_keyframe_id("L21_V001", 1)   # 'L21_V001#001'  (keyframe_index, khớp file 001.jpg)
-```
+## License
 
-Không tự f-string. docs/02 §4 gọi đây là *"điểm dễ sai nhất — sai một chỗ là cả pipeline lệch"*.
-
-**2. `frame_idx` và `pts_time` đọc thẳng từ `map-keyframes` CSV khi dòng đó tồn tại.** Hàm bị cấm là `round(pts_time×fps)` — sai 83–93% dòng video 29.97fps (NTSC drop-frame), luôn lệch +1 khung. **`floor(pts_time×fps)` thì đúng 100%** trên cả 177.321 dòng và là cách hợp lệ duy nhất để đặt id cho một khung **ngoài** danh mục BTC (khung tự trích, hoặc khung người vận hành tua tới). BTC chưa chốt submit theo cái nào nên lưu đủ cả hai cột — xem `CLAUDE.md` §2.
-
-**3. Submit sai còn tệ hơn không submit.** Validator thà chặn nhầm còn hơn cho lọt (docs/05 §3).
-
----
-
-## Cấu trúc thư mục
-
-```
-src/mfe/          CODE — mọi thứ chạy được
-config/           local.yaml (active) · modal.yaml (stub)
-docs/             contract · context 3 buổi · adr
-tests/            unit/<workstream>/ · integration/ · fixtures/
-
-data/             video, keyframe, segment          ← gitignored
-stores/           Faiss · BM25 · sqlite             ← gitignored
-eval/             queryset.jsonl (tracked) · results/ (gitignored)
-infra/modal/      stub deploy
-scripts/          tiện ích dev
-```
-
-Code ở `src/`, artifact ở gốc — nên `src/mfe/stores/` (code) và `stores/` (Faiss index) không đụng nhau. Lý do đầy đủ: [`adr/0001`](docs/adr/0001-src-layout.md).
-
----
-
-## Sprint 1 — Definition of Done
-
-Từ docs/00 §1. `tests/integration/test_vertical_slice.py` là bản code của danh sách này (hiện skip toàn bộ — mỗi test được unskip bởi workstream sở hữu nó).
-
-- [ ] Offline chạy trên một thư mục video bất kỳ bằng **một lệnh**, đổ ra đủ 4 kho
-- [ ] Online nhận query text → trả top-k keyframe → mở đúng video/timestamp
-- [ ] Mapping ID↔frame↔timestamp đúng **100%** trên tập mẫu
-- [ ] Mọi submit sai schema bị validator **chặn**
-- [ ] Chạy ≥ 30 query nội bộ không crash, có log tái hiện
-- [ ] Có số liệu Recall@K, TTCA, latency, throughput
-
-**Thứ tự tích hợp** (docs/01 §4): Nhật Bảo dựng mapping+validator → Quốc Đạt ingest → Công Quang mở API → Phạm Trọng nối `search_text` → Vỹ Triết chạy harness → bổ sung dần.
-
----
-
-## Đổi contract thế nào
-
-docs/01 §1: muốn đổi schema một kho hoặc chữ ký một tool → **báo Vỹ Triết**. Vỹ Triết cập nhật `docs/00`, ghi ADR, thông báo nhóm. Không ai tự sửa contract trong file cá nhân.
+[MIT](LICENSE).
