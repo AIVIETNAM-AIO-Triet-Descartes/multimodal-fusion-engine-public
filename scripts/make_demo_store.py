@@ -25,7 +25,7 @@ from pathlib import Path
 CAPTIONS = {
     "DEMO_V001#000120": "A man in a red jacket rides a bicycle along a riverside road at sunset.",
     "DEMO_V001#000480": "Two cyclists stop near a bridge; one drinks water from a green bottle.",
-    "DEMO_V002#000075": "A news anchor sits at a desk in front of a blue screen showing a city map.",
+    "DEMO_V002#000075": "A news anchor sits at a desk before a blue screen showing a city map.",
     "DEMO_V002#000300": "Heavy rain floods a street; motorbikes push through knee-deep water.",
     "DEMO_V003#000050": "A chef slices green onions on a wooden board in a small kitchen.",
     "DEMO_V003#000210": "Noodles are stirred in a pot while steam rises; a sign reads 'PHO 24'.",

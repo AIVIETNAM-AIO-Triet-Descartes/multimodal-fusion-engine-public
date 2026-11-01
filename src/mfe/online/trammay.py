@@ -1,4 +1,4 @@
-"""Cổng LLM tương thích OpenAI (URL đặt qua `MFE_TRAMMAY_BASE_URL`) — dùng chung cho mọi tầng gọi API.
+"""Cổng LLM tương thích OpenAI (URL: `MFE_TRAMMAY_BASE_URL`) — dùng chung cho mọi tầng gọi API.
 
 Vì sao có file này thay vì mỗi tầng tự gọi
 -------------------------------------------
