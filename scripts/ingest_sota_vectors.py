@@ -1,6 +1,6 @@
 """Load SOTA_AIC's precomputed image/text embeddings into Milvus.
 
-    python scripts/ingest_sota_vectors.py --model bge-m3 --sota-root D:/Projects/SOTA_AIC \
+    python scripts/ingest_sota_vectors.py --model bge-m3 --sota-root path/to/SOTA_AIC \
         --config config/pilot.yaml --videos L21_V001,L21_V002,L21_V003
 
 Bảo already ran both models over the 855 pilot keyframes, so this costs no GPU —

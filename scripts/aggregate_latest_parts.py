@@ -79,7 +79,7 @@ def parse_args() -> argparse.Namespace:
         "--output-root", type=Path,
         default=Path("/data/multimodal-fusion-engine/runtime/btc_b12/flat"),
     )
-    parser.add_argument("--dotenv", type=Path, default=Path("/home/ubuntu/.env"))
+    parser.add_argument("--dotenv", type=Path, default=Path(".env"))
     return parser.parse_args()
 
 

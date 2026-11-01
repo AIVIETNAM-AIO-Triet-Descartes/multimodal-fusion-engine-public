@@ -47,24 +47,21 @@ from starlette.responses import FileResponse, JSONResponse, PlainTextResponse, R
 from starlette.routing import Route, WebSocketRoute
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
-WEB_ROOT = Path("/home/ubuntu/web")
-REPO_ROOT = Path("/home/ubuntu/multimodal-fusion-engine")
+#: Deployment roots are configurable; defaults resolve relative to this repo.
+WEB_ROOT = Path(os.getenv("MFE_WEB_ROOT", Path(__file__).resolve().parent))
+REPO_ROOT = Path(os.getenv("MFE_REPO_ROOT", Path(__file__).resolve().parents[1]))
 INDEX_PATH = WEB_ROOT / "index.html"
 ACCOUNTS_PATH = WEB_ROOT / "accounts.json"
 SESSION_SECRET_PATH = WEB_ROOT / ".session_secret"
 SUGGESTIONS_PATH = WEB_ROOT / "suggestions.json"
 DRES_SUBMISSIONS_PATH = WEB_ROOT / "dres_submissions.json"
-RUNTIME_ROOT = Path("/data/multimodal-fusion-engine/runtime/btc_b12")
+RUNTIME_ROOT = Path(os.getenv("MFE_RUNTIME_ROOT", REPO_ROOT / "runtime" / "btc_b12"))
 CONFIG_PATH = REPO_ROOT / "config" / "btc_b12.yaml"
 FLAT_ROOT = RUNTIME_ROOT / "flat"
 IMAGE_CACHE = RUNTIME_ROOT / "image-cache"
 MAP_ROOT = RUNTIME_ROOT / "relational" / "map-keyframes"
-B1_IMAGE_ROOT = Path(
-    "/data/multimodal-fusion-engine/modal/keyframes-btc/bundle/aic_btc_b1_v1/keyframes"
-)
-B2_IMAGE_ROOT = Path(
-    "/data/multimodal-fusion-engine/modal/keyframes-batch-2-v2/bundle/aic_btc_b2_v1/keyframes"
-)
+B1_IMAGE_ROOT = Path(os.getenv("MFE_B1_IMAGE_ROOT", RUNTIME_ROOT / "keyframes" / "b1"))
+B2_IMAGE_ROOT = Path(os.getenv("MFE_B2_IMAGE_ROOT", RUNTIME_ROOT / "keyframes" / "b2"))
 
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
@@ -304,7 +301,7 @@ def _read_session_secret() -> str:
 
 def _load_accounts() -> dict[str, dict[str, Any]]:
     if not ACCOUNTS_PATH.is_file():
-        raise RuntimeError(f"Thieu {ACCOUNTS_PATH}; chay /home/ubuntu/web/create_accounts.py")
+        raise RuntimeError(f"Thieu {ACCOUNTS_PATH}; chay web/create_accounts.py")
     payload = json.loads(ACCOUNTS_PATH.read_text(encoding="utf-8"))
     users = payload.get("users")
     if not isinstance(users, dict) or not users:
@@ -1224,7 +1221,7 @@ async def config(request: Request) -> JSONResponse:
             "ok": True,
             "arms": manager.arm_config(),
             "quest": {
-                "provider": "llm-gateway.invalid / Gemini"
+                "provider": "OpenAI-compatible gateway / Gemini"
                 if os.getenv("TRAMMAY_API_KEY")
                 else "chua cau hinh Trammay",
                 "model": TRAMMAY_MODEL_TIERS[_default_trammay_tier()],
@@ -1301,7 +1298,7 @@ def _quest_analysis_sync(
     available, reason = client.available()
     if not available:
         raise RuntimeError(reason or "QUEST Trammay chua san sang")
-    provider = "llm-gateway.invalid / Gemini" if client.trammay_client is not None else "legacy"
+    provider = "OpenAI-compatible gateway / Gemini" if client.trammay_client is not None else "legacy"
 
     if query_type == "KIS":
         kis = QuestKIS()

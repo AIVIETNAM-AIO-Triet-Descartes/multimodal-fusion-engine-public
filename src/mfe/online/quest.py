@@ -238,7 +238,7 @@ class QuestClient:
     """Client QUEST.
 
     Khi có ``TRAMMAY_API_KEY`` thì toàn bộ QUEST đi qua model Gemini của
-    ``llm-gateway.invalid``. Các provider cũ chỉ còn là đường tương thích cho máy chưa
+    ``MFE_TRAMMAY_BASE_URL``. Các provider cũ chỉ còn là đường tương thích cho máy chưa
     được cấu hình Trammay; chúng không được gọi khi Trammay đã sẵn sàng.
     """
     

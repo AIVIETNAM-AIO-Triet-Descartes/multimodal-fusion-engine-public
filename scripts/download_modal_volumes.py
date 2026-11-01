@@ -89,7 +89,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dotenv",
         type=Path,
-        default=Path("/home/ubuntu/.env"),
+        default=Path(".env"),
         help="File containing MODAL_TOKEN_ID and MODAL_TOKEN_SECRET.",
     )
     parser.add_argument(

@@ -26,7 +26,7 @@ def main() -> None:
         type=Path,
         default=Path("/data/multimodal-fusion-engine/modal/keyframes-batch-2-v2"),
     )
-    parser.add_argument("--dotenv", type=Path, default=Path("/home/ubuntu/.env"))
+    parser.add_argument("--dotenv", type=Path, default=Path(".env"))
     args = parser.parse_args()
     for key, value in load_dotenv(args.dotenv).items():
         os.environ.setdefault(key, value)

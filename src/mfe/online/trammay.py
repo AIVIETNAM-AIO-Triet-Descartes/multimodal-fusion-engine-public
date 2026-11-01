@@ -1,4 +1,4 @@
-"""Cổng API tương thích OpenAI của Đạt (`llm-gateway.invalid`) — dùng chung cho mọi tầng gọi API.
+"""Cổng LLM tương thích OpenAI (URL đặt qua `MFE_TRAMMAY_BASE_URL`) — dùng chung cho mọi tầng gọi API.
 
 Vì sao có file này thay vì mỗi tầng tự gọi
 -------------------------------------------
@@ -47,13 +47,14 @@ ENV_KEY = "TRAMMAY_API_KEY"
 ENV_BASE = "MFE_TRAMMAY_BASE_URL"
 ENV_MODEL = "MFE_TRAMMAY_MODEL"
 
-DEFAULT_BASE = "https://llm-gateway.invalid/v1"
+#: Không có giá trị mặc định: gateway là hạ tầng riêng, phải tự cấu hình.
+DEFAULT_BASE = ""
 #: Đo 20-09 trên 200 ảnh: caption có động từ ở 90,2%, 0 lỗi trên 800 lượt.
 DEFAULT_MODEL = "ag/gemini-3.8-flash"
 
 #: Cloudflare chặn client không có UA bằng `error code: 1010`. Giá trị cụ thể
 #: không quan trọng — sự CÓ MẶT của header mới quan trọng.
-USER_AGENT = "mfe/1.0 (+https://llm-gateway.invalid)"
+USER_AGENT = "mfe/1.0"
 
 #: Mã đáng thử lại, gộp hai nhóm rất khác nhau:
 #:
@@ -134,7 +135,7 @@ class TrammayClient:
         Trả None chứ không ném: người gọi hỏi `available()` để biết **vì sao**.
         """
         key = os.getenv(ENV_KEY)
-        if not key:
+        if not key or not (os.getenv(ENV_BASE) or DEFAULT_BASE):
             return None
         return cls(
             api_key=key,
@@ -363,6 +364,8 @@ def available() -> tuple[bool, str]:
     """
     if not os.getenv(ENV_KEY):
         return False, f"chưa có {ENV_KEY} trong môi trường (kiểm .env)"
+    if not (os.getenv(ENV_BASE) or DEFAULT_BASE):
+        return False, f"chưa có {ENV_BASE} trong môi trường (kiểm .env)"
     return True, ""
 
 

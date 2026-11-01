@@ -2,20 +2,20 @@
 # Các artifact lớn và map/ảnh nằm trên mount /data; script chuẩn bị kho là
 # scripts/aggregate_latest_parts.py và scripts/build_b12_relational.py.
 paths:
-  map_keyframes: /data/multimodal-fusion-engine/runtime/btc_b12/relational/map-keyframes/
-  media_info: /data/multimodal-fusion-engine/runtime/btc_b12/relational/media-info/
-  videos: /data/multimodal-fusion-engine/runtime/btc_b12/videos/
-  keyframes: /data/multimodal-fusion-engine/runtime/btc_b12/keyframes/
-  clip_features: /data/multimodal-fusion-engine/runtime/btc_b12/clip-features/
-  objects: /data/multimodal-fusion-engine/runtime/btc_b12/objects/
-  segments: /data/multimodal-fusion-engine/runtime/btc_b12/segments/
-  vector_store: /data/multimodal-fusion-engine/runtime/btc_b12/vector/
-  inverted_store: /data/multimodal-fusion-engine/runtime/btc_b12/inverted/
-  asset_store: /data/multimodal-fusion-engine/runtime/btc_b12/asset/
-  relational_db: /data/multimodal-fusion-engine/runtime/btc_b12/relational/app.db
-  eval_results: /data/multimodal-fusion-engine/runtime/btc_b12/eval/
-  throughput: /data/multimodal-fusion-engine/runtime/btc_b12/throughput.json
-  event_log: /data/multimodal-fusion-engine/runtime/btc_b12/events.jsonl
+  map_keyframes: runtime/btc_b12/relational/map-keyframes/
+  media_info: runtime/btc_b12/relational/media-info/
+  videos: runtime/btc_b12/videos/
+  keyframes: runtime/btc_b12/keyframes/
+  clip_features: runtime/btc_b12/clip-features/
+  objects: runtime/btc_b12/objects/
+  segments: runtime/btc_b12/segments/
+  vector_store: runtime/btc_b12/vector/
+  inverted_store: runtime/btc_b12/inverted/
+  asset_store: runtime/btc_b12/asset/
+  relational_db: runtime/btc_b12/relational/app.db
+  eval_results: runtime/btc_b12/eval/
+  throughput: runtime/btc_b12/throughput.json
+  event_log: runtime/btc_b12/events.jsonl
 
 storage:
   backend: local

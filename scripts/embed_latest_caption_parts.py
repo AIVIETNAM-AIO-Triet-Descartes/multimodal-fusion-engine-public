@@ -71,7 +71,7 @@ def parse_args() -> argparse.Namespace:
             "để chạy nâng cấp BGE đầy đủ."
         ),
     )
-    parser.add_argument("--dotenv", type=Path, default=Path("/home/ubuntu/.env"))
+    parser.add_argument("--dotenv", type=Path, default=Path(".env"))
     return parser.parse_args()
 
 

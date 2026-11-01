@@ -45,7 +45,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--videos", nargs="+", default=list(DEFAULT_VIDEOS))
     parser.add_argument("--redo", action="store_true",
                         help="Chạy lại dù marker đã có; mặc định chỉ bổ sung phần còn thiếu.")
-    parser.add_argument("--dotenv", type=Path, default=Path("/home/ubuntu/.env"))
+    parser.add_argument("--dotenv", type=Path, default=Path(".env"))
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
 

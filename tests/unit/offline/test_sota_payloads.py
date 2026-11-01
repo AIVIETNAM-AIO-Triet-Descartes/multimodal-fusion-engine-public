@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -20,7 +21,7 @@ from mfe.offline.provided import ProvidedDataset
 PILOT_VIDEOS = ["L21_V001", "L21_V002", "L21_V003"]
 _DATASET_ROOT = Path("data/sample_2026")
 _MAP_DIR = _DATASET_ROOT / "map-keyframes"
-_SOTA_VECTORS = Path("D:/Projects/SOTA_AIC/data/vectors")
+_SOTA_VECTORS = Path(os.getenv("MFE_SOTA_VECTORS", "SOTA_AIC/data/vectors"))
 _HAS_PILOT_MAPS = all((_MAP_DIR / f"{video_id}.csv").is_file() for video_id in PILOT_VIDEOS)
 
 pytestmark = pytest.mark.skipif(
@@ -170,7 +171,7 @@ class TestOurOwnKeyGrammar:
 
 class TestAgainstBaosRealExport:
     pytestmark = pytest.mark.skipif(
-        not _SOTA_VECTORS.is_dir(), reason="needs D:/Projects/SOTA_AIC/data/vectors"
+        not _SOTA_VECTORS.is_dir(), reason="needs MFE_SOTA_VECTORS (SOTA_AIC/data/vectors)"
     )
 
     def test_every_source_loads_and_ids_resolve(self, id_map):

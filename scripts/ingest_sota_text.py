@@ -1,6 +1,6 @@
 """Load SOTA_AIC's text exports into the production Elasticsearch index.
 
-    python scripts/ingest_sota_text.py --sota-root D:/Projects/SOTA_AIC \
+    python scripts/ingest_sota_text.py --sota-root path/to/SOTA_AIC \
         --config config/pilot.yaml --videos L21_V001,L21_V002,L21_V003
 
 Reads Bảo's `data/vectors/*.json`, translates every keyframe id through

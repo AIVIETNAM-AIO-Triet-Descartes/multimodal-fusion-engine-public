@@ -6,9 +6,10 @@ from __future__ import annotations
 import hashlib
 import json
 import secrets
+import os
 from pathlib import Path
 
-ROOT = Path("/home/ubuntu/web")
+ROOT = Path(os.getenv("MFE_WEB_ROOT", Path(__file__).resolve().parent))
 ACCOUNTS = ROOT / "accounts.json"
 CREDENTIALS = ROOT / "CREDENTIALS.txt"
 SESSION_SECRET = ROOT / ".session_secret"
