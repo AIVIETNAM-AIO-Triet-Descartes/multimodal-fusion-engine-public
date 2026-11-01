@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from pathlib import Path as _Path
+
+import pytest as _pytest
 
 GENERATOR = Path("scratchpad/gen_nb25_26_b1_parallel_producers.py")
 NOTEBOOKS = [
@@ -18,6 +21,10 @@ def _run_generator(namespace: dict) -> None:
     )
 
 
+@_pytest.mark.skipif(
+    not _Path("scratchpad").is_dir(),
+    reason="notebook generators (scratchpad/) are not included in the public replica",
+)
 def test_parallel_producers_regenerate_compile_and_are_resumable() -> None:
     ns = {"__name__": "__main__"}
     _run_generator(ns)

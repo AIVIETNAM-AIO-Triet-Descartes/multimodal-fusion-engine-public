@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from pathlib import Path as _Path
 
 import pytest
+import pytest as _pytest
 
 GENERATOR = Path("scratchpad/gen_nb30_btc_b0_b1_dev_ab.py")
 NOTEBOOK = Path("notebooks/btc/30-btc-b0-b1-dev-ab.ipynb")
@@ -28,6 +30,10 @@ def _helpers() -> dict:
     return namespace
 
 
+@_pytest.mark.skipif(
+    not _Path("scratchpad").is_dir(),
+    reason="notebook generators (scratchpad/) are not included in the public replica",
+)
 def test_notebook_30_regenerates_and_compiles() -> None:
     exec(compile(GENERATOR.read_text(encoding="utf-8"), str(GENERATOR), "exec"))
     payload = _payload()

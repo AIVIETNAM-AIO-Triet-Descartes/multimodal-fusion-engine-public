@@ -4,10 +4,12 @@ import ast
 import json
 import runpy
 from pathlib import Path
+from pathlib import Path as _Path
 from typing import Any
 
 import numpy as np
 import pytest
+import pytest as _pytest
 
 from mfe.offline.keyframe_augmentation.common import sha256_file, sha256_json
 from mfe.offline.transport import LocalDirTransport
@@ -68,6 +70,10 @@ def _unit_vectors(rows: int, dim: int = 1024) -> np.ndarray:
     return vectors
 
 
+@_pytest.mark.skipif(
+    not _Path("scratchpad").is_dir(),
+    reason="notebook generators (scratchpad/) are not included in the public replica",
+)
 def test_generator_is_idempotent_and_all_code_cells_compile() -> None:
     _regenerate()
     first = NOTEBOOK.read_bytes()

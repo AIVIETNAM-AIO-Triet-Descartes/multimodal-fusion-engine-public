@@ -2,11 +2,18 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from pathlib import Path as _Path
+
+import pytest as _pytest
 
 NOTEBOOK = Path("notebooks/btc/23-btc-feature-parity-worklist-freeze.ipynb")
 GENERATOR = Path("scratchpad/gen_nb23_btc_feature_parity_worklist.py")
 
 
+@_pytest.mark.skipif(
+    not _Path("scratchpad").is_dir(),
+    reason="notebook generators (scratchpad/) are not included in the public replica",
+)
 def test_feature_parity_freeze_contract_and_regeneration() -> None:
     namespace = {"__name__": "__main__"}
     exec(compile(GENERATOR.read_text(encoding="utf-8"), str(GENERATOR), "exec"), namespace)

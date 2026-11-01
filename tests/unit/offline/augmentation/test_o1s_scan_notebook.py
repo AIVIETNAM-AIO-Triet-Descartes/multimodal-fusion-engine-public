@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from pathlib import Path as _Path
+
+import pytest as _pytest
 
 NOTEBOOK = Path("notebooks/btc/19-btc-o1s-representative-scan-producer.ipynb")
 
@@ -56,6 +59,10 @@ def _normalised() -> str:
     return NOTEBOOK.read_text(encoding="utf-8").replace("\r\n", "\n")
 
 
+@_pytest.mark.skipif(
+    not _Path("scratchpad").is_dir(),
+    reason="notebook generators (scratchpad/) are not included in the public replica",
+)
 def test_o1s_scan_notebook_is_regenerated_exactly_and_cells_compile() -> None:
     payload, _ = _source()
     before = _normalised()

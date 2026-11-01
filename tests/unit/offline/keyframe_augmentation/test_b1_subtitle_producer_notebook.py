@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 import runpy
 from pathlib import Path
+from pathlib import Path as _Path
+
+import pytest as _pytest
 
 GENERATOR = Path("scratchpad/gen_nb33_btc_b1_subtitle_producer.py")
 NOTEBOOK = Path("notebooks/btc/33-btc-b1-subtitle-producer.ipynb")
@@ -21,6 +24,10 @@ def _source() -> str:
     )
 
 
+@_pytest.mark.skipif(
+    not _Path("scratchpad").is_dir(),
+    reason="notebook generators (scratchpad/) are not included in the public replica",
+)
 def test_notebook_regenerates_idempotently_and_compiles() -> None:
     _regenerate()
     first = NOTEBOOK.read_bytes()

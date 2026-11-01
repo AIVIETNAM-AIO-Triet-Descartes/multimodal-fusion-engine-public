@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from pathlib import Path as _Path
+
+import pytest as _pytest
 
 GENERATOR = Path("scratchpad/gen_nb32_btc_b0_b1_dev163_ab.py")
 NOTEBOOK = Path("notebooks/btc/32-btc-b0-b1-dev163-ab.ipynb")
@@ -15,6 +18,10 @@ def _source() -> str:
     return "\n".join("".join(cell.get("source", [])) for cell in _payload()["cells"])
 
 
+@_pytest.mark.skipif(
+    not _Path("scratchpad").is_dir(),
+    reason="notebook generators (scratchpad/) are not included in the public replica",
+)
 def test_notebook_32_regenerates_and_compiles() -> None:
     exec(compile(GENERATOR.read_text(encoding="utf-8"), str(GENERATOR), "exec"))
     payload = _payload()
@@ -45,6 +52,10 @@ def test_notebook_32_locks_exact_expanded_dev_contract() -> None:
     assert '"btc_mutated": False' in source
 
 
+@_pytest.mark.skipif(
+    not _Path("eval/dev").is_dir(),
+    reason="raw per-annotator dev files (eval/dev/) are not included in the public replica",
+)
 def test_repository_sources_form_exact_163_query_set() -> None:
     from mfe.eval.official import load_official_queryset
 

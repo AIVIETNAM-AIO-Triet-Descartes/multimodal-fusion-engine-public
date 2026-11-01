@@ -2,11 +2,18 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from pathlib import Path as _Path
+
+import pytest as _pytest
 
 NOTEBOOK = Path("notebooks/btc/24-btc-siglip-b0-b4-screen.ipynb")
 GENERATOR = Path("scratchpad/gen_nb24_btc_siglip_b0_b4_screen.py")
 
 
+@_pytest.mark.skipif(
+    not _Path("scratchpad").is_dir(),
+    reason="notebook generators (scratchpad/) are not included in the public replica",
+)
 def test_siglip_screen_contract_regeneration_and_compile() -> None:
     namespace = {"__name__": "__main__"}
     exec(compile(GENERATOR.read_text(encoding="utf-8"), str(GENERATOR), "exec"), namespace)

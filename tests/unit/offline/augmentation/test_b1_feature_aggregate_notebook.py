@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from pathlib import Path as _Path
 
 import numpy as np
 import pytest
+import pytest as _pytest
 
 from mfe.offline.keyframe_augmentation.common import sha256_json
 
@@ -36,6 +38,10 @@ def _helper_namespace() -> dict:
     return namespace
 
 
+@_pytest.mark.skipif(
+    not _Path("scratchpad").is_dir(),
+    reason="notebook generators (scratchpad/) are not included in the public replica",
+)
 def test_notebook_29_regenerates_and_all_cells_compile() -> None:
     exec(compile(GENERATOR.read_text(encoding="utf-8"), str(GENERATOR), "exec"))
     payload = json.loads(NOTEBOOK.read_text(encoding="utf-8"))

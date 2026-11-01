@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from pathlib import Path as _Path
+
+import pytest as _pytest
 
 NOTEBOOK = Path("notebooks/btc/22-btc-o1s-exact-aggregate.ipynb")
 GENERATOR = Path("scratchpad/gen_nb22_btc_o1s_exact_aggregate.py")
@@ -39,6 +42,10 @@ def test_exact_aggregate_is_fail_closed_dev_only_and_read_only() -> None:
     assert 'REPO_REF = "feature/quang/storage"' in source
 
 
+@_pytest.mark.skipif(
+    not _Path("scratchpad").is_dir(),
+    reason="notebook generators (scratchpad/) are not included in the public replica",
+)
 def test_exact_aggregate_is_regenerated_exactly_and_cells_compile() -> None:
     payload, _ = _payload_and_source()
     before = NOTEBOOK.read_bytes()

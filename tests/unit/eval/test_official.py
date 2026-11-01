@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from mfe.contracts.errors import ContractError
@@ -173,6 +175,10 @@ def test_videos_are_ranked_by_mean_score():
 # --- query set -------------------------------------------------------------
 
 
+@pytest.mark.skipif(
+    not Path("eval/queryset_btc_2026.jsonl").is_file(),
+    reason="the organizers' official queryset is not redistributed in the public replica",
+)
 def test_baseline_queryset_parses_and_covers_all_three_types():
     queries = load_official_queryset("eval/queryset_btc_2026.jsonl")
 
